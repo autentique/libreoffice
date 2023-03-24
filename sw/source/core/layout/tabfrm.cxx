@@ -2912,14 +2912,27 @@ bool SwTabFrame::CalcFlyOffsets( SwTwips& rUpper,
                         bConsiderFly = false;
                 }
 
+                text::WrapTextMode nSurround = text::WrapTextMode_NONE;
                 if ( bConsiderFly )
                 {
-                    const SwFormatSurround   &rSur = pFly->GetFormat()->GetSurround();
+                    nSurround = pFly->GetFormat()->GetSurround().GetSurround();
+                    // If the frame format is a TextBox of a draw shape,
+                    // then use the surround of the original shape.
+                    bool bWrapThrough = nSurround == text::WrapTextMode_THROUGH;
+                    SwTextBoxHelper::getShapeWrapThrough(pFly->GetFormat(), bWrapThrough);
+                    if (bWrapThrough)
+                        bConsiderFly = false;
+                    else if (!bWrapThrough && nSurround == text::WrapTextMode_THROUGH)
+                        nSurround = text::WrapTextMode_PARALLEL;
+                }
+
+                if (bConsiderFly)
+                {
                     const SwFormatHoriOrient &rHori= pFly->GetFormat()->GetHoriOrient();
-                    bool bShiftDown = css::text::WrapTextMode_NONE == rSur.GetSurround();
+                    bool bShiftDown = css::text::WrapTextMode_NONE == nSurround;
                     if (!bShiftDown && bAddVerticalFlyOffsets)
                     {
-                        if (rSur.GetSurround() == text::WrapTextMode_PARALLEL
+                        if (nSurround == text::WrapTextMode_PARALLEL
                             && rHori.GetHoriOrient() == text::HoriOrientation::NONE)
                         {
                             // We know that wrapping was requested and the table frame overlaps with
@@ -2979,8 +2992,8 @@ bool SwTabFrame::CalcFlyOffsets( SwTwips& rUpper,
                             bInvalidatePrtArea = true;
                         }
                     }
-                    if ( (css::text::WrapTextMode_RIGHT    == rSur.GetSurround() ||
-                          css::text::WrapTextMode_PARALLEL == rSur.GetSurround())&&
+                    if ((css::text::WrapTextMode_RIGHT == nSurround
+                         || css::text::WrapTextMode_PARALLEL == nSurround) &&
                          text::HoriOrientation::LEFT == rHori.GetHoriOrient() )
                     {
                         const tools::Long nWidth = aRectFnSet.XDiff(
@@ -2989,8 +3002,8 @@ bool SwTabFrame::CalcFlyOffsets( SwTwips& rUpper,
                         rLeftOffset = std::max( rLeftOffset, nWidth );
                         bInvalidatePrtArea = true;
                     }
-                    if ( (css::text::WrapTextMode_LEFT     == rSur.GetSurround() ||
-                          css::text::WrapTextMode_PARALLEL == rSur.GetSurround())&&
+                    if ((css::text::WrapTextMode_LEFT == nSurround
+                         || css::text::WrapTextMode_PARALLEL == nSurround) &&
                          text::HoriOrientation::RIGHT == rHori.GetHoriOrient() )
                     {
                         const tools::Long nWidth = aRectFnSet.XDiff(
