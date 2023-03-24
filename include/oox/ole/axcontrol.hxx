@@ -33,6 +33,7 @@
 #include <oox/ole/olehelper.hxx>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
+#include <com/sun/star/table/CellRangeAddress.hpp>
 
 namespace com::sun::star {
     namespace awt { class XControlModel; }
@@ -262,6 +263,9 @@ public:
                             const OUString& rCtrlSource,
                             const OUString& rRowSource,
                             sal_Int32 nRefSheet = 0 ) const;
+
+    static void         sanitizeList(
+                            com::sun::star::table::CellRangeAddress& aRangeAddr, css::uno::Reference< css::lang::XMultiServiceFactory >& xModelFactory);
 
     // ActiveX (Forms 2.0) specific conversion --------------------------------
 

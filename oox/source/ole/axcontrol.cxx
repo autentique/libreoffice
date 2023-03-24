@@ -375,18 +375,36 @@ void ControlConverter::bindToSources( const Reference< XControlModel >& rxCtrlMo
                 throw RuntimeException();
         }
 
-        // create argument sequence
-        Sequence< Any > aArgs{ Any(NamedValue("CellRange", Any(aRangeAddr))) };
-
         // create the EntrySource instance and set at the control model
         Reference< XMultiServiceFactory > xModelFactory( mxDocModel, UNO_QUERY_THROW );
+        if (aRangeAddr.EndRow - aRangeAddr.StartRow > 1000) {
+            ControlConverter::sanitizeList(aRangeAddr, xModelFactory);
+        }
+        // create argument sequence
+        Sequence< Any > aArgs{ Any(NamedValue("CellRange", Any(aRangeAddr))) };
         Reference< XListEntrySource > xEntrySource( xModelFactory->createInstanceWithArguments("com.sun.star.table.CellRangeListSource", aArgs ), UNO_QUERY_THROW );
+
         xEntrySink->setListEntrySource( xEntrySource );
     }
     catch (const Exception&)
     {
         TOOLS_WARN_EXCEPTION("oox", "");
     }
+}
+
+void ControlConverter::sanitizeList (CellRangeAddress& aRangeAddr, Reference< XMultiServiceFactory >& xModelFactory) {
+    Sequence< Any > aArgs{ Any(NamedValue("CellRange", Any(aRangeAddr))) };
+    Reference< XListEntrySource > xEntrySource( xModelFactory->createInstanceWithArguments("com.sun.star.table.CellRangeListSource", aArgs ), UNO_QUERY_THROW );
+
+    int i = aRangeAddr.StartRow;
+    int lastValid = i;
+    while (i < aRangeAddr.EndRow) {
+        if (xEntrySource->getListEntry(i) != "") {
+            lastValid = i;
+        }
+        i++;
+    }
+    aRangeAddr.EndRow = lastValid;
 }
 
 // ActiveX (Forms 2.0) specific conversion ------------------------------------
