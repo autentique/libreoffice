@@ -406,8 +406,7 @@ void SwFmDrawPage::setPropertyValue(const OUString& rPropertyName, const uno::An
             if (aValue >>= xTheme)
             {
                 auto& rUnoTheme = dynamic_cast<UnoTheme&>(*xTheme);
-                std::unique_ptr<model::Theme> pTheme(new model::Theme(rUnoTheme.getTheme()));
-                pPage->getSdrPageProperties().SetTheme(std::move(pTheme));
+                pPage->getSdrPageProperties().SetTheme(rUnoTheme.getTheme());
             }
         }
         break;
@@ -443,9 +442,9 @@ uno::Any SwFmDrawPage::getPropertyValue(const OUString& rPropertyName)
         {
             css::uno::Reference<css::util::XTheme> xTheme;
 
-            auto const& pTheme = GetSdrPage()->getSdrPageProperties().GetTheme();
+            auto pTheme = GetSdrPage()->getSdrPageProperties().GetTheme();
             if (pTheme)
-                xTheme = new UnoTheme(*pTheme);
+                xTheme = model::theme::createXTheme(pTheme);
             aAny <<= xTheme;
         }
         break;
@@ -640,7 +639,7 @@ void SwFmDrawPage::add(const uno::Reference< drawing::XShape > & xShape)
                                     static_cast< cppu::OWeakObject * > ( this ) );
 
     // we're already registered in the model / SwXDrawPage::add() already called
-    if(pShape->m_pPage || pShape->m_pFormat || !pShape->m_bDescriptor )
+    if(pShape->m_pPage || !pShape->m_bDescriptor )
         return;
 
     // we're inserted elsewhere already
@@ -788,7 +787,6 @@ void SwFmDrawPage::add(const uno::Reference< drawing::XShape > & xShape)
         {
             pFormat->SetFormatName(pSvxShape->GetSdrObject()->GetName(), false);
         }
-        pShape->SetFrameFormat(pFormat);
     }
     pShape->m_bDescriptor = false;
 
@@ -918,7 +916,6 @@ SwXShape::SwXShape(
         uno::Reference<uno::XInterface> & xShape,
         SwDoc const*const pDoc)
     : m_pPage(nullptr)
-    , m_pFormat(nullptr)
     , m_pPropSet(aSwMapProvider.GetPropertySet(PROPERTY_MAP_TEXT_SHAPE))
     , m_pPropertyMapEntries(aSwMapProvider.GetPropertyMapEntries(PROPERTY_MAP_TEXT_SHAPE))
     , m_pImpl(new SwShapeDescriptor_Impl(pDoc))
@@ -949,14 +946,18 @@ SwXShape::SwXShape(
     SdrObject* pObj = SdrObject::getSdrObjectFromXShape(m_xShapeAgg);
     if(pObj)
     {
-        auto pFormat = ::FindFrameFormat( pObj );
-        if(pFormat)
-            SetFrameFormat(pFormat);
-
         lcl_addShapePropertyEventFactories( *pObj, *this );
         m_pImpl->m_bInitializedPropertyNotifier = true;
     }
 
+}
+
+SwFrameFormat* SwXShape::GetFrameFormat() const
+{
+    SdrObject* pObj = SdrObject::getSdrObjectFromXShape(m_xShapeAgg);
+    if(pObj)
+        return ::FindFrameFormat( pObj );
+    return nullptr;
 }
 
 void SwXShape::AddExistingShapeToFormat( SdrObject const & _rObj )
@@ -973,12 +974,7 @@ void SwXShape::AddExistingShapeToFormat( SdrObject const & _rObj )
         if ( pSwShape )
         {
             if ( pSwShape->m_bDescriptor )
-            {
-                auto pFormat = ::FindFrameFormat( pCurrent );
-                if ( pFormat )
-                    pSwShape->SetFrameFormat(pFormat);
                 pSwShape->m_bDescriptor = false;
-            }
 
             if ( !pSwShape->m_pImpl->m_bInitializedPropertyNotifier )
             {
@@ -999,7 +995,6 @@ SwXShape::~SwXShape()
         m_xShapeAgg->setDelegator(xRef);
     }
     m_pImpl.reset();
-    EndListeningAll();
     if(m_pPage)
        const_cast<SwFmDrawPage*>(m_pPage)->RemoveShape(this);
 }
@@ -2088,15 +2083,6 @@ void SwXShape::removeVetoableChangeListener(
     OSL_FAIL("not implemented");
 }
 
-void SwXShape::Notify(const SfxHint& rHint)
-{
-    if(rHint.GetId() == SfxHintId::Dying)
-    {
-        m_pFormat = nullptr;
-        EndListeningAll();
-    }
-}
-
 void SwXShape::attach(const uno::Reference< text::XTextRange > & xTextRange)
 {
     SolarMutexGuard aGuard;
@@ -2567,9 +2553,10 @@ drawing::HomogenMatrix3 SwXShape::ConvertTransformationToLayoutDir(
                 aTempMatrix.set(1, 0, aMatrix.Line2.Column1 );
                 aTempMatrix.set(1, 1, aMatrix.Line2.Column2 );
                 aTempMatrix.set(1, 2, aMatrix.Line2.Column3 );
-                aTempMatrix.set(2, 0, aMatrix.Line3.Column1 );
-                aTempMatrix.set(2, 1, aMatrix.Line3.Column2 );
-                aTempMatrix.set(2, 2, aMatrix.Line3.Column3 );
+                // For this to be a valid 2D transform matrix, the last row must be [0,0,1]
+                assert( aMatrix.Line3.Column1 == 0 );
+                assert( aMatrix.Line3.Column2 == 0 );
+                assert( aMatrix.Line3.Column3 == 1 );
                 // #i73079#
                 aTempMatrix.translate( aTranslateDiff.X, aTranslateDiff.Y );
                 aMatrix.Line1.Column1 = aTempMatrix.get(0, 0);
@@ -2578,9 +2565,9 @@ drawing::HomogenMatrix3 SwXShape::ConvertTransformationToLayoutDir(
                 aMatrix.Line2.Column1 = aTempMatrix.get(1, 0);
                 aMatrix.Line2.Column2 = aTempMatrix.get(1, 1);
                 aMatrix.Line2.Column3 = aTempMatrix.get(1, 2);
-                aMatrix.Line3.Column1 = aTempMatrix.get(2, 0);
-                aMatrix.Line3.Column2 = aTempMatrix.get(2, 1);
-                aMatrix.Line3.Column3 = aTempMatrix.get(2, 2);
+                aMatrix.Line3.Column1 = 0;
+                aMatrix.Line3.Column2 = 0;
+                aMatrix.Line3.Column3 = 1;
             }
         }
     }
@@ -2836,12 +2823,6 @@ void SwXGroupShape::add( const uno::Reference< XShape >& xShape )
         }
     }
     pSwShape->m_bDescriptor = false;
-    //add the group member to the format of the group
-    SwFrameFormat* pShapeFormat = ::FindFrameFormat( pSvxShape->GetSdrObject() );
-
-    if(pShapeFormat)
-        pSwShape->SetFrameFormat(pShapeFormat);
-
 }
 
 void SwXGroupShape::remove( const uno::Reference< XShape >& xShape )

@@ -275,7 +275,12 @@ double SwUserFieldType::GetValue( SwCalc& rCalc )
     return m_nValue;
 }
 
-OUString SwUserFieldType::GetContent( sal_uInt32 nFormat )
+OUString SwUserFieldType::GetInputOrDateTime( sal_uInt32 nFormat ) const
+{
+    return static_cast<const SwValueFieldType*>(this)->GetInputOrDateTime( m_aContent, GetValue(), nFormat);
+}
+
+OUString SwUserFieldType::GetContent( sal_uInt32 nFormat ) const
 {
     if (nFormat && nFormat != SAL_MAX_UINT32)
     {
@@ -307,7 +312,7 @@ void SwUserFieldType::SetContent( const OUString& rStr, sal_uInt32 nFormat )
             SetValue(fValue);
             LanguageTag aContentLanguage(GetFieldTypeLanguage());
             m_aContentLang = aContentLanguage.getBcp47();
-            m_aContent = DoubleToString(fValue, nFormat);
+            m_aContent = DoubleToString(fValue, aContentLanguage.getLanguageType());
         }
     }
 
@@ -348,7 +353,7 @@ void SwUserFieldType::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
             m_nValue = fVal;
             LanguageTag aContentLanguage(GetFieldTypeLanguage());
             m_aContentLang = aContentLanguage.getBcp47();
-            m_aContent = DoubleToString(m_nValue, static_cast<sal_uInt16>(GetFieldTypeLanguage()));
+            m_aContent = DoubleToString(m_nValue, aContentLanguage.getLanguageType());
         }
         break;
     case FIELD_PROP_PAR2:

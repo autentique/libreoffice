@@ -12,7 +12,7 @@
 #include <swmodeltestbase.hxx>
 
 #include <com/sun/star/awt/FontSlant.hpp>
-#include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/PointSequenceSequence.hpp>
@@ -51,6 +51,7 @@
 #include <comphelper/sequenceashashmap.hxx>
 #include <vcl/filter/PDFiumLibrary.hxx>
 #include <comphelper/scopeguard.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 
 #include <docufld.hxx> // for SwHiddenTextField::ParseIfFieldDefinition() method call
 #include <unoprnms.hxx>
@@ -279,7 +280,6 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf125877)
     CPPUNIT_ASSERT_EQUAL(1, getPages());
     uno::Reference<text::XTextTablesSupplier> xSupplier(mxComponent, uno::UNO_QUERY);
     uno::Reference<container::XIndexAccess> xTables(xSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
 
     // This was 0 (lost table during ODT export in footnotes)
     // Note: fix also tdf#95806: painting table layout is correct
@@ -289,6 +289,16 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf125877)
     uno::Reference<text::XTextFramesSupplier> xTextFramesSupplier(mxComponent, uno::UNO_QUERY);
     uno::Reference<container::XIndexAccess> xIndexAccess(xTextFramesSupplier->getTextFrames(), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xIndexAccess->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf150149)
+{
+    loadAndReload("tdf150149.fodt");
+    CPPUNIT_ASSERT_EQUAL(1, getPages());
+    xmlDocUniquePtr pXmlDoc = parseExport("content.xml");
+    // This was 0 (lost table header in multi-column section)
+    assertXPath(pXmlDoc, "//table:table-header-rows", 1);
+    assertXPath(pXmlDoc, "//table:table-header-rows/table:table-row/table:table-cell", 3);
 }
 
 DECLARE_ODFEXPORT_TEST(testTdf103567, "tdf103567.odt")
@@ -782,16 +792,30 @@ DECLARE_ODFEXPORT_TEST(testTextframeGradient, "textframe-gradient.odt")
 
     uno::Reference<beans::XPropertySet> xFrame(xIndexAccess->getByIndex(0), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, getProperty<drawing::FillStyle>(xFrame, "FillStyle"));
-    awt::Gradient aGradient = getProperty<awt::Gradient>(xFrame, "FillGradient");
-    CPPUNIT_ASSERT_EQUAL(Color(0xC0504D), Color(ColorTransparency, aGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(Color(0xD99594), Color(ColorTransparency, aGradient.EndColor));
+    awt::Gradient2 aGradient = getProperty<awt::Gradient2>(xFrame, "FillGradient");
+
+    // MCGR: Use the completely imported gradient to check for correctness
+    basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.75294117647058822, 0.31372549019607843, 0.30196078431372547));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.85098039215686272, 0.58431372549019611, 0.58039215686274515));
     CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_AXIAL, aGradient.Style);
 
     xFrame.set(xIndexAccess->getByIndex(1), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, getProperty<drawing::FillStyle>(xFrame, "FillStyle"));
-    aGradient = getProperty<awt::Gradient>(xFrame, "FillGradient");
-    CPPUNIT_ASSERT_EQUAL(COL_BLACK, Color(ColorTransparency, aGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(Color(0x666666), Color(ColorTransparency, aGradient.EndColor));
+    aGradient = getProperty<awt::Gradient2>(xFrame, "FillGradient");
+
+    // MCGR: Use the completely imported gradient to check for correctness
+    aColorStops = basegfx::BColorStops(aGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.0, 0.0, 0.0));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.40000000000000002, 0.40000000000000002, 0.40000000000000002));
     CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_AXIAL, aGradient.Style);
 }
 
@@ -1091,9 +1115,6 @@ DECLARE_ODFEXPORT_TEST(testCharacterBorder, "charborder.odt")
             uno::Reference < container::XEnumeration > xAutoStylesEnum( xAutoStyleFamily->createEnumeration() );
             CPPUNIT_ASSERT_EQUAL(true, static_cast<bool>(xAutoStylesEnum->hasMoreElements()));
 
-            // First paragraph autostyle
-            uno::Reference < beans::XPropertySet > xPSet( xAutoStylesEnum->nextElement(), uno::UNO_QUERY );
-
             // Top border
             CPPUNIT_ASSERT_BORDER_EQUAL(aFirstParCharTopBorder, getProperty<table::BorderLine2>(xSet,"CharTopBorder"));
             CPPUNIT_ASSERT_EQUAL(aFirstParCharTopPadding, getProperty<sal_Int32>(xSet,"CharTopBorderDistance"));
@@ -1191,10 +1212,10 @@ CPPUNIT_TEST_FIXTURE(Test, testProtectionKey)
     uno::Sequence<sal_Int8> const key1(getProperty<uno::Sequence<sal_Int8>>(xSect1, "ProtectionKey"));
     CPPUNIT_ASSERT(SvPasswordHelper::CompareHashPassword(key1, password));
     uno::Reference<beans::XPropertySet> xSect2(xSections->getByIndex(2), uno::UNO_QUERY);
-    uno::Sequence<sal_Int8> const key2(getProperty<uno::Sequence<sal_Int8>>(xSect1, "ProtectionKey"));
+    uno::Sequence<sal_Int8> const key2(getProperty<uno::Sequence<sal_Int8>>(xSect2, "ProtectionKey"));
     CPPUNIT_ASSERT(SvPasswordHelper::CompareHashPassword(key2, password));
     uno::Reference<beans::XPropertySet> xSect3(xSections->getByIndex(3), uno::UNO_QUERY);
-    uno::Sequence<sal_Int8> const key3(getProperty<uno::Sequence<sal_Int8>>(xSect1, "ProtectionKey"));
+    uno::Sequence<sal_Int8> const key3(getProperty<uno::Sequence<sal_Int8>>(xSect3, "ProtectionKey"));
     CPPUNIT_ASSERT(SvPasswordHelper::CompareHashPassword(key3, password));
 
     // we can't assume that the user entered the password; check that we
@@ -1249,7 +1270,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf103091)
     // check that all conditional paragraph style conditions are imported
     uno::Reference<container::XNameAccess> xParaStyles(getStyles("ParagraphStyles"));
     uno::Reference<beans::XPropertySet> xStyle1(xParaStyles->getByName(
-            "Text Body"), uno::UNO_QUERY);
+            "Text body"), uno::UNO_QUERY);
     auto conditions(getProperty<uno::Sequence<beans::NamedValue>>(xStyle1, "ParaStyleConditions"));
 
     CPPUNIT_ASSERT_EQUAL(sal_Int32(28), conditions.getLength());

@@ -390,25 +390,34 @@ bool SwFieldPortion::Format( SwTextFormatInfo &rInf )
             // These characters should not be contained in the follow
             // field portion. They are handled via the HookChar mechanism.
             const sal_Unicode nNew = !aNew.isEmpty() ? aNew[0] : 0;
-            switch (nNew)
+            auto IsHook = [](const sal_Unicode cNew) -> bool
             {
-                case CH_BREAK  : bFull = true;
-                    [[fallthrough]];
-                case ' ' :
-                case CH_TAB    :
-                case CHAR_HARDHYPHEN:               // non-breaking hyphen
-                case CHAR_SOFTHYPHEN:
-                case CHAR_HARDBLANK:
-                case CHAR_ZWSP :
-                case CHAR_WJ :
-                case CH_TXTATR_BREAKWORD:
-                case CH_TXTATR_INWORD:
+                switch (cNew)
                 {
-                    aNew = aNew.copy( 1 );
-                    ++nNextOfst;
-                    break;
+                    case CH_BREAK:
+                    case CH_TAB:
+                    case CHAR_HARDHYPHEN: // non-breaking hyphen
+                    case CHAR_SOFTHYPHEN:
+                    case CHAR_HARDBLANK:
+                    case CHAR_ZWSP:
+                    case CHAR_WJ:
+                    case CH_TXTATR_BREAKWORD:
+                    case CH_TXTATR_INWORD:
+                    {
+                        return true;
+                    }
+                    default:
+                        return false;
                 }
-                default: ;
+            };
+            if (IsHook(nNew))
+            {
+                if (nNew == CH_BREAK)
+                {
+                    bFull = true;
+                }
+                aNew = aNew.copy(1);
+                ++nNextOfst;
             }
 
             // Even if there is no more text left for a follow field,
@@ -419,8 +428,13 @@ bool SwFieldPortion::Format( SwTextFormatInfo &rInf )
             {
                 pField->SetFont( std::make_unique<SwFont>( *rInf.GetFont() ) );
             }
-            pField->SetFollow( true );
-            if (pField->Compress())
+            if (IsFollow() || Compress())
+            {   // empty this will be deleted in SwLineLayout::CalcLine()
+                // anyway so make sure pField doesn't have a stale flag
+                pField->SetFollow( true );
+            }
+            if (pField->Compress() && !std::all_of(std::u16string_view(aNew).begin(),
+                        std::u16string_view(aNew).end(), IsHook))
             {   // empty pField will be deleted in SwLineLayout::CalcLine()
                 // anyway so make sure this one doesn't have a stale flag
                 SetHasFollow( true );
@@ -524,10 +538,10 @@ SwNumberPortion::SwNumberPortion( const OUString &rExpand,
                                   const bool bCntr,
                                   const sal_uInt16 nMinDst,
                                   const bool bLabelAlignmentPosAndSpaceModeActive )
-        : SwFieldPortion( rExpand, std::move(pFont) ),
-          m_nFixWidth(0),
-          m_nMinDist( nMinDst ),
-          mbLabelAlignmentPosAndSpaceModeActive( bLabelAlignmentPosAndSpaceModeActive )
+    : SwFieldPortion(rExpand, std::move(pFont), false, TextFrameIndex(0))
+    , m_nFixWidth(0)
+    , m_nMinDist(nMinDst)
+    , mbLabelAlignmentPosAndSpaceModeActive(bLabelAlignmentPosAndSpaceModeActive)
 {
     SetWhichPor( PortionType::Number );
     SetLeft( bLft );

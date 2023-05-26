@@ -112,10 +112,10 @@ IMPL_LINK(ScTabControl, ShowPageList, const CommandEvent &, rEvent, void)
         OUString sId = OUString::number(nId);
         xPopup->append_radio(sId, aString);
         if (nId == nCurPageId)
-            xPopup->set_active(sId.toUtf8(), true);
+            xPopup->set_active(sId, true);
     }
 
-    OString sIdent(xPopup->popup_at_rect(pPopupParent, aRect));
+    OUString sIdent(xPopup->popup_at_rect(pPopupParent, aRect));
     if (!sIdent.isEmpty())
         SwitchToPageId(sIdent.toUInt32());
 }
@@ -437,7 +437,7 @@ void ScTabControl::SwitchToPageId(sal_uInt16 nId)
     {
         // notify LibreOfficeKit about changed page
         OString aPayload = OString::number(nId - 1);
-        pViewData->GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SET_PART, aPayload.getStr());
+        pViewData->GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SET_PART, aPayload);
     }
 }
 

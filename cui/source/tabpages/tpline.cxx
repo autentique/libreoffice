@@ -242,7 +242,7 @@ void SvxLineTabPage::FillListboxes()
 
 void SvxLineTabPage::ActivatePage( const SfxItemSet& rSet )
 {
-    const CntUInt16Item* pPageTypeItem = rSet.GetItem<CntUInt16Item>(SID_PAGE_TYPE, false);
+    const SfxUInt16Item* pPageTypeItem = rSet.GetItem<SfxUInt16Item>(SID_PAGE_TYPE, false);
     if (pPageTypeItem)
         SetPageType(static_cast<PageType>(pPageTypeItem->GetValue()));
     if( m_nDlgType == 0 && m_pDashList.is() )
@@ -457,7 +457,7 @@ bool SvxLineTabPage::FillItemSet( SfxItemSet* rAttrs )
     if (m_xLbColor->IsValueChangedFromSaved())
     {
         NamedColor aColor = m_xLbColor->GetSelectedEntry();
-        XLineColorItem aItem(aColor.second, aColor.first);
+        XLineColorItem aItem(aColor.m_aName, aColor.m_aColor);
         pOld = GetOldItem( *rAttrs, XATTR_LINECOLOR );
         if ( !pOld || !( *static_cast<const XLineColorItem*>(pOld) == aItem ) )
         {
@@ -759,7 +759,7 @@ void SvxLineTabPage::FillXLSet_Impl()
 
     m_rXLSet.Put( XLineWidthItem( GetCoreValue( *m_xMtrLineWidth, m_ePoolUnit ) ) );
     NamedColor aColor = m_xLbColor->GetSelectedEntry();
-    m_rXLSet.Put(XLineColorItem(aColor.second, aColor.first));
+    m_rXLSet.Put(XLineColorItem(aColor.m_aName, aColor.m_aColor));
 
     // Centered line end
     if( m_xTsbCenterStart->get_state() == TRISTATE_TRUE )
@@ -1517,7 +1517,7 @@ IMPL_LINK_NOARG(SvxLineTabPage, MenuCreateHdl_Impl, weld::Toggleable&, void)
 
 // #58425# Symbols on a list (e.g. StarChart)
 // Handler for menu button
-IMPL_LINK(SvxLineTabPage, GraphicHdl_Impl, const OString&, rIdent, void)
+IMPL_LINK(SvxLineTabPage, GraphicHdl_Impl, const OUString&, rIdent, void)
 {
     const Graphic* pGraphic = nullptr;
     Graphic aGraphic;
@@ -1525,7 +1525,7 @@ IMPL_LINK(SvxLineTabPage, GraphicHdl_Impl, const OString&, rIdent, void)
     bool bEnable = true;
     tools::Long nPreviousSymbolType = m_nSymbolType;
 
-    OString sNumber;
+    OUString sNumber;
     if (rIdent.startsWith("gallery", &sNumber))
     {
         SvxBmpItemInfo* pInfo = m_aGalleryBrushItems[sNumber.toUInt32()].get();

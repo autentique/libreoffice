@@ -173,7 +173,7 @@ protected:
 };
 
 /// Calculates what scaling factor will be used for autofit text scaling of this shape.
-sal_Int16 GetTextFitToSizeScale(SdrObject* pObject)
+double GetTextFitToSizeScale(SdrObject* pObject)
 {
     SdrTextObj* pTextObj = DynCastSdrTextObj(pObject);
     if (!pTextObj)
@@ -188,7 +188,7 @@ sal_Int16 GetTextFitToSizeScale(SdrObject* pObject)
         return 0;
     }
 
-    return pTextObj->GetFontScaleY();
+    return pTextObj->GetFontScale();
 }
 }
 
@@ -950,19 +950,20 @@ void SvxShape::Notify( SfxBroadcaster&, const SfxHint& rHint ) noexcept
     // do cheap checks first, this method is hot
     if (rHint.GetId() != SfxHintId::ThisIsAnSdrHint)
         return;
-    rtl::Reference<SdrObject> pSdrObject(mxSdrObject);
-    if( !pSdrObject )
+    if( !mxSdrObject )
         return;
     const SdrHint* pSdrHint = static_cast<const SdrHint*>(&rHint);
     // #i55919# SdrHintKind::ObjectChange is only interesting if it's for this object
     if ((pSdrHint->GetKind() != SdrHintKind::ModelCleared) &&
-         (pSdrHint->GetKind() != SdrHintKind::ObjectChange || pSdrHint->GetObject() != pSdrObject.get() ))
+         (pSdrHint->GetKind() != SdrHintKind::ObjectChange || pSdrHint->GetObject() != mxSdrObject.get() ))
         return;
 
-    uno::Reference< uno::XInterface > xSelf( pSdrObject->getWeakUnoShape() );
+    // prevent object being deleted from under us
+    rtl::Reference<SdrObject> xSdrSelf(mxSdrObject);
+    uno::Reference< uno::XInterface > xSelf( mxSdrObject->getWeakUnoShape() );
     if( !xSelf.is() )
     {
-        EndListening(pSdrObject->getSdrModelFromSdrObject());
+        EndListening(mxSdrObject->getSdrModelFromSdrObject());
         mxSdrObject.clear();
         return;
     }
@@ -973,9 +974,8 @@ void SvxShape::Notify( SfxBroadcaster&, const SfxHint& rHint ) noexcept
     }
     else // (pSdrHint->GetKind() == SdrHintKind::ModelCleared)
     {
-        EndListening(pSdrObject->getSdrModelFromSdrObject());
-        pSdrObject->setUnoShape(nullptr);
-        pSdrObject.clear();
+        EndListening(mxSdrObject->getSdrModelFromSdrObject());
+        mxSdrObject->setUnoShape(nullptr);
         mxSdrObject.clear();
 
         if(!mpImpl->mbDisposing)
@@ -1964,7 +1964,8 @@ beans::PropertyState SvxShape::_getPropertyState( const OUString& PropertyName )
                 if (pMap->nMemberId == MID_COLOR_THEME_INDEX)
                 {
                     const XFillColorItem* pColor = rSet.GetItem<XFillColorItem>(pMap->nWID);
-                    if (pColor->GetThemeColor().getType() == model::ThemeColorType::Unknown)
+                    if (pColor->getComplexColor().getType() == model::ColorType::Unused ||
+                        pColor->getComplexColor().getSchemeType() == model::ThemeColorType::Unknown)
                     {
                         eState = beans::PropertyState_DEFAULT_VALUE;
                     }
@@ -1973,7 +1974,7 @@ beans::PropertyState SvxShape::_getPropertyState( const OUString& PropertyName )
                 {
                     const XFillColorItem* pColor = rSet.GetItem<XFillColorItem>(pMap->nWID);
                     sal_Int16 nLumMod = 10000;
-                    for (auto const& rTransform : pColor->GetThemeColor().getTransformations())
+                    for (auto const& rTransform : pColor->getComplexColor().getTransformations())
                     {
                         if (rTransform.meType == model::TransformationType::LumMod)
                             nLumMod = rTransform.mnValue;
@@ -1987,7 +1988,7 @@ beans::PropertyState SvxShape::_getPropertyState( const OUString& PropertyName )
                 {
                     const XFillColorItem* pColor = rSet.GetItem<XFillColorItem>(pMap->nWID);
                     sal_Int16 nLumOff = 0;
-                    for (auto const& rTransform : pColor->GetThemeColor().getTransformations())
+                    for (auto const& rTransform : pColor->getComplexColor().getTransformations())
                     {
                         if (rTransform.meType == model::TransformationType::LumOff)
                             nLumOff = rTransform.mnValue;
@@ -1997,20 +1998,20 @@ beans::PropertyState SvxShape::_getPropertyState( const OUString& PropertyName )
                         eState = beans::PropertyState_DEFAULT_VALUE;
                     }
                 }
-                else if (pMap->nMemberId == MID_COLOR_THEME_REFERENCE)
+                else if (pMap->nMemberId == MID_COMPLEX_COLOR)
                 {
-                    const XFillColorItem* pColor = rSet.GetItem<XFillColorItem>(pMap->nWID);
-                    if (pColor->GetThemeColor().getType() == model::ThemeColorType::Unknown)
+                    auto const* pColor = rSet.GetItem<XFillColorItem>(pMap->nWID);
+                    if (pColor->getComplexColor().getType() == model::ColorType::Unused)
                     {
                         eState = beans::PropertyState_DEFAULT_VALUE;
                     }
                 }
                 break;
             case XATTR_LINECOLOR:
-                if (pMap->nMemberId == MID_COLOR_THEME_REFERENCE)
+                if (pMap->nMemberId == MID_COMPLEX_COLOR)
                 {
                     auto const* pColor = rSet.GetItem<XLineColorItem>(pMap->nWID);
-                    if (pColor->GetThemeColor().getType() == model::ThemeColorType::Unknown)
+                    if (pColor->getComplexColor().getType() == model::ColorType::Unused)
                     {
                         eState = beans::PropertyState_DEFAULT_VALUE;
                     }
@@ -2075,9 +2076,10 @@ bool SvxShape::setPropertyValueImpl( const OUString&, const SfxItemPropertyMapEn
             aNewHomogenMatrix.set(1, 0, aMatrix.Line2.Column1);
             aNewHomogenMatrix.set(1, 1, aMatrix.Line2.Column2);
             aNewHomogenMatrix.set(1, 2, aMatrix.Line2.Column3);
-            aNewHomogenMatrix.set(2, 0, aMatrix.Line3.Column1);
-            aNewHomogenMatrix.set(2, 1, aMatrix.Line3.Column2);
-            aNewHomogenMatrix.set(2, 2, aMatrix.Line3.Column3);
+            // For this to be a valid 2D transform matrix, the last row must be [0,0,1]
+            assert( aMatrix.Line3.Column1 == 0 );
+            assert( aMatrix.Line3.Column2 == 0 );
+            assert( aMatrix.Line3.Column3 == 1 );
 
             // tdf#117145 metric of SdrModel is app-specific, metric of UNO API is 100thmm
             // Need to adapt aNewHomogenMatrix from 100thmm to app-specific
@@ -2361,7 +2363,7 @@ bool SvxShape::setPropertyValueImpl( const OUString&, const SfxItemPropertyMapEn
 
     case OWN_ATTR_TEXTFITTOSIZESCALE:
     {
-        sal_Int16 nMaxScale = 0;
+        double nMaxScale = 0.0;
         if (rValue >>= nMaxScale)
         {
             SdrTextFitToSizeTypeItem aItem(pSdrObject->GetMergedItem(SDRATTR_TEXT_FITTOSIZE));
@@ -2577,9 +2579,9 @@ bool SvxShape::getPropertyValueImpl( const OUString&, const SfxItemPropertyMapEn
         aMatrix.Line2.Column1 = aNewHomogenMatrix.get(1, 0);
         aMatrix.Line2.Column2 = aNewHomogenMatrix.get(1, 1);
         aMatrix.Line2.Column3 = aNewHomogenMatrix.get(1, 2);
-        aMatrix.Line3.Column1 = aNewHomogenMatrix.get(2, 0);
-        aMatrix.Line3.Column2 = aNewHomogenMatrix.get(2, 1);
-        aMatrix.Line3.Column3 = aNewHomogenMatrix.get(2, 2);
+        aMatrix.Line3.Column1 = 0;
+        aMatrix.Line3.Column2 = 0;
+        aMatrix.Line3.Column3 = 1;
 
         rValue <<= aMatrix;
 
@@ -2871,7 +2873,8 @@ bool SvxShape::getPropertyValueImpl( const OUString&, const SfxItemPropertyMapEn
 
     case OWN_ATTR_TEXTFITTOSIZESCALE:
     {
-        rValue <<= GetTextFitToSizeScale(GetSdrObject());
+        double nScale = GetTextFitToSizeScale(GetSdrObject());
+        rValue <<= nScale;
         break;
     }
 

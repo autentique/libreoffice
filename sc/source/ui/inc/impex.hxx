@@ -144,7 +144,7 @@ public:
     bool ImportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId );
     bool ExportStream( SvStream&, const OUString& rBaseURL, SotClipboardFormatId );
 
-    bool ExportData( const OUString& rMimeType,
+    bool ExportData( std::u16string_view rMimeType,
                      css::uno::Any & rValue  );
 
     // after import
@@ -161,7 +161,6 @@ public:
     void SetExportTextOptions( const ScExportTextOptions& options ) { mExportTextOptions = options; }
 
     bool GetIncludeBOM() const { return mbIncludeBOM; }
-    void SetIncludeBOM(bool bVal) { mbIncludeBOM = bVal; }
 };
 
 // Helper class for importing clipboard strings as streams.

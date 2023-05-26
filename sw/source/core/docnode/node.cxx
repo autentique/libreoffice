@@ -547,16 +547,15 @@ const SwPageDesc* SwNode::FindPageDesc( SwNodeOffset* pPgDescNdIdx ) const
         {
             // Find the right Anchor first
             const SwFrameFormat* pFormat = nullptr;
-            const SwFrameFormats& rFormats = *rDoc.GetSpzFrameFormats();
+            const sw::SpzFrameFormats& rFormats = *rDoc.GetSpzFrameFormats();
 
-            for( size_t n = 0; n < rFormats.size(); ++n )
+            for(sw::SpzFrameFormat* pSpz: rFormats)
             {
-                const SwFrameFormat* pFrameFormat = rFormats[ n ];
-                const SwFormatContent& rContent = pFrameFormat->GetContent();
+                const SwFormatContent& rContent = pSpz->GetContent();
                 if( rContent.GetContentIdx() &&
                     &rContent.GetContentIdx()->GetNode() == static_cast<SwNode const *>(pSttNd) )
                 {
-                    pFormat = pFrameFormat;
+                    pFormat = pSpz;
                     break;
                 }
             }
@@ -745,24 +744,23 @@ SwFrameFormat* SwNode::GetFlyFormat() const
         if( IsContentNode() )
         {
             SwContentFrame* pFrame = SwIterator<SwContentFrame, SwContentNode, sw::IteratorMode::UnwrapMulti>(*static_cast<const SwContentNode*>(this)).First();
-            if( pFrame )
+            if( pFrame && pFrame->FindFlyFrame())
                 pRet = pFrame->FindFlyFrame()->GetFormat();
         }
         if( !pRet )
         {
             // The hard way through the Doc is our last way out
-            const SwFrameFormats& rFrameFormatTable = *GetDoc().GetSpzFrameFormats();
-            for( size_t n = 0; n < rFrameFormatTable.size(); ++n )
+            const sw::SpzFrameFormats& rSpzs = *GetDoc().GetSpzFrameFormats();
+            for(sw::SpzFrameFormat* pSpz: rSpzs)
             {
-                SwFrameFormat* pFormat = rFrameFormatTable[n];
                 // Only Writer fly frames can contain Writer nodes.
-                if (pFormat->Which() != RES_FLYFRMFMT)
+                if (pSpz->Which() != RES_FLYFRMFMT)
                     continue;
-                const SwFormatContent& rContent = pFormat->GetContent();
+                const SwFormatContent& rContent = pSpz->GetContent();
                 if( rContent.GetContentIdx() &&
                     &rContent.GetContentIdx()->GetNode() == pSttNd )
                 {
-                    pRet = pFormat;
+                    pRet = pSpz;
                     break;
                 }
             }
@@ -1564,31 +1562,23 @@ SwContentNode *SwContentNode::JoinNext()
     return this;
 }
 
+
 /// Get info from Modify
 bool SwContentNode::GetInfo( SfxPoolItem& rInfo ) const
 {
     switch( rInfo.Which() )
     {
+    case RES_FINDNEARESTNODE:
+        if( GetAttr( RES_PAGEDESC ).GetPageDesc() )
+            static_cast<SwFindNearestNode&>(rInfo).CheckNode( *this );
+        return true;
     case RES_AUTOFMT_DOCNODE:
         if( &GetNodes() == static_cast<SwAutoFormatGetDocNode&>(rInfo).pNodes )
         {
             return false;
         }
         break;
-
-    case RES_FINDNEARESTNODE:
-        if( GetAttr( RES_PAGEDESC ).GetPageDesc() )
-            static_cast<SwFindNearestNode&>(rInfo).CheckNode( *this );
-        return true;
-
-    case RES_CONTENT_VISIBLE:
-        {
-            static_cast<SwPtrMsgPoolItem&>(rInfo).pObject =
-                SwIterator<SwFrame, SwContentNode, sw::IteratorMode::UnwrapMulti>(*this).First();
-        }
-        return false;
     }
-
     return sw::BroadcastingModify::GetInfo( rInfo );
 }
 

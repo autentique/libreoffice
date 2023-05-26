@@ -26,8 +26,14 @@
 #include <postmac.h>
 #endif
 
+#undef HAVE_MALLOC_TRIM
+
 #ifdef LINUX
 #include <fcntl.h>
+#if defined __GLIBC__
+#  include <malloc.h>
+#  define HAVE_MALLOC_TRIM
+#endif
 #endif
 
 #ifdef ANDROID
@@ -211,6 +217,10 @@
 #include <unotools/viewoptions.hxx>
 #include <vcl/settings.hxx>
 
+#include <officecfg/Setup.hxx>
+#include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
+#include <svtools/acceleratorexecute.hxx>
+
 using namespace css;
 using namespace vcl;
 using namespace desktop;
@@ -259,8 +269,8 @@ public:
         OStringBuffer aOutput;
         for (const auto &s : aEvents)
         {
-            aOutput.append(OUStringToOString(s, RTL_TEXTENCODING_UTF8));
-            aOutput.append("\n");
+            aOutput.append(OUStringToOString(s, RTL_TEXTENCODING_UTF8)
+                + "\n");
         }
         if (aOutput.getLength() > 0)
         {
@@ -490,18 +500,18 @@ static bool extractLinks(const uno::Reference< container::XNameAccess >& xLinks,
     return bIsTarget;
 }
 
-static void unoAnyToJson(tools::JsonWriter& rJson, const char * pNodeName, const uno::Any& anyItem)
+static void unoAnyToJson(tools::JsonWriter& rJson, std::string_view pNodeName, const uno::Any& anyItem)
 {
     auto aNode = rJson.startNode(pNodeName);
     OUString aType = anyItem.getValueTypeName();
-    rJson.put("type", aType.toUtf8().getStr());
+    rJson.put("type", aType);
 
     if (aType == "string")
-        rJson.put("value", anyItem.get<OUString>().toUtf8().getStr());
+        rJson.put("value", anyItem.get<OUString>());
     else if (aType == "unsigned long")
-        rJson.put("value", OString::number(anyItem.get<sal_uInt32>()).getStr());
+        rJson.put("value", OString::number(anyItem.get<sal_uInt32>()));
     else if (aType == "long")
-        rJson.put("value", OString::number(anyItem.get<sal_Int32>()).getStr());
+        rJson.put("value", OString::number(anyItem.get<sal_Int32>()));
     else if (aType == "[]any")
     {
         uno::Sequence<uno::Any> aSeq;
@@ -511,35 +521,35 @@ static void unoAnyToJson(tools::JsonWriter& rJson, const char * pNodeName, const
 
             for (auto i = 0; i < aSeq.getLength(); ++i)
             {
-                unoAnyToJson(rJson, OString::number(i).getStr(), aSeq[i]);
+                unoAnyToJson(rJson, OString::number(i), aSeq[i]);
             }
         }
     }
 }
 
-static int lcl_getViewId(const std::string& payload);
+static int lcl_getViewId(std::string_view payload);
 
 namespace desktop {
 
-RectangleAndPart RectangleAndPart::Create(const std::string& rPayload)
+RectangleAndPart RectangleAndPart::Create(const OString& rPayload)
 {
     RectangleAndPart aRet;
-    if (rPayload.compare(0, 5, "EMPTY") == 0) // payload starts with "EMPTY"
+    if (rPayload.startsWith("EMPTY")) // payload starts with "EMPTY"
     {
         aRet.m_aRectangle = tools::Rectangle(0, 0, SfxLokHelper::MaxTwips, SfxLokHelper::MaxTwips);
         if (comphelper::LibreOfficeKit::isPartInInvalidation())
         {
-            int nSeparatorPos = rPayload.find(',', 6);
+            int nSeparatorPos = rPayload.indexOf(',', 6);
             bool bHasMode = nSeparatorPos > 0;
             if (bHasMode)
             {
-                aRet.m_nPart = std::stol(rPayload.substr(6, nSeparatorPos - 6));
-                assert(rPayload.length() > o3tl::make_unsigned(nSeparatorPos));
-                aRet.m_nMode = std::stol(rPayload.substr(nSeparatorPos + 1));
+                aRet.m_nPart = o3tl::toInt32(rPayload.subView(6, nSeparatorPos - 6));
+                assert(rPayload.getLength() > nSeparatorPos);
+                aRet.m_nMode = o3tl::toInt32(rPayload.subView(nSeparatorPos + 1));
             }
             else
             {
-                aRet.m_nPart = std::stol(rPayload.substr(6));
+                aRet.m_nPart = o3tl::toInt32(rPayload.subView(6));
                 aRet.m_nMode = 0;
             }
         }
@@ -548,8 +558,8 @@ RectangleAndPart RectangleAndPart::Create(const std::string& rPayload)
     }
 
     // Read '<left>, <top>, <width>, <height>[, <part>, <mode>]'. C++ streams are simpler but slower.
-    const char* pos = rPayload.c_str();
-    const char* end = rPayload.c_str() + rPayload.size();
+    const char* pos = rPayload.getStr();
+    const char* end = rPayload.getStr() + rPayload.getLength();
     tools::Long nLeft = rtl_str_toInt64_WithLength(pos, 10, end - pos);
     while( *pos != ',' )
         ++pos;
@@ -622,9 +632,9 @@ tools::Rectangle RectangleAndPart::SanitizedRectangle(const tools::Rectangle& re
     return SanitizedRectangle(rect.Left(), rect.Top(), rect.getOpenWidth(), rect.getOpenHeight());
 }
 
-const std::string& CallbackFlushHandler::CallbackData::getPayload() const
+const OString& CallbackFlushHandler::CallbackData::getPayload() const
 {
-    if(PayloadString.empty())
+    if(PayloadString.isEmpty())
     {
         // Do to-string conversion on demand, as many calls will get dropped without
         // needing the string.
@@ -667,7 +677,7 @@ void CallbackFlushHandler::CallbackData::setJson(const boost::property_tree::ptr
     std::stringstream aJSONStream;
     constexpr bool bPretty = false; // Don't waste time and bloat logs.
     boost::property_tree::write_json(aJSONStream, rTree, bPretty);
-    PayloadString = boost::trim_copy(aJSONStream.str());
+    PayloadString = OString(o3tl::trim(aJSONStream.str()));
 
     PayloadObject = rTree;
 }
@@ -706,7 +716,7 @@ bool CallbackFlushHandler::CallbackData::validate() const
             std::stringstream aJSONStream;
             boost::property_tree::write_json(aJSONStream, getJson(), false);
             const std::string aExpected = boost::trim_copy(aJSONStream.str());
-            return aExpected == getPayload();
+            return getPayload() == std::string_view(aExpected);
         }
 
         // View id.
@@ -764,7 +774,7 @@ static bool isUpdatedTypePerViewId(int type)
     }
 }
 
-static int lcl_getViewId(const std::string& payload)
+static int lcl_getViewId(std::string_view payload)
 {
     // this is a cheap way how to get the viewId from a JSON message; proper
     // parsing is terribly expensive, and we just need the viewId here
@@ -783,7 +793,7 @@ static int lcl_getViewId(const std::string& payload)
     }
 
     if (numberPos < payload.length() && payload[numberPos] >= '0' && payload[numberPos] <= '9')
-        return strtol(payload.substr(numberPos).c_str(), nullptr, 10);
+        return o3tl::toInt32(payload.substr(numberPos));
 
     return 0;
 }
@@ -1113,13 +1123,6 @@ static void doc_paintTile(LibreOfficeKitDocument* pThis,
                           const int nCanvasWidth, const int nCanvasHeight,
                           const int nTilePosX, const int nTilePosY,
                           const int nTileWidth, const int nTileHeight);
-#ifdef IOS
-static void doc_paintTileToCGContext(LibreOfficeKitDocument* pThis,
-                                     void* rCGContext,
-                                     const int nCanvasWidth, const int nCanvasHeight,
-                                     const int nTilePosX, const int nTilePosY,
-                                     const int nTileWidth, const int nTileHeight);
-#endif
 static void doc_paintPartTile(LibreOfficeKitDocument* pThis,
                               unsigned char* pBuffer,
                               const int nPart,
@@ -1386,9 +1389,6 @@ LibLODocument_Impl::LibLODocument_Impl(uno::Reference <css::lang::XComponent> xC
         m_pDocumentClass->setPartMode = doc_setPartMode;
         m_pDocumentClass->getEditMode = doc_getEditMode;
         m_pDocumentClass->paintTile = doc_paintTile;
-#ifdef IOS
-        m_pDocumentClass->paintTileToCGContext = doc_paintTileToCGContext;
-#endif
         m_pDocumentClass->paintPartTile = doc_paintPartTile;
         m_pDocumentClass->getTileMode = doc_getTileMode;
         m_pDocumentClass->getDocumentSize = doc_getDocumentSize;
@@ -1597,13 +1597,13 @@ void CallbackFlushHandler::resetUpdatedTypePerViewId( int nType, int nViewId )
     }
 }
 
-void CallbackFlushHandler::libreOfficeKitViewCallback(int nType, const char* pPayload)
+void CallbackFlushHandler::libreOfficeKitViewCallback(int nType, const OString& pPayload)
 {
     CallbackData callbackData(pPayload);
     queue(nType, callbackData);
 }
 
-void CallbackFlushHandler::libreOfficeKitViewCallbackWithViewId(int nType, const char* pPayload, int nViewId)
+void CallbackFlushHandler::libreOfficeKitViewCallbackWithViewId(int nType, const OString& pPayload, int nViewId)
 {
     CallbackData callbackData(pPayload, nViewId);
     queue(nType, callbackData);
@@ -1654,7 +1654,7 @@ void CallbackFlushHandler::libreOfficeKitViewAddPendingInvalidateTiles()
     startTimer();
 }
 
-void CallbackFlushHandler::queue(const int type, const char* data)
+void CallbackFlushHandler::queue(const int type, const OString& data)
 {
     CallbackData callbackData(data);
     queue(type, callbackData);
@@ -1709,9 +1709,9 @@ void CallbackFlushHandler::queue(const int type, CallbackData& aCallbackData)
 
     // Suppress invalid payloads.
     if (type == LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR &&
-        aCallbackData.getPayload().find(", 0, 0, ") != std::string::npos &&
-        aCallbackData.getPayload().find("\"hyperlink\":\"\"") == std::string::npos &&
-        aCallbackData.getPayload().find("\"hyperlink\": {}") == std::string::npos)
+        aCallbackData.getPayload().indexOf(", 0, 0, ") != -1 &&
+        aCallbackData.getPayload().indexOf("\"hyperlink\":\"\"") == -1 &&
+        aCallbackData.getPayload().indexOf("\"hyperlink\": {}") == -1)
     {
         // The cursor position is often the relative coordinates of the widget
         // issuing it, instead of the absolute one that we expect.
@@ -1843,8 +1843,8 @@ void CallbackFlushHandler::queue(const int type, CallbackData& aCallbackData)
                 // deleting the duplicate of visible cursor message can cause hyperlink popup not to show up on second/or more click on the same place.
                 // If the hyperlink is not empty we can bypass that to show the popup
                 const bool hyperLinkException = type == LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR &&
-                    aCallbackData.getPayload().find("\"hyperlink\":\"\"") == std::string::npos &&
-                    aCallbackData.getPayload().find("\"hyperlink\": {}") == std::string::npos;
+                    aCallbackData.getPayload().indexOf("\"hyperlink\":\"\"") == -1 &&
+                    aCallbackData.getPayload().indexOf("\"hyperlink\": {}") == -1;
                 if(!hyperLinkException)
                 {
                     const int nViewId = aCallbackData.getViewId();
@@ -1866,16 +1866,16 @@ void CallbackFlushHandler::queue(const int type, CallbackData& aCallbackData)
             case LOK_CALLBACK_STATE_CHANGED:
             {
                 // Compare the state name=value and overwrite earlier entries with same name.
-                const auto pos = aCallbackData.getPayload().find('=');
-                if (pos != std::string::npos)
+                const auto pos = aCallbackData.getPayload().indexOf('=');
+                if (pos != -1)
                 {
-                    const std::string name = aCallbackData.getPayload().substr(0, pos + 1);
+                    const std::string_view name = aCallbackData.getPayload().subView(0, pos + 1);
                     // This is needed because otherwise it creates some problems when
                     // a save occurs while a cell is still edited in Calc.
                     if (name != ".uno:ModifiedStatus=")
                     {
                         removeAll(type, [&name] (const CallbackData& elemData) {
-                                return (elemData.getPayload().compare(0, name.size(), name) == 0);
+                                return elemData.getPayload().startsWith(name);
                             }
                         );
                     }
@@ -1893,7 +1893,7 @@ void CallbackFlushHandler::queue(const int type, CallbackData& aCallbackData)
                 // remove only selection ranges and 'EMPTY' messages
                 // always send 'INPLACE' and 'INPLACE EXIT' messages
                 removeAll(type, [] (const CallbackData& elemData)
-                    { return (elemData.getPayload().find("INPLACE") == std::string::npos); });
+                    { return (elemData.getPayload().indexOf("INPLACE") == -1); });
             }
             break;
         }
@@ -2055,9 +2055,9 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(int type, CallbackData& a
 
 bool CallbackFlushHandler::processWindowEvent(int type, CallbackData& aCallbackData)
 {
-    const std::string& payload = aCallbackData.getPayload();
+    const OString& payload = aCallbackData.getPayload();
 
-    boost::property_tree::ptree& aTree = aCallbackData.setJson(payload);
+    boost::property_tree::ptree& aTree = aCallbackData.setJson(std::string(payload));
     const unsigned nLOKWindowId = aTree.get<unsigned>("id", 0);
     const std::string aAction = aTree.get<std::string>("action", "");
     if (aAction == "invalidate")
@@ -2299,7 +2299,7 @@ void CallbackFlushHandler::enqueueUpdatedType( int type, const SfxViewShell* vie
     std::optional<OString> payload = viewShell->getLOKPayload( type, viewId );
     if(!payload)
         return; // No actual payload to send.
-    CallbackData callbackData(payload->getStr(), viewId);
+    CallbackData callbackData(*payload, viewId);
     m_queue1.emplace_back(type);
     m_queue2.emplace_back(callbackData);
     SAL_INFO("lok", "Queued updated [" << type << "]: [" << callbackData.getPayload()
@@ -2341,13 +2341,13 @@ void CallbackFlushHandler::Invoke()
         // common code-path for events on this view:
         if (viewId == -1)
         {
-            size_t idx;
+            sal_Int32 idx;
             // key-value pairs
             if (type == LOK_CALLBACK_STATE_CHANGED &&
-                (idx = payload.find('=')) != std::string::npos)
+                (idx = payload.indexOf('=')) != -1)
             {
-                std::string key = payload.substr(0, idx);
-                std::string value = payload.substr(idx+1);
+                OString key = payload.copy(0, idx);
+                OString value = payload.copy(idx+1);
                 const auto stateIt = m_lastStateChange.find(key);
                 if (stateIt != m_lastStateChange.end())
                 {
@@ -2409,7 +2409,7 @@ void CallbackFlushHandler::Invoke()
             }
         }
 
-        m_pCallback(type, payload.c_str(), m_pData);
+        m_pCallback(type, payload.getStr(), m_pData);
     }
 
     m_queue1.clear();
@@ -2579,41 +2579,6 @@ LibLibreOffice_Impl::~LibLibreOffice_Impl()
 
 namespace
 {
-
-#ifdef IOS
-void paintTileToCGContext(ITiledRenderable* pDocument,
-                          void* rCGContext, const Size nCanvasSize,
-                          const int nTilePosX, const int nTilePosY,
-                          const int nTileWidth, const int nTileHeight)
-{
-    SystemGraphicsData aData;
-    aData.rCGContext = reinterpret_cast<CGContextRef>(rCGContext);
-
-    ScopedVclPtrInstance<VirtualDevice> pDevice(aData, Size(1, 1), DeviceFormat::WITHOUT_ALPHA);
-    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
-    pDevice->SetOutputSizePixel(nCanvasSize);
-    pDocument->paintTile(*pDevice, nCanvasSize.Width(), nCanvasSize.Height(),
-                    nTilePosX, nTilePosY, nTileWidth, nTileHeight);
-}
-
-void paintTileIOS(LibreOfficeKitDocument* pThis,
-             unsigned char* pBuffer,
-             const int nCanvasWidth, const int nCanvasHeight, const double fDPIScale,
-             const int nTilePosX, const int nTilePosY,
-             const int nTileWidth, const int nTileHeight)
-{
-    CGContextRef pCGContext = CGBitmapContextCreate(pBuffer, nCanvasWidth, nCanvasHeight, 8,
-                                                    nCanvasWidth * 4, CGColorSpaceCreateDeviceRGB(),
-                                                    kCGImageAlphaPremultipliedFirst | kCGImageByteOrder32Little);
-
-    CGContextTranslateCTM(pCGContext, 0, nCanvasHeight);
-    CGContextScaleCTM(pCGContext, fDPIScale, -fDPIScale);
-
-    doc_paintTileToCGContext(pThis, (void*) pCGContext, nCanvasWidth, nCanvasHeight, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
-
-    CGContextRelease(pCGContext);
-}
-#endif
 
 void setLanguageAndLocale(OUString const & aLangISO)
 {
@@ -3035,7 +3000,7 @@ static bool lo_signDocument(LibreOfficeKit* /*pThis*/,
     std::string aCertificateBase64String = extractCertificate(aCertificateString);
     if (!aCertificateBase64String.empty())
     {
-        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String.c_str());
+        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String);
         comphelper::Base64::decode(aCertificateSequence, aBase64OUString);
     }
     else
@@ -3049,7 +3014,7 @@ static bool lo_signDocument(LibreOfficeKit* /*pThis*/,
     std::string aPrivateKeyBase64String = extractPrivateKey(aPrivateKeyString);
     if (!aPrivateKeyBase64String.empty())
     {
-        OUString aBase64OUString = OUString::createFromAscii(aPrivateKeyBase64String.c_str());
+        OUString aBase64OUString = OUString::createFromAscii(aPrivateKeyBase64String);
         comphelper::Base64::decode(aPrivateKeySequence, aBase64OUString);
     }
     else
@@ -3120,8 +3085,7 @@ static char* lo_extractRequest(LibreOfficeKit* /*pThis*/, const char* pFilePath)
 
                 if( xLTS.is() )
                 {
-                    OUStringBuffer jsonText;
-                    jsonText.append("{ \"Targets\": { ");
+                    OUStringBuffer jsonText("{ \"Targets\": { ");
                     bool lastParentheses = extractLinks(xLTS->getLinks(), false, jsonText);
                     jsonText.append("} }");
                     if (!lastParentheses)
@@ -3147,6 +3111,12 @@ static char* lo_extractRequest(LibreOfficeKit* /*pThis*/, const char* pFilePath)
 static void lo_trimMemory(LibreOfficeKit* /* pThis */, int nTarget)
 {
     vcl::lok::trimMemory(nTarget);
+    if (nTarget > 1000)
+    {
+#ifdef HAVE_MALLOC_TRIM
+        malloc_trim(0);
+#endif
+    }
 }
 
 static void lo_registerCallback (LibreOfficeKit* pThis,
@@ -3922,8 +3892,31 @@ static void doc_paintTile(LibreOfficeKitDocument* pThis,
     comphelper::ScopeGuard dpiScaleGuard([]() { comphelper::LibreOfficeKit::setDPIScale(1.0); });
 
 #if defined(IOS)
-    double fDPIScaleX = 1.0;
-    paintTileIOS(pThis, pBuffer, nCanvasWidth, nCanvasHeight, fDPIScaleX, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+    double fDPIScale = 1.0;
+
+    CGContextRef pCGContext = CGBitmapContextCreate(pBuffer, nCanvasWidth, nCanvasHeight, 8,
+                                                    nCanvasWidth * 4, CGColorSpaceCreateDeviceRGB(),
+                                                    kCGImageAlphaPremultipliedFirst | kCGImageByteOrder32Little);
+
+    CGContextTranslateCTM(pCGContext, 0, nCanvasHeight);
+    CGContextScaleCTM(pCGContext, fDPIScale, -fDPIScale);
+
+    SAL_INFO( "lok.tiledrendering", "doc_paintTile: painting [" << nTileWidth << "x" << nTileHeight <<
+              "]@(" << nTilePosX << ", " << nTilePosY << ") to [" <<
+              nCanvasWidth << "x" << nCanvasHeight << "]px" );
+
+    Size aCanvasSize(nCanvasWidth, nCanvasHeight);
+
+    SystemGraphicsData aData;
+    aData.rCGContext = reinterpret_cast<CGContextRef>(pCGContext);
+
+    ScopedVclPtrInstance<VirtualDevice> pDevice(aData, Size(1, 1), DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    pDevice->SetOutputSizePixel(aCanvasSize);
+    pDoc->paintTile(*pDevice, aCanvasSize.Width(), aCanvasSize.Height(),
+                    nTilePosX, nTilePosY, nTileWidth, nTileHeight);
+
+    CGContextRelease(pCGContext);
 #else
     ScopedVclPtrInstance< VirtualDevice > pDevice(DeviceFormat::WITHOUT_ALPHA);
 
@@ -3955,7 +3948,7 @@ static void doc_paintTile(LibreOfficeKitDocument* pThis,
     pDevice->EnableMapMode(false);
     BitmapEx aBmpEx = pDevice->GetBitmapEx({ 0, 0 }, { nCanvasWidth, nCanvasHeight });
     Bitmap aBmp = aBmpEx.GetBitmap();
-    Bitmap aAlpha = aBmpEx.GetAlphaMask();
+    AlphaMask aAlpha = aBmpEx.GetAlphaMask();
     Bitmap::ScopedReadAccess sraBmp(aBmp);
     Bitmap::ScopedReadAccess sraAlpha(aAlpha);
 
@@ -3985,36 +3978,6 @@ static void doc_paintTile(LibreOfficeKitDocument* pThis,
     (void) pBuffer;
 #endif
 }
-
-#ifdef IOS
-
-// This function is separate only to be used by LibreOfficeLight. If that app can be retired, this
-// function's code can be inlined.
-static void doc_paintTileToCGContext(LibreOfficeKitDocument* pThis,
-                                     void* rCGContext,
-                                     const int nCanvasWidth, const int nCanvasHeight,
-                                     const int nTilePosX, const int nTilePosY,
-                                     const int nTileWidth, const int nTileHeight)
-{
-    SolarMutexGuard aGuard;
-    SetLastExceptionMsg();
-
-    SAL_INFO( "lok.tiledrendering", "paintTileToCGContext: painting [" << nTileWidth << "x" << nTileHeight <<
-              "]@(" << nTilePosX << ", " << nTilePosY << ") to [" <<
-              nCanvasWidth << "x" << nCanvasHeight << "]px" );
-
-    ITiledRenderable* pDoc = getTiledRenderable(pThis);
-    if (!pDoc)
-    {
-        SetLastExceptionMsg("Document doesn't support tiled rendering");
-        return;
-    }
-
-    Size aCanvasSize(nCanvasWidth, nCanvasHeight);
-    paintTileToCGContext(pDoc, rCGContext, aCanvasSize, nTilePosX, nTilePosY, nTileWidth, nTileHeight);
-}
-
-#endif
 
 static void doc_paintPartTile(LibreOfficeKitDocument* pThis,
                               unsigned char* pBuffer,
@@ -4329,7 +4292,7 @@ static void doc_registerCallback(LibreOfficeKitDocument* pThis,
                     bFirst = false;
                 else
                     sPayload += ", ";
-                sPayload += "\"" + std::string(f.toUtf8().getStr()) + "\"";
+                sPayload += "\"" + std::string(f.toUtf8()) + "\"";
             }
             sPayload += " ] }";
             pCallback(LOK_CALLBACK_FONTS_MISSING, sPayload.c_str(), pData);
@@ -4358,7 +4321,7 @@ static char* getPostIts(LibreOfficeKitDocument* pThis)
     }
     tools::JsonWriter aJsonWriter;
     pDoc->getPostIts(aJsonWriter);
-    return aJsonWriter.extractData();
+    return strdup(aJsonWriter.finishAndGetAsOString().getStr());
 }
 
 /// Returns the JSON representation of the positions of all the comments in the document
@@ -4373,7 +4336,7 @@ static char* getPostItsPos(LibreOfficeKitDocument* pThis)
     }
     tools::JsonWriter aJsonWriter;
     pDoc->getPostItsPos(aJsonWriter);
-    return aJsonWriter.extractData();
+    return strdup(aJsonWriter.finishAndGetAsOString().getStr());
 }
 
 static char* getRulerState(LibreOfficeKitDocument* pThis)
@@ -4387,7 +4350,7 @@ static char* getRulerState(LibreOfficeKitDocument* pThis)
     }
     tools::JsonWriter aJsonWriter;
     pDoc->getRulerState(aJsonWriter);
-    return aJsonWriter.extractData();
+    return strdup(aJsonWriter.finishAndGetAsOString().getStr());
 }
 
 static void doc_postKeyEvent(LibreOfficeKitDocument* pThis, int nType, int nCharCode, int nKeyCode)
@@ -4613,13 +4576,17 @@ namespace {
 */
 class DispatchResultListener : public cppu::WeakImplHelper<css::frame::XDispatchResultListener>
 {
-    OString maCommand;                 ///< Command for which this is the result.
-    std::shared_ptr<CallbackFlushHandler> mpCallback; ///< Callback to call.
+    const OString maCommand; ///< Command for which this is the result.
+    const std::shared_ptr<CallbackFlushHandler> mpCallback; ///< Callback to call.
+    const std::chrono::steady_clock::time_point mSaveTime; //< The time we started saving.
+    const bool mbWasModified; //< Whether or not the document was modified before saving.
 
 public:
     DispatchResultListener(const char* pCommand, std::shared_ptr<CallbackFlushHandler> pCallback)
         : maCommand(pCommand)
         , mpCallback(std::move(pCallback))
+        , mSaveTime(std::chrono::steady_clock::now())
+        , mbWasModified(SfxObjectShell::Current()->IsModified())
     {
         assert(mpCallback);
     }
@@ -4636,7 +4603,15 @@ public:
         }
 
         unoAnyToJson(aJson, "result", rEvent.Result);
-        mpCallback->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.extractData());
+        aJson.put("wasModified", mbWasModified);
+        aJson.put("startUnixTimeMics",
+                  std::chrono::time_point_cast<std::chrono::microseconds>(mSaveTime)
+                      .time_since_epoch()
+                      .count());
+        aJson.put("saveDurationMics", std::chrono::duration_cast<std::chrono::microseconds>(
+                                          std::chrono::steady_clock::now() - mSaveTime)
+                                          .count());
+        mpCallback->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.finishAndGetAsOString());
     }
 
     virtual void SAL_CALL disposing(const css::lang::EventObject&) override {}
@@ -4658,28 +4633,25 @@ static void lcl_sendDialogEvent(unsigned long long int nWindowId, const char* pA
 
     try
     {
-        OString sControlId = OUStringToOString(aMap["id"], RTL_TEXTENCODING_ASCII_US);
+        OUString sControlId = aMap["id"];
 
         // dialogs send own id but notebookbar and sidebar controls are remembered by SfxViewShell id
-        bool bFoundWeldedControl = jsdialog::ExecuteAction(std::to_string(nWindowId), sControlId, aMap);
-        if (!bFoundWeldedControl)
-            bFoundWeldedControl = jsdialog::ExecuteAction(std::to_string(nCurrentShellId) + "sidebar", sControlId, aMap);
-        if (!bFoundWeldedControl)
-            bFoundWeldedControl = jsdialog::ExecuteAction(std::to_string(nCurrentShellId) + "notebookbar", sControlId, aMap);
-        if (!bFoundWeldedControl)
-            bFoundWeldedControl = jsdialog::ExecuteAction(std::to_string(nCurrentShellId) + "formulabar", sControlId, aMap);
-        if (!bFoundWeldedControl && !SfxViewShell::Current())
-        {
-            // this is needed for dialogs shown before document is loaded: MacroWarning dialog, etc...
-            // these dialogs are created with WindowId "0"
-            bFoundWeldedControl = jsdialog::ExecuteAction("0", sControlId, aMap);
-        }
-
-        if (bFoundWeldedControl)
+        if (jsdialog::ExecuteAction(OUString::number(nWindowId), sControlId, aMap))
+            return;
+        auto sCurrentShellId = OUString::number(nCurrentShellId);
+        if (jsdialog::ExecuteAction(sCurrentShellId + "sidebar", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "notebookbar", sControlId, aMap))
+            return;
+        if (jsdialog::ExecuteAction(sCurrentShellId + "formulabar", sControlId, aMap))
+            return;
+        // this is needed for dialogs shown before document is loaded: MacroWarning dialog, etc...
+        // these dialogs are created with WindowId "0"
+        if (!SfxViewShell::Current() && jsdialog::ExecuteAction("0", sControlId, aMap))
             return;
 
         // force resend - used in mobile-wizard
-        jsdialog::SendFullUpdate(std::to_string(nCurrentShellId) + "sidebar", "Panel");
+        jsdialog::SendFullUpdate(sCurrentShellId + "sidebar", "Panel");
 
     } catch(...) {}
 }
@@ -4833,7 +4805,7 @@ static void doc_postUnoCommand(LibreOfficeKitDocument* pThis, const char* pComma
             tools::JsonWriter aJson;
             aJson.put("commandName", pCommand);
             aJson.put("success", bResult);
-            pDocument->mpCallbackFlushHandlers[nView]->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.extractData());
+            pDocument->mpCallbackFlushHandlers[nView]->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.finishAndGetAsOString());
             return;
         }
 
@@ -4871,7 +4843,7 @@ static void doc_postUnoCommand(LibreOfficeKitDocument* pThis, const char* pComma
                 aJson.put("type", "string");
                 aJson.put("value", "unmodified");
             }
-            pDocument->mpCallbackFlushHandlers[nView]->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.extractData());
+            pDocument->mpCallbackFlushHandlers[nView]->queue(LOK_CALLBACK_UNO_COMMAND_RESULT, aJson.finishAndGetAsOString());
             return;
         }
     }
@@ -5194,7 +5166,7 @@ static bool getFromTransferable(
     }
 
     datatransfer::DataFlavor aFlavor;
-    aFlavor.MimeType = OUString::fromUtf8(aMimeType.getStr());
+    aFlavor.MimeType = OUString::fromUtf8(aMimeType);
     if (aMimeType == "text/plain;charset=utf-16")
         aFlavor.DataType = cppu::UnoType<OUString>::get();
     else
@@ -6053,7 +6025,7 @@ static char* getTrackedChanges(LibreOfficeKitDocument* pThis)
         pDoc->getTrackedChanges(aJson);
     }
 
-    return aJson.extractData();
+    return strdup(aJson.finishAndGetAsOString().getStr());
 }
 
 
@@ -6068,7 +6040,7 @@ static char* getTrackedChangeAuthors(LibreOfficeKitDocument* pThis)
     }
     tools::JsonWriter aJsonWriter;
     pDoc->getTrackedChangeAuthors(aJsonWriter);
-    return aJsonWriter.extractData();
+    return strdup(aJsonWriter.finishAndGetAsOString().getStr());
 }
 
 static char* doc_getCommandValues(LibreOfficeKitDocument* pThis, const char* pCommand)
@@ -6174,7 +6146,7 @@ static char* doc_getCommandValues(LibreOfficeKitDocument* pThis, const char* pCo
 
         tools::JsonWriter aJsonWriter;
         pDoc->getRowColumnHeaders(aRectangle, aJsonWriter);
-        return aJsonWriter.extractData();
+        return strdup(aJsonWriter.finishAndGetAsOString().getStr());
     }
     else if (o3tl::starts_with(aCommand, aSheetGeometryData))
     {
@@ -6240,7 +6212,7 @@ static char* doc_getCommandValues(LibreOfficeKitDocument* pThis, const char* pCo
         // Ignore command's deprecated parameters.
         tools::JsonWriter aJsonWriter;
         pDoc->getCellCursor(aJsonWriter);
-        return aJsonWriter.extractData();
+        return strdup(aJsonWriter.finishAndGetAsOString().getStr());
     }
     else if (o3tl::starts_with(aCommand, aFontSubset))
     {
@@ -6250,7 +6222,7 @@ static char* doc_getCommandValues(LibreOfficeKitDocument* pThis, const char* pCo
     {
         tools::JsonWriter aJsonWriter;
         pDoc->getCommandValues(aJsonWriter, aCommand);
-        return aJsonWriter.extractData();
+        return strdup(aJsonWriter.finishAndGetAsOString().getStr());
     }
     else
     {
@@ -6698,7 +6670,7 @@ static bool doc_insertCertificate(LibreOfficeKitDocument* pThis,
     std::string aCertificateBase64String = extractCertificate(aCertificateString);
     if (!aCertificateBase64String.empty())
     {
-        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String.c_str());
+        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String);
         comphelper::Base64::decode(aCertificateSequence, aBase64OUString);
     }
     else
@@ -6712,7 +6684,7 @@ static bool doc_insertCertificate(LibreOfficeKitDocument* pThis,
     std::string aPrivateKeyBase64String = extractPrivateKey(aPrivateKeyString);
     if (!aPrivateKeyBase64String.empty())
     {
-        OUString aBase64OUString = OUString::createFromAscii(aPrivateKeyBase64String.c_str());
+        OUString aBase64OUString = OUString::createFromAscii(aPrivateKeyBase64String);
         comphelper::Base64::decode(aPrivateKeySequence, aBase64OUString);
     }
     else
@@ -6770,7 +6742,7 @@ static bool doc_addCertificate(LibreOfficeKitDocument* pThis,
     std::string aCertificateBase64String = extractCertificate(aCertificateString);
     if (!aCertificateBase64String.empty())
     {
-        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String.c_str());
+        OUString aBase64OUString = OUString::createFromAscii(aCertificateBase64String);
         comphelper::Base64::decode(aCertificateSequence, aBase64OUString);
     }
     else
@@ -7009,13 +6981,13 @@ static char* lo_getFilterTypes(LibreOfficeKit* pThis)
             OUString aValue;
             if (it != std::cend(aValues) && (it->Value >>= aValue) && !aValue.isEmpty())
             {
-                auto typeNode = aJson.startNode(rType.toUtf8().getStr());
+                auto typeNode = aJson.startNode(rType.toUtf8());
                 aJson.put("MediaType", aValue.toUtf8());
             }
         }
     }
 
-    return aJson.extractData();
+    return strdup(aJson.finishAndGetAsOString().getStr());
 }
 
 static void lo_setOptionalFeatures(LibreOfficeKit* pThis, unsigned long long const features)
@@ -7179,6 +7151,47 @@ static void lo_status_indicator_callback(void *data, comphelper::LibreOfficeKit:
     }
 }
 
+/// Used by preloadData (LibreOfficeKit) for providing different shortcuts for different languages.
+static void preLoadShortCutAccelerators()
+{
+    std::unordered_map<OUString, css::uno::Reference<com::sun::star::ui::XAcceleratorConfiguration>>& acceleratorConfs = SfxLokHelper::getAcceleratorConfs();
+    css::uno::Sequence<OUString> installedLocales(officecfg::Setup::Office::InstalledLocales::get()->getElementNames());
+    OUString actualLang = officecfg::Setup::L10N::ooLocale::get();
+
+    for (sal_Int32 i = 0; i < installedLocales.getLength(); i++)
+    {
+        OUString language = LanguageTag(installedLocales[i]).getLocale().Language;
+
+        if (!comphelper::LibreOfficeKit::isAllowlistedLanguage(language))
+        {
+            // Language is listed by COOL and also installed in core. We can create the short cut accelerator.
+
+            // Set the UI language to current one, before creating the accelerator.
+            std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+            officecfg::Setup::L10N::ooLocale::set(installedLocales[i], batch);
+            batch->commit();
+
+            // Supported module names: Writer, Calc, Draw, Impress
+            std::vector<OUString> supportedModuleNames = { "com.sun.star.text.TextDocument", "com.sun.star.sheet.SpreadsheetDocument", "com.sun.star.drawing.DrawingDocument", "com.sun.star.presentation.PresentationDocument" };
+            // Create the accelerators.
+            for (std::size_t j = 0; j < supportedModuleNames.size(); j++)
+            {
+                OUString key = supportedModuleNames[j] + installedLocales[i];
+                acceleratorConfs[key] = svt::AcceleratorExecute::lok_createNewAcceleratorConfiguration(::comphelper::getProcessComponentContext(), supportedModuleNames[j]);
+            }
+        }
+        else
+        {
+            std::cerr << "Language is installed in core but not in the list of COOL languages: " << language << "\n";
+        }
+    }
+
+    // Set the UI language back to default one.
+    std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+    officecfg::Setup::L10N::ooLocale::set(actualLang, batch);
+    batch->commit();
+}
+
 /// Used only by LibreOfficeKit when used by Online to pre-initialize
 static void preloadData()
 {
@@ -7241,6 +7254,9 @@ static void preloadData()
     std::cerr << "Preload icons\n";
     ImageTree &images = ImageTree::get();
     images.getImageUrl("forcefed.png", "style", "FO_oo");
+
+    std::cerr << "Preload short cut accelerators\n";
+    preLoadShortCutAccelerators();
 
     std::cerr << "Preload languages\n";
 
@@ -7847,26 +7863,6 @@ static void lo_destroy(LibreOfficeKit* pThis)
     bInitialized = false;
     SAL_INFO("lok", "LO Destroy Done");
 }
-
-#ifdef IOS
-
-// Used by the unmaintained LibreOfficeLight app. Once that has been retired, get rid of this, too.
-
-__attribute__((visibility("default")))
-void temporaryHackToInvokeCallbackHandlers(LibreOfficeKitDocument* pThis)
-{
-    SolarMutexGuard aGuard;
-    LibLODocument_Impl* pDocument = static_cast<LibLODocument_Impl*>(pThis);
-
-    int nOrigViewId = doc_getView(pThis);
-
-    if (nOrigViewId >= 0 && pDocument->mpCallbackFlushHandlers[nOrigViewId])
-    {
-        pDocument->mpCallbackFlushHandlers[nOrigViewId]->Invoke();
-    }
-}
-
-#endif
 
 } // extern "C"
 

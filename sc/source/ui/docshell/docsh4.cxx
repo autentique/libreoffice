@@ -199,8 +199,23 @@ void ScDocShell::ReloadAllLinks()
     m_pDocument->UpdateAreaLinks();
 }
 
-IMPL_LINK_NOARG( ScDocShell, ReloadAllLinksHdl, weld::Button&, void )
+IMPL_LINK( ScDocShell, ReloadAllLinksHdl, weld::Button&, rButton, void )
 {
+    ScDocument& rDoc = GetDocument();
+    if (rDoc.HasLinkFormulaNeedingCheck() && rDoc.GetDocLinkManager().hasExternalRefLinks())
+    {
+        // If we have WEBSERVICE/Dde link and other external links in the document, it might indicate some
+        // exfiltration attempt, add *another* warning about this on top of the "Security Warning"
+        // shown in the infobar before they got here.
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(&rButton,
+                                                       VclMessageType::Warning, VclButtonsType::YesNo,
+                                                       ScResId(STR_TRUST_DOCUMENT_WARNING)));
+        xQueryBox->set_secondary_text(ScResId(STR_WEBSERVICE_WITH_LINKS_WARNING));
+        xQueryBox->set_default_response(RET_NO);
+        if (xQueryBox->run() != RET_YES)
+            return;
+    }
+
     ReloadAllLinks();
 
     ScTabViewShell* pViewSh = GetBestViewShell();
@@ -2585,7 +2600,7 @@ void ScDocShell::LOKCommentNotify(LOKCommentNotificationType nType, const ScDocu
     while (pViewShell)
     {
         if (pThisViewShell == nullptr || pViewShell->GetDocId() == pThisViewShell->GetDocId())
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_COMMENT, aPayload.c_str());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_COMMENT, OString(aPayload));
         pViewShell = SfxViewShell::GetNext(*pViewShell);
     }
 }

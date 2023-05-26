@@ -402,7 +402,7 @@ CPPUNIT_TEST_FIXTURE(HtmlImportTest, testTdf122789)
     SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
     CPPUNIT_ASSERT(pTextDoc);
     SwDoc* pDoc = pTextDoc->GetDocShell()->GetDoc();
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rFormats.size());
     // This failed, the image had an absolute size, not a relative one.
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt8>(70), rFormats[0]->GetAttrSet().GetFrameSize().GetWidthPercent());
@@ -603,6 +603,12 @@ CPPUNIT_TEST_FIXTURE(HtmlImportTest, testTdf153341)
     const uno::Reference<text::XTextRange> xPara3 = getParagraph(3);
     const uno::Reference<beans::XPropertySet> xRun3(getRun(xPara3,1), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(Color(ColorTransparency, 0xB3, 0xFF, 0x00, 0x00), getProperty<Color>(xRun3, "CharColor"));
+}
+
+CPPUNIT_TEST_FIXTURE(HtmlImportTest, testTdf155011)
+{
+    createSwWebDoc("tdf155011.html");
+    // Must not crash / fail asserts
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

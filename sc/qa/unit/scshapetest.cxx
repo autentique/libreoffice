@@ -145,12 +145,9 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf143619_validation_circle_pos)
 
     // Error was, that deleting row and col before E6 does not move circle to D5, but to B3.
     // Delete first row and first column.
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$A$1")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$A$1");
     dispatchCommand(mxComponent, ".uno:DeleteRows", {});
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$A$1");
     dispatchCommand(mxComponent, ".uno:DeleteColumns", {});
 
     // Without fix in place the position was (2007, 833)
@@ -566,10 +563,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf137576_LogicRectInDefaultMeasureline)
     pTabViewShell->SetDrawShell(false);
 
     // Hide column A.
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$A$1")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$A$1");
     dispatchCommand(mxComponent, ".uno:HideColumn", {});
 
     // Get current position. I will not use absolute values for comparison, because document is loaded
@@ -676,10 +670,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testHideColsShow)
     tools::Rectangle aSnapRectOrig(pObj->GetSnapRect());
 
     // Hide cols C and D.
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$C$1:$D$1")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$C$1:$D$1");
 
     ScTabViewShell* pViewShell = getViewShell();
     pViewShell->GetViewData().GetDispatcher().Execute(FID_COL_HIDE);
@@ -688,10 +679,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testHideColsShow)
     CPPUNIT_ASSERT_MESSAGE("Hide: Object should be invisible", !pObj->IsVisible());
 
     // Show cols C and D
-    aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$C$1:$D$1")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$C$1:$D$1");
     pViewShell->GetViewData().GetDispatcher().Execute(FID_COL_SHOW);
 
     // Check object is visible and has old size
@@ -744,10 +732,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf138138_MoveCellWithRotatedShape)
     CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aExpectedRect, aSnapRect, 1);
 
     // Insert two columns after column B
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$A$1:$B$1")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$A$1:$B$1");
 
     ScTabViewShell* pViewShell = getViewShell();
     pViewShell->GetViewData().GetDispatcher().Execute(FID_INS_COLUMNS_AFTER);
@@ -840,10 +825,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf137355_UndoHideRows)
 
     // Hide rows 3 to 6 in UI. [Note: Simple pDoc->SetRowHidden(2,5,0,true) does not work, because it
     // does not produce the needed undo items.]
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$A$3:$A$6")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$A$3:$A$6");
     ScTabViewShell* pViewShell = getViewShell();
     pViewShell->GetViewData().GetDispatcher().Execute(FID_ROW_HIDE);
 
@@ -871,10 +853,7 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf152081_UndoHideColsWithNotes)
     CPPUNIT_ASSERT_MESSAGE("Load: Note object should be visible", pObj->IsVisible());
 
     // Hide B column
-    uno::Sequence<beans::PropertyValue> aPropertyValues = {
-        comphelper::makePropertyValue("ToPoint", OUString("$B$2:$B$2")),
-    };
-    dispatchCommand(mxComponent, ".uno:GoToCell", aPropertyValues);
+    goToCell("$B$2:$B$2");
     ScTabViewShell* pViewShell = getViewShell();
     pViewShell->GetViewData().GetDispatcher().Execute(FID_COL_HIDE);
 
@@ -910,10 +889,6 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf115655_HideDetail)
     pViewShell->GetViewData().SetCurY(1);
     pViewShell->GetViewData().GetDispatcher().Execute(SID_OUTLINE_HIDE);
     CPPUNIT_ASSERT_MESSAGE("Collapse: Image should not be visible", !pObj->IsVisible());
-
-    // FIXME: validation fails with
-    // Error: unexpected attribute "drawooo:display"
-    skipValidation();
 
     // Save and reload
     saveAndReload("calc8");
@@ -1018,6 +993,218 @@ CPPUNIT_TEST_FIXTURE(ScShapeTest, testLargeAnchorOffset)
     //   - after reload Y expected 9089 actual 9643 Tolerance 1
     const Point aNewPos = pObj->GetRelativePos();
     CPPUNIT_ASSERT_POINT_EQUAL_WITH_TOLERANCE(aOldPos, aNewPos, 1);
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf139083_copy_without_resize)
+{
+    // Load a document, which has a shape anchored to cell B2, but without 'resize with cell'.
+    // When the range B2:B3 is copied and pasted to D5, then the copied shape should keep its size.
+    createScDoc("ods/tdf139083_copy_without_resize.ods");
+
+    // Get document
+    ScDocument* pDoc = getScDoc();
+
+    // Copy cells B2:B3. They have row height 2cm and column width 3cm.
+    goToCell("$B$2:$B$3");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+
+    // Paste to D5. There are row height 0.5cm and column width 1cm.
+    goToCell("$D$5");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Make sure original and pasted shape have the same size.
+    // Size of original shape is 2001x3002, without fix size of pasted shape was 668x750.
+    SdrObject* pObjOrig = lcl_getSdrObjectWithAssert(*pDoc, 0); // original shape
+    SdrObject* pObjPasted = lcl_getSdrObjectWithAssert(*pDoc, 1); // pasted shape
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(2001, pObjOrig->GetSnapRect().GetWidth(), 1);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(3002, pObjOrig->GetSnapRect().GetHeight(), 1);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(2001, pObjPasted->GetSnapRect().GetWidth(), 1);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(3002, pObjPasted->GetSnapRect().GetHeight(), 1);
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf155093_double_names)
+{
+    // Load a document, which has a shape in range B6:C14 with name "myArrow". When the range was
+    // copied and pasted, then the copied shape got the same name and thus was not accessible with
+    // Navigator.
+    createScDoc("ods/tdf155093_double_names.ods");
+    ScDocument* pDoc = getScDoc();
+
+    // Copy and paste
+    goToCell("$B$6:$C$14");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("$D$16");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Make sure original and pasted shape have different names.
+    SdrObject* pObjOrig = lcl_getSdrObjectWithAssert(*pDoc, 0); // original shape
+    SdrObject* pObjPasted = lcl_getSdrObjectWithAssert(*pDoc, 1); // pasted shape
+    CPPUNIT_ASSERT(pObjOrig->GetName() != pObjPasted->GetName());
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf155095_shape_collapsed_group)
+{
+    // Load a document, which has a shape in range C9:C16, anchored 'To cell (resize with cell)'.
+    // The rows 11 to 14 are in a collapsed group. So the shape effectively spans 4 rows. When
+    // copying the range B5:C19 and pasting it to B22, the group is expanded and the shape should
+    // increase its height so that it spans 8 rows.
+    createScDoc("ods/tdf155095_shape_over_collapsed_group.ods");
+    ScDocument* pDoc = getScDoc();
+
+    // Copy and paste
+    goToCell("$B$5:$C$19");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("$B$22");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Make sure the shape has the correct size and spans C26:C33
+    SdrObject* pObj = lcl_getSdrObjectWithAssert(*pDoc, 1); // pasted shape
+    // Without fix the shape had position(6708,11564) and size(407,2013).
+    tools::Rectangle aExpectedRect(tools::Rectangle(Point(6708, 10743), Size(407, 3473)));
+    tools::Rectangle aSnapRect(pObj->GetSnapRect());
+    CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aExpectedRect, aSnapRect, 1);
+
+    // Without fix the shape spans C28:C32
+    ScDrawObjData* pObjData = ScDrawLayer::GetObjData(pObj);
+    ScAddress aExpectedStart(SCCOL(2), SCROW(25), SCTAB(0)); // zero based
+    ScAddress aExpectedEnd(SCCOL(2), SCROW(32), SCTAB(0));
+    CPPUNIT_ASSERT_EQUAL(aExpectedStart, (*pObjData).maStart);
+    CPPUNIT_ASSERT_EQUAL(aExpectedEnd, (*pObjData).maEnd);
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf155094_paste_transposed)
+{
+    // Load a document, which has a page anchored shape "Red" in C4, a cell anchored shape "Green" in
+    // D4 and a cell anchored shape "Blue" with 'resize with cell' in E4. The range C3:E5 is copied
+    // and pasted with 'Transpose all' to cell K6. The pasted content had these errors:
+    // Pasted shape "Red" was missing.
+    // Pasted shape "Green" was resized although 'resize with cell' was not set.
+    // Pasted shape "Blue" was in cell K5 instead of L8.
+    // The behavior of paste transposed is changed since LO 7.6 so that no shape is resized.
+    createScDoc("ods/tdf155094_paste_transposed.ods");
+    ScDocument* pDoc = getScDoc();
+
+    // Copy and paste
+    goToCell("$C$3:$E$5");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("$K$6");
+    uno::Sequence<beans::PropertyValue> aPropertyValues
+        = { comphelper::makePropertyValue("Flags", OUString("A")),
+            comphelper::makePropertyValue("FormulaCommand", sal_uInt16(0)),
+            comphelper::makePropertyValue("SkipEmptyCells", false),
+            comphelper::makePropertyValue("Transpose", true),
+            comphelper::makePropertyValue("AsLink", false),
+            comphelper::makePropertyValue("MoveMode", sal_uInt16(4)) };
+    dispatchCommand(mxComponent, ".uno:InsertContents", aPropertyValues);
+
+    // Without fix there had been only 5 object.
+    ScDrawLayer* pDrawLayer = pDoc->GetDrawLayer();
+    CPPUNIT_ASSERT_MESSAGE("No ScDrawLayer", pDrawLayer);
+    const SdrPage* pPage = pDrawLayer->GetPage(0);
+    CPPUNIT_ASSERT_MESSAGE("No draw page", pPage);
+    CPPUNIT_ASSERT_EQUAL(size_t(6), pPage->GetObjCount());
+
+    // Without fix pasted object had position(7972, 8616) and size(1805×801).
+    SdrObject* pObjGreen = lcl_getSdrObjectWithAssert(*pDoc, 4); // pasted shape "Green"
+    tools::Rectangle aExpectedRect(tools::Rectangle(Point(12489, 12609), Size(800, 800)));
+    tools::Rectangle aSnapRect(pObjGreen->GetSnapRect());
+    CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aExpectedRect, aSnapRect, 1);
+
+    // Without fix the pasted object was at wrong position(10230,8616).
+    // Since LO 7.6 the pasted object has the same size as the original shape "Blue".
+    SdrObject* pObjBlue = lcl_getSdrObjectWithAssert(*pDoc, 5);
+    aExpectedRect = tools::Rectangle(Point(12489, 14612), Size(800, 800));
+    aSnapRect = pObjBlue->GetSnapRect();
+    CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aExpectedRect, aSnapRect, 1);
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf155091_paste_duplicates)
+{
+    // Load a document, which has a shape in range C6:C16, anchored 'To cell (resize with cell)'.
+    // The rows 6 to 9 are filtered. When copying the range B5:C19 and paste it to B23, the
+    // shape was pasted twice.
+    createScDoc("ods/tdf155091_paste_duplicates.ods");
+    ScDocument* pDoc = getScDoc();
+
+    // Copy and paste
+    goToCell("$B$5:$C$19");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("$B$23");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Make sure there is no third object but only original and pasted one.
+    ScDrawLayer* pDrawLayer = pDoc->GetDrawLayer();
+    CPPUNIT_ASSERT_MESSAGE("No ScDrawLayer", pDrawLayer);
+    const SdrPage* pPage = pDrawLayer->GetPage(0);
+    CPPUNIT_ASSERT_MESSAGE("No draw page", pPage);
+    CPPUNIT_ASSERT_EQUAL(size_t(2), pPage->GetObjCount());
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf125938_anchor_after_copy_paste)
+{
+    // Load a document, which has an image in cell $sheet1.$B$3, anchored to cell. When the range
+    // A3:C3 was copied and pasted to D9:D11 in sheet2, the image was displayed in cell D10, but
+    // its anchor was in B3.
+    createScDoc("ods/tdf125938_anchor_after_copy_paste.ods");
+    ScDocument* pDoc = getScDoc();
+
+    // Copy and paste
+    goToCell("$Sheet1.$A$3:$C$3");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("$Sheet2.$D$9");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Get pasted shape
+    ScDrawLayer* pDrawLayer = pDoc->GetDrawLayer();
+    const SdrPage* pPage = pDrawLayer->GetPage(1);
+    SdrObject* pObj = pPage->GetObj(0);
+
+    // Make sure object is anchored to E9
+    ScDrawObjData* pObjData = ScDrawLayer::GetObjData(pObj);
+    ScAddress aExpectedAddress(SCCOL(4), SCROW(8), SCTAB(1)); // zero based
+    CPPUNIT_ASSERT_EQUAL(aExpectedAddress, (*pObjData).maStart);
+}
+
+CPPUNIT_TEST_FIXTURE(ScShapeTest, testTdf154821_shape_in_group)
+{
+    // The document contains a shape in A7, a group spanning rows 2 to 4 and a second group spanning
+    // rows 6 to 10. Error was, that when the document was saved with collapsed groups, the shape
+    // lost its position.
+    createScDoc("ods/tdf154821_shape_in_group.ods");
+
+    // Get snap rectangle before collapse and save
+    ScDocument* pDoc = getScDoc();
+    SdrObject* pObj = lcl_getSdrObjectWithAssert(*pDoc, 0);
+    tools::Rectangle aRectOrig = pObj->GetSnapRect();
+
+    // Collapse the lower group
+    ScTabViewShell* pViewShell = getViewShell();
+    pViewShell->GetViewData().SetCurX(0);
+    pViewShell->GetViewData().SetCurY(5);
+    pViewShell->GetViewData().GetDispatcher().Execute(SID_OUTLINE_HIDE);
+    // Collapse the upper group
+    pViewShell->GetViewData().SetCurX(0);
+    pViewShell->GetViewData().SetCurY(1);
+    pViewShell->GetViewData().GetDispatcher().Execute(SID_OUTLINE_HIDE);
+
+    saveAndReload("calc8");
+
+    // Expand the lower group
+    pViewShell = getViewShell();
+    pViewShell->GetViewData().SetCurX(0);
+    pViewShell->GetViewData().SetCurY(5);
+    pViewShell->GetViewData().GetDispatcher().Execute(SID_OUTLINE_SHOW);
+    // Expand the upper group
+    pViewShell = getViewShell();
+    pViewShell->GetViewData().SetCurX(0);
+    pViewShell->GetViewData().SetCurY(1);
+    pViewShell->GetViewData().GetDispatcher().Execute(SID_OUTLINE_SHOW);
+
+    // Verify shape position is not changed besides rounding errors from twips<->mm
+    pDoc = getScDoc();
+    pObj = lcl_getSdrObjectWithAssert(*pDoc, 0);
+    tools::Rectangle aRectReload = pObj->GetSnapRect();
+    CPPUNIT_ASSERT_RECTANGLE_EQUAL_WITH_TOLERANCE(aRectOrig, aRectReload, 1);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

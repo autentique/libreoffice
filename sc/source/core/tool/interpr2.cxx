@@ -22,6 +22,7 @@
 
 #include <comphelper/string.hxx>
 #include <o3tl/float_int_conversion.hxx>
+#include <o3tl/string_view.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <sfx2/objsh.hxx>
@@ -962,20 +963,55 @@ void ScInterpreter::RoundNumber( rtl_math_RoundingMode eMode )
         fVal = ::rtl::math::round( GetDouble(), 0, eMode );
     else
     {
-        sal_Int16 nDec = GetInt16();
-        double fX = GetDouble();
+        const sal_Int16 nDec = GetInt16();
+        const double fX = GetDouble();
         if (nGlobalError == FormulaError::NONE)
         {
+            // A quite aggressive approach with 12 significant digits.
+            // However, using 14 or some other doesn't work because other
+            // values may fail, like =ROUNDDOWN(2-5E-015;13) would produce
+            // 2 (another example in tdf#124286).
+            constexpr sal_Int16 kSigDig = 12;
+
             if ( ( eMode == rtl_math_RoundingMode_Down ||
                    eMode == rtl_math_RoundingMode_Up ) &&
-                 nDec < 12 && fmod( fX, 1.0 ) != 0.0 )
+                 nDec < kSigDig && fmod( fX, 1.0 ) != 0.0 )
+
             {
-                // tdf124286 : round to 12 significant digits before rounding
+                // tdf124286 : round to significant digits before rounding
                 //             down or up to avoid unexpected rounding errors
                 //             caused by decimal -> binary -> decimal conversion
-                double fRes;
-                RoundSignificant( fX, 12, fRes );
-                fVal = ::rtl::math::round( fRes, nDec, eMode );
+
+                double fRes = fX;
+                // Similar to RoundSignificant() but omitting the back-scaling
+                // and interim integer rounding before the final rounding,
+                // which would result in double rounding. Instead, adjust the
+                // decimals and round into integer part before scaling back.
+                const double fTemp = floor( log10( std::abs(fRes))) + 1.0 - kSigDig;
+                // Avoid inaccuracy of negative powers of 10.
+                if (fTemp < 0.0)
+                    fRes *= pow(10.0, -fTemp);
+                else
+                    fRes /= pow(10.0, fTemp);
+                if (std::isfinite(fRes))
+                {
+                    // fRes is now at a decimal normalized scale.
+                    // Truncate up-rounding to opposite direction for values
+                    // like 0.0600000000000005 =ROUNDUP(8.06-8;2) that here now
+                    // is 600000000000.005 and otherwise would yield 0.07
+                    if (eMode == rtl_math_RoundingMode_Up)
+                        fRes = ::rtl::math::approxFloor(fRes);
+                    fVal = ::rtl::math::round( fRes, nDec + fTemp, eMode );
+                    if (fTemp < 0.0)
+                        fVal /= pow(10.0, -fTemp);
+                    else
+                        fVal *= pow(10.0, fTemp);
+                }
+                else
+                {
+                    // Overflow. Let our round() decide if and how to round.
+                    fVal = ::rtl::math::round( fX, nDec, eMode );
+                }
             }
             else
                 fVal = ::rtl::math::round( fX, nDec, eMode );
@@ -1001,8 +1037,21 @@ void ScInterpreter::ScRoundUp()
 
 void ScInterpreter::RoundSignificant( double fX, double fDigits, double &fRes )
 {
-    double fTemp = ::rtl::math::approxFloor( log10( std::abs(fX) ) ) + 1.0 - fDigits;
-    fRes = ::rtl::math::round( pow(10.0, -fTemp ) * fX ) * pow( 10.0, fTemp );
+    double fTemp = floor( log10( std::abs(fX) ) ) + 1.0 - fDigits;
+    double fIn = fX;
+    // Avoid inaccuracy of negative powers of 10.
+    if (fTemp < 0.0)
+        fIn *= pow(10.0, -fTemp);
+    else
+        fIn /= pow(10.0, fTemp);
+    // For very large fX there might be an overflow in fIn resulting in
+    // non-finite. rtl::math::round() handles that and it will be propagated as
+    // usual.
+    fRes = ::rtl::math::round(fIn);
+    if (fTemp < 0.0)
+        fRes /= pow(10.0, -fTemp);
+    else
+        fRes *= pow(10.0, fTemp);
 }
 
 // tdf#105931
@@ -2419,7 +2468,7 @@ void ScInterpreter::ScIntersect()
         }
         size_t n = pRefList->size();
         if (!n)
-            PushError( FormulaError::NoRef);
+            PushError( FormulaError::NoCode);
         else if (n == 1)
         {
             const ScComplexRefData& rRef = (*pRefList)[0];
@@ -2477,7 +2526,7 @@ void ScInterpreter::ScIntersect()
         SCROW nRow2 = ::std::min( nR2[0], nR2[1]);
         SCTAB nTab2 = ::std::min( nT2[0], nT2[1]);
         if (nCol2 < nCol1 || nRow2 < nRow1 || nTab2 < nTab1)
-            PushError( FormulaError::NoRef);
+            PushError( FormulaError::NoCode);
         else if (nCol2 == nCol1 && nRow2 == nRow1 && nTab2 == nTab1)
             PushSingleRef( nCol1, nRow1, nTab1);
         else
@@ -3218,7 +3267,7 @@ void ScInterpreter::ScHyperLink()
     http://ec.europa.eu/economy_finance/euro/adoption/conversion/
     http://ec.europa.eu/economy_finance/euro/countries/
  */
-static bool lclConvertMoney( const OUString& aSearchUnit, double& rfRate, int& rnDec )
+static bool lclConvertMoney( std::u16string_view aSearchUnit, double& rfRate, int& rnDec )
 {
     struct ConvertInfo
     {
@@ -3251,7 +3300,7 @@ static bool lclConvertMoney( const OUString& aSearchUnit, double& rfRate, int& r
     };
 
     for (const auto & i : aConvertTable)
-        if ( aSearchUnit.equalsIgnoreAsciiCaseAscii( i.pCurrText ) )
+        if ( o3tl::equalsIgnoreAsciiCase( aSearchUnit, i.pCurrText ) )
         {
             rfRate = i.fRate;
             rnDec  = i.nDec;

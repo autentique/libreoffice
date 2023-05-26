@@ -66,7 +66,6 @@
 #include <hints.hxx>
 #include <detdata.hxx>
 #include <dpobject.hxx>
-#include <detfunc.hxx>
 #include <scmod.hxx>
 #include <dociter.hxx>
 #include <progress.hxx>
@@ -425,16 +424,14 @@ void ScDocument::CreateValidTabName(OUString& rName) const
         if ( !ValidNewTabName(rName) )
         {
             SCTAB i = 1;
-            OUStringBuffer aName;
+            OUString aName;
             do
             {
                 i++;
-                aName = rName;
-                aName.append('_');
-                aName.append(static_cast<sal_Int32>(i));
+                aName = rName + "_" + OUString::number(static_cast<sal_Int32>(i));
             }
-            while (!ValidNewTabName(aName.toString()) && (i < MAXTAB+1));
-            rName = aName.makeStringAndClear();
+            while (!ValidNewTabName(aName) && (i < MAXTAB+1));
+            rName = aName;
         }
     }
 }
@@ -2412,13 +2409,14 @@ void ScDocument::TransposeClip(ScDocument* pTransClip, InsertDeleteFlags nFlags,
                     //  (mpDrawLayer in the original clipboard document is set only if there
                     //  are drawing objects to copy)
 
+                    // ToDo: Loop over blocks of non-filtered rows in case of filtered rows exist.
                     pTransClip->InitDrawLayer();
-                    tools::Rectangle aSourceRect = GetMMRect( aClipRange.aStart.Col(), aClipRange.aStart.Row(),
-                                                        aClipRange.aEnd.Col(), aClipRange.aEnd.Row(), i );
-                    tools::Rectangle aDestRect = pTransClip->GetMMRect( 0, 0,
-                            static_cast<SCCOL>(aClipRange.aEnd.Row() - aClipRange.aStart.Row()),
-                            static_cast<SCROW>(aClipRange.aEnd.Col() - aClipRange.aStart.Col()), i );
-                    pTransClip->mpDrawLayer->CopyFromClip( mpDrawLayer.get(), i, aSourceRect, ScAddress(0,0,i), aDestRect );
+                    ScAddress aTransposedEnd(
+                        static_cast<SCCOL>(aClipRange.aEnd.Row() - aClipRange.aStart.Row() + aClipRange.aStart.Col()),
+                        static_cast<SCROW>(aClipRange.aEnd.Col() - aClipRange.aStart.Col() + aClipRange.aStart.Row()), i);
+                    ScRange aDestRange(aClipRange.aStart, aTransposedEnd);
+                    ScAddress aDestStart = aClipRange.aStart;
+                    pTransClip->mpDrawLayer->CopyFromClip(mpDrawLayer.get(), i, aClipRange, aDestStart, aDestRange, true);
                 }
             }
         }
@@ -2693,12 +2691,10 @@ void ScDocument::CopyBlockFromClip(
                     //  For GetMMRect, the row heights in the target document must already be valid
                     //  (copied in an extra step before pasting, or updated after pasting cells, but
                     //  before pasting objects).
-
-                    tools::Rectangle aSourceRect = rCxt.getClipDoc()->GetMMRect(
-                                    nCol1-nDx, nRow1-nDy, nCol2-nDx, nRow2-nDy, nClipTab );
-                    tools::Rectangle aDestRect = GetMMRect( nCol1, nRow1, nCol2, nRow2, i );
-                    mpDrawLayer->CopyFromClip(rCxt.getClipDoc()->mpDrawLayer.get(), nClipTab, aSourceRect,
-                                                ScAddress( nCol1, nRow1, i ), aDestRect );
+                    ScRange aSourceRange(nCol1 - nDx, nRow1 - nDy, nClipTab, nCol2 - nDx, nRow2 - nDy, nClipTab);
+                    ScRange aDestRange(nCol1, nRow1, i, nCol2, nRow2, i);
+                    mpDrawLayer->CopyFromClip(rCxt.getClipDoc()->mpDrawLayer.get(), nClipTab, aSourceRange,
+                                                ScAddress( nCol1, nRow1, i ), aDestRange);
                 }
             }
 
@@ -2909,8 +2905,9 @@ void ScDocument::CopyFromClip(
     InsertDeleteFlags nDelFlag = InsertDeleteFlags::NONE;
     if ( (nInsFlag & (InsertDeleteFlags::CONTENTS | InsertDeleteFlags::ADDNOTES)) == (InsertDeleteFlags::NOTE | InsertDeleteFlags::ADDNOTES) )
         nDelFlag |= InsertDeleteFlags::NOTE;
-    else if ( nInsFlag & InsertDeleteFlags::CONTENTS )
-        nDelFlag |= InsertDeleteFlags::CONTENTS;
+    // tdf#141440 - do not delete notes when pasting contents (see InsertDeleteFlags::CONTENTS)
+    else if ( nInsFlag & (InsertDeleteFlags::CONTENTS & ~InsertDeleteFlags::NOTE) )
+        nDelFlag |= InsertDeleteFlags::CONTENTS & ~InsertDeleteFlags::NOTE;
 
     if (nInsFlag & InsertDeleteFlags::ATTRIB)
         nDelFlag |= InsertDeleteFlags::ATTRIB;
@@ -4563,14 +4560,6 @@ SCROW ScDocument::CountVisibleRows(SCROW nStartRow, SCROW nEndRow, SCTAB nTab) c
     return maTabs[nTab]->CountVisibleRows(nStartRow, nEndRow);
 }
 
-SCCOL ScDocument::CountVisibleCols(SCROW nStartCol, SCROW nEndCol, SCTAB nTab) const
-{
-    if (!ValidTab(nTab) || nTab >= static_cast<SCTAB>(maTabs.size()) || !maTabs[nTab])
-        return 0;
-
-    return maTabs[nTab]->CountVisibleCols(nStartCol, nEndCol);
-}
-
 bool ScDocument::RowFiltered(SCROW nRow, SCTAB nTab, SCROW* pFirstRow, SCROW* pLastRow) const
 {
     if (!ValidTab(nTab) || nTab >= static_cast<SCTAB>(maTabs.size()) || !maTabs[nTab])
@@ -5045,17 +5034,12 @@ void ScDocument::StyleSheetChanged( const SfxStyleSheetBase* pStyleSheet, bool b
                                     double nPPTX, double nPPTY,
                                     const Fraction& rZoomX, const Fraction& rZoomY )
 {
-    for (const auto& a : maTabs)
+    for (const auto& rTab : maTabs)
     {
-        if (a)
-            a->StyleSheetChanged
-                ( pStyleSheet, bRemoved, pDev, nPPTX, nPPTY, rZoomX, rZoomY );
-    }
-
-    if ( pStyleSheet && pStyleSheet->GetName() == ScResId(STR_STYLENAME_STANDARD) )
-    {
-        //  update attributes for all note objects
-        ScDetectiveFunc::UpdateAllComments( *this );
+        if (rTab)
+        {
+            rTab->StyleSheetChanged(pStyleSheet, bRemoved, pDev, nPPTX, nPPTY, rZoomX, rZoomY);
+        }
     }
 }
 
@@ -5077,9 +5061,9 @@ bool ScDocument::IsStyleSheetUsed( const ScStyleSheet& rStyle ) const
 
         bool bIsUsed = false;
 
-        for (const auto& a : maTabs)
+        for (const auto& rTab : maTabs)
         {
-            if (a && a->IsStyleSheetUsed( rStyle ) )
+            if (rTab && rTab->IsStyleSheetUsed( rStyle ) )
                 bIsUsed = true;
         }
 

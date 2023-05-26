@@ -526,8 +526,10 @@ ErrCode DocxExport::ExportDocument_Impl()
     // init sections
     m_pSections.reset(new MSWordSections( *this ));
 
+    auto& rGraphicExportCache = oox::drawingml::GraphicExportCache::get();
+
     // Make sure images are counted from one, even when exporting multiple documents.
-    oox::drawingml::DrawingML::PushExportGraphics();
+    rGraphicExportCache.push();
 
     WriteMainText();
 
@@ -555,7 +557,8 @@ ErrCode DocxExport::ExportDocument_Impl()
     m_aLinkedTextboxesHelper.clear();   //final cleanup
     m_pStyles.reset();
     m_pSections.reset();
-    oox::drawingml::DrawingML::PopExportGraphics();
+
+    rGraphicExportCache.pop();
 
     return ERRCODE_NONE;
 }
@@ -998,7 +1001,8 @@ static auto
 WriteCompat(SwDoc const& rDoc, ::sax_fastparser::FSHelperPtr const& rpFS,
         sal_Int32 & rTargetCompatibilityMode) -> void
 {
-    if (!rDoc.getIDocumentSettingAccess().get(DocumentSettingId::ADD_EXT_LEADING))
+    const IDocumentSettingAccess& rIDSA = rDoc.getIDocumentSettingAccess();
+    if (!rIDSA.get(DocumentSettingId::ADD_EXT_LEADING))
     {
         rpFS->singleElementNS(XML_w, XML_noLeading);
         if (rTargetCompatibilityMode > 14)
@@ -1007,13 +1011,19 @@ WriteCompat(SwDoc const& rDoc, ::sax_fastparser::FSHelperPtr const& rpFS,
         }
     }
     // Do not justify lines with manual break
-    if (rDoc.getIDocumentSettingAccess().get(DocumentSettingId::DO_NOT_JUSTIFY_LINES_WITH_MANUAL_BREAK))
+    if (rIDSA.get(DocumentSettingId::DO_NOT_JUSTIFY_LINES_WITH_MANUAL_BREAK))
     {
         rpFS->singleElementNS(XML_w, XML_doNotExpandShiftReturn);
     }
     // tdf#146515 export "Use printer metrics for document formatting"
-    if (!rDoc.getIDocumentSettingAccess().get(DocumentSettingId::USE_VIRTUAL_DEVICE))
+    if (!rIDSA.get(DocumentSettingId::USE_VIRTUAL_DEVICE))
         rpFS->singleElementNS(XML_w, XML_usePrinterMetrics);
+
+    if (rIDSA.get(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES))
+    {
+        // Map the DoNotBreakWrappedTables compat flag to <w:doNotBreakWrappedTables>.
+        rpFS->singleElementNS(XML_w, XML_doNotBreakWrappedTables);
+    }
 }
 
 void DocxExport::WriteSettings()
@@ -1083,10 +1093,10 @@ void DocxExport::WriteSettings()
                     FSNS(XML_w, XML_cryptProviderType), "rsaAES",
                     FSNS(XML_w, XML_cryptAlgorithmClass), "hash",
                     FSNS(XML_w, XML_cryptAlgorithmType), "typeAny",
-                    FSNS(XML_w, XML_cryptAlgorithmSid), OString::number(nAlgorithmSid).getStr(),
-                    FSNS(XML_w, XML_cryptSpinCount), OString::number(nCount).getStr(),
-                    FSNS(XML_w, XML_hash), sHash.toUtf8().getStr(),
-                    FSNS(XML_w, XML_salt), sSalt.toUtf8().getStr());
+                    FSNS(XML_w, XML_cryptAlgorithmSid), OString::number(nAlgorithmSid),
+                    FSNS(XML_w, XML_cryptSpinCount), OString::number(nCount),
+                    FSNS(XML_w, XML_hash), sHash,
+                    FSNS(XML_w, XML_salt), sSalt);
         }
     }
 
@@ -1176,7 +1186,7 @@ void DocxExport::WriteSettings()
         pFS->singleElementNS(XML_w, XML_dataType,
             FSNS( XML_w, XML_val ), "textFile" );
         pFS->singleElementNS( XML_w, XML_query,
-            FSNS( XML_w, XML_val ), OUStringToOString( sDataSource, RTL_TEXTENCODING_UTF8 ).getStr() );
+            FSNS( XML_w, XML_val ), sDataSource );
         pFS->endElementNS( XML_w, XML_mailMerge );
     }
 
@@ -1894,11 +1904,6 @@ void DocxExport::WriteMainText()
 {
     // setup the namespaces
     m_pDocumentFS->startElementNS( XML_w, XML_document, MainXmlNamespaces());
-
-    if ( getenv("SW_DEBUG_DOM") )
-    {
-        m_rDoc.dumpAsXml();
-    }
 
     // reset the incrementing linked-textboxes chain ID before re-saving.
     m_nLinkedTextboxesChainId=0;

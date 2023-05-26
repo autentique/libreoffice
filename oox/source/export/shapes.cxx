@@ -321,16 +321,6 @@ uno::Reference<io::XInputStream> GetOLEObjectStream(
 
 namespace oox::drawingml {
 
-#define GETA(propName) \
-    GetProperty( rXPropSet, #propName)
-
-#define GETAD(propName) \
-    ( GetPropertyAndState( rXPropSet, rXPropState, #propName, eState ) && eState == beans::PropertyState_DIRECT_VALUE )
-
-#define GET(variable, propName) \
-    if ( GETA(propName) ) \
-        mAny >>= variable;
-
 ShapeExport::ShapeExport( sal_Int32 nXmlNamespace, FSHelperPtr pFS, ShapeHashMap* pShapeMap, XmlFilterBase* pFB, DocumentType eDocumentType, DMLTextExport* pTextExport, bool bUserShapes )
     : DrawingML( std::move(pFS), pFB, eDocumentType, pTextExport )
     , m_nEmbeddedObjects(0)
@@ -746,7 +736,7 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
     bool bHasGeometrySeq(false);
     Sequence< PropertyValue > aGeometrySeq;
     OUString sShapeType("non-primitive"); // default in ODF
-    if (GETA(CustomShapeGeometry))
+    if (GetProperty(rXPropSet, "CustomShapeGeometry"))
     {
         SAL_INFO("oox.shape", "got custom shape geometry");
         if (mAny >>= aGeometrySeq)
@@ -816,7 +806,7 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
     if (GetDocumentType() != DOCUMENT_DOCX || mbUserShapes)
     {
         bool bUseBackground = false;
-        if (GETA(FillUseSlideBackground))
+        if (GetProperty(rXPropSet, "FillUseSlideBackground"))
             mAny >>= bUseBackground;
         if (bUseBackground)
             mpFS->startElementNS(mnXmlNamespace, XML_sp, XML_useBgFill, "1");
@@ -824,7 +814,7 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
             mpFS->startElementNS(mnXmlNamespace, XML_sp);
 
         bool isVisible = true ;
-        if( GETA (Visible))
+        if( GetProperty(rXPropSet, "Visible"))
         {
             mAny >>= isVisible;
         }
@@ -834,7 +824,7 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
             OString::number(GetShapeID(xShape) == -1 ? GetNewShapeID(xShape) : GetShapeID(xShape)),
             XML_name, GetShapeName(xShape), XML_hidden, sax_fastparser::UseIf("1", !isVisible));
 
-        if( GETA( URL ) )
+        if( GetProperty(rXPropSet, "URL") )
         {
             OUString sURL;
             mAny >>= sURL;
@@ -850,10 +840,10 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
         }
 
         OUString sBookmark;
-        if (GETA(Bookmark))
+        if (GetProperty(rXPropSet, "Bookmark"))
             mAny >>= sBookmark;
 
-        if (GETA(OnClick))
+        if (GetProperty(rXPropSet, "OnClick"))
         {
             OUString sPPAction;
             presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
@@ -912,6 +902,29 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
     else
     {
         pFS->startElementNS(mnXmlNamespace, XML_wsp);
+        if (m_xParent.is())
+        {
+            pFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id,
+                                OString::number(GetShapeID(xShape) == -1 ? GetNewShapeID(xShape)
+                                                                         : GetShapeID(xShape)),
+                                XML_name, GetShapeName(xShape));
+
+            if (GetProperty(rXPropSet, "Hyperlink"))
+            {
+                OUString sURL;
+                mAny >>= sURL;
+                if (!sURL.isEmpty())
+                {
+                    OUString sRelId = mpFB->addRelation(
+                        mpFS->getOutputStream(), oox::getRelationship(Relationship::HYPERLINK),
+                        mpURLTransformer->getTransformedString(sURL),
+                        mpURLTransformer->isExternalURL(sURL));
+
+                    mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+                }
+            }
+            pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+        }
         pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr);
     }
 
@@ -1650,20 +1663,38 @@ static void lcl_GetConnectorAdjustValue(const Reference<XShape>& xShape, tools::
     }
 }
 
-static sal_Int32 lcl_GetGluePointId(const Reference<XShape>& xShape, sal_Int32& nGluePointId)
+static sal_Int32 lcl_GetGluePointId(const Reference<XShape>& xShape, sal_Int32 nGluePointId)
 {
-    uno::Reference<drawing::XGluePointsSupplier> xSupplier(xShape, uno::UNO_QUERY);
-    uno::Reference<container::XIdentifierAccess> xGluePoints(xSupplier->getGluePoints(),
-                                                             uno::UNO_QUERY);
     if (nGluePointId > 3)
-        nGluePointId -= 4;
+        return nGluePointId - 4;
     else
     {
-        // change id of the bounding box (1 <-> 3)
-        if (nGluePointId == 1)
-            nGluePointId = 3; // Right
-        else if (nGluePointId == 3)
-            nGluePointId = 1; // Left
+        bool bFlipH = false;
+        bool bFlipV = false;
+        Reference<XPropertySet> xShapeProps(xShape, UNO_QUERY);
+        if (xShapeProps->getPropertySetInfo()->hasPropertyByName("CustomShapeGeometry"))
+        {
+            Sequence<PropertyValue> aGeometrySeq;
+            xShapeProps->getPropertyValue("CustomShapeGeometry") >>= aGeometrySeq;
+            for (int i = 0; i < aGeometrySeq.getLength(); i++)
+            {
+                const PropertyValue& rProp = aGeometrySeq[i];
+                if (rProp.Name == "MirroredX")
+                    rProp.Value >>= bFlipH;
+
+                if (rProp.Name == "MirroredY")
+                    rProp.Value >>= bFlipV;
+            }
+        }
+
+        if ((!bFlipH && !bFlipV) || (bFlipH && bFlipV))
+        {
+            // change id of the bounding box (1 <-> 3)
+            if (nGluePointId == 1)
+                nGluePointId = 3; // Right
+            else if (nGluePointId == 3)
+                nGluePointId = 1; // Left
+        }
     }
 
     return nGluePointId;
@@ -1690,7 +1721,8 @@ ShapeExport& ShapeExport::WriteConnectorShape( const Reference< XShape >& xShape
     Reference< XShape > rXShapeB;
     PropertyState eState;
     ConnectorType eConnectorType = ConnectorType_STANDARD;
-    GET(eConnectorType, EdgeKind);
+    if (GetProperty(rXPropSet, "EdgeKind"))
+        mAny >>= eConnectorType;
 
     switch( eConnectorType ) {
         case ConnectorType_CURVE:
@@ -1706,21 +1738,26 @@ ShapeExport& ShapeExport::WriteConnectorShape( const Reference< XShape >& xShape
             break;
     }
 
-    if( GETAD( EdgeStartPoint ) ) {
+    if (GetPropertyAndState( rXPropSet, rXPropState, "EdgeStartPoint", eState ) && eState == beans::PropertyState_DIRECT_VALUE )
+    {
         mAny >>= aStartPoint;
-        if( GETAD( EdgeEndPoint ) ) {
+        if (GetPropertyAndState( rXPropSet, rXPropState, "EdgeEndPoint", eState ) && eState == beans::PropertyState_DIRECT_VALUE )
             mAny >>= aEndPoint;
-        }
     }
-    GET( rXShapeA, EdgeStartConnection );
-    GET( rXShapeB, EdgeEndConnection );
+    if (GetProperty(rXPropSet, "EdgeStartConnection"))
+        mAny >>= rXShapeA;
+    if (GetProperty(rXPropSet, "EdgeEndConnection"))
+        mAny >>= rXShapeB;
 
-    GET(nStartGlueId, StartGluePointIndex);
+    if (GetProperty(rXPropSet, "StartGluePointIndex"))
+        mAny >>= nStartGlueId;
     if (nStartGlueId != -1)
-        lcl_GetGluePointId(rXShapeA, nStartGlueId);
-    GET(nEndGlueId, EndGluePointIndex);
+        nStartGlueId = lcl_GetGluePointId(rXShapeA, nStartGlueId);
+
+    if (GetProperty(rXPropSet, "EndGluePointIndex"))
+        mAny >>= nEndGlueId;
     if (nEndGlueId != -1)
-        lcl_GetGluePointId(rXShapeB, nEndGlueId);
+        nEndGlueId = lcl_GetGluePointId(rXShapeB, nEndGlueId);
 
     // Position is relative to group in Word, but relative to anchor of group in API.
     if (GetDocumentType() == DOCUMENT_DOCX && !mbUserShapes && m_xParent.is())
@@ -2275,7 +2312,27 @@ void ShapeExport::WriteTableCellProperties(const Reference< XPropertySet>& xCell
     aVerticalAlignment >>= eVerticalAlignment;
     sVerticalAlignment = GetTextVerticalAdjust(eVerticalAlignment);
 
+    sal_Int32 nRotateAngle = 0;
+    Any aRotateAngle = xCellPropSet->getPropertyValue("RotateAngle");
+    aRotateAngle >>= nRotateAngle;
+    std::optional<OString> aTextVerticalValue = GetTextVerticalType(nRotateAngle);
+
+    Sequence<PropertyValue> aGrabBag;
+    if( !aTextVerticalValue &&
+        (xCellPropSet->getPropertyValue("CellInteropGrabBag") >>= aGrabBag) )
+    {
+        for (auto const& rIt : std::as_const(aGrabBag))
+        {
+            if (rIt.Name == "mso-tcPr-vert-value")
+            {
+                aTextVerticalValue = rIt.Value.get<OUString>().toUtf8();
+                break;
+            }
+        }
+    }
+
     mpFS->startElementNS(XML_a, XML_tcPr, XML_anchor, sVerticalAlignment,
+    XML_vert, aTextVerticalValue,
     XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)), nLeftMargin > 0),
     XML_marR, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nRightMargin)), nRightMargin > 0));
 

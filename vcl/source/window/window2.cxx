@@ -268,7 +268,7 @@ void Window::StartTracking( StartTrackingFlags nFlags )
     if ( !mpWindowImpl->mbUseFrameData &&
          (nFlags & (StartTrackingFlags::ScrollRepeat | StartTrackingFlags::ButtonRepeat)) )
     {
-        pSVData->mpWinData->mpTrackTimer = new AutoTimer("vcl::Window pSVData->mpWinData->mpTrackTimer");
+        pSVData->mpWinData->mpTrackTimer.reset(new AutoTimer("vcl::Window pSVData->mpWinData->mpTrackTimer"));
 
         if ( nFlags & StartTrackingFlags::ScrollRepeat )
             pSVData->mpWinData->mpTrackTimer->SetTimeout( MouseSettings::GetScrollRepeat() );
@@ -304,10 +304,7 @@ void Window::EndTracking( TrackingEventFlags nFlags )
         return;
 
     if ( !mpWindowImpl->mbUseFrameData && pSVData->mpWinData->mpTrackTimer )
-    {
-        delete pSVData->mpWinData->mpTrackTimer;
-        pSVData->mpWinData->mpTrackTimer = nullptr;
-    }
+        pSVData->mpWinData->mpTrackTimer.reset();
 
     mpWindowImpl->mpFrameData->mpTrackWin = pSVData->mpWinData->mpTrackWin = nullptr;
     pSVData->mpWinData->mnTrackFlags  = StartTrackingFlags::NONE;
@@ -854,12 +851,12 @@ void Window::EnableDocking( bool bEnable )
     return ImplGetTopmostFrameWindow()->mpWindowImpl->mpFrameData->maOwnerDrawList;
 }
 
-void Window::SetHelpId( const OString& rHelpId )
+void Window::SetHelpId( const OUString& rHelpId )
 {
     mpWindowImpl->maHelpId = rHelpId;
 }
 
-const OString& Window::GetHelpId() const
+const OUString& Window::GetHelpId() const
 {
     return mpWindowImpl->maHelpId;
 }
@@ -1422,7 +1419,7 @@ namespace
     }
 }
 
-bool Window::set_font_attribute(const OString &rKey, std::u16string_view rValue)
+bool Window::set_font_attribute(const OUString &rKey, std::u16string_view rValue)
 {
     if (rKey == "weight")
     {
@@ -1488,7 +1485,7 @@ bool Window::set_font_attribute(const OString &rKey, std::u16string_view rValue)
     return true;
 }
 
-bool Window::set_property(const OString &rKey, const OUString &rValue)
+bool Window::set_property(const OUString &rKey, const OUString &rValue)
 {
     if ((rKey == "label") || (rKey == "title") || (rKey == "text") )
     {
@@ -1622,7 +1619,7 @@ bool Window::set_property(const OString &rKey, const OUString &rValue)
     }
     else if (rKey == "accessible-role")
     {
-        sal_Int16 role = BuilderUtils::getRoleFromName(rValue.toUtf8());
+        sal_Int16 role = BuilderUtils::getRoleFromName(rValue);
         if (role != com::sun::star::accessibility::AccessibleRole::UNKNOWN)
             SetAccessibleRole(role);
     }

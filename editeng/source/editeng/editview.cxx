@@ -524,7 +524,7 @@ void EditView::ShowCursor( bool bGotoCursor, bool bForceVisCursor, bool bActivat
             return;
 
         static const OString aPayload = OString::boolean(true);
-        pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload.getStr());
+        pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload);
         pImpEditView->mpViewShell->NotifyOtherViews(LOK_CALLBACK_VIEW_CURSOR_VISIBLE, "visible", aPayload);
     }
 }
@@ -542,7 +542,7 @@ void EditView::HideCursor(bool bDeactivate)
             return;
 
         OString aPayload = OString::boolean(false);
-        pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload.getStr());
+        pImpEditView->mpViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE, aPayload);
         pImpEditView->mpViewShell->NotifyOtherViews(LOK_CALLBACK_VIEW_CURSOR_VISIBLE, "visible", aPayload);
     }
 }
@@ -923,7 +923,7 @@ static void LOKSendSpellPopupMenu(const weld::Menu& rMenu, LanguageType nGuessLa
     {
         for(int i = 0; i < nSuggestions; ++i)
         {
-            OString sItemId = OString::number(MN_ALTSTART + i);
+            OUString sItemId = OUString::number(MN_ALTSTART + i);
             OUString sText = rMenu.get_label(sItemId);
             aItemTree.put("text", sText.toUtf8().getStr());
             aItemTree.put("type", "command");
@@ -975,7 +975,7 @@ static void LOKSendSpellPopupMenu(const weld::Menu& rMenu, LanguageType nGuessLa
 
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aRoot, true);
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, aStream.str().c_str());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, OString(aStream.str()));
 }
 
 bool EditView::ExecuteSpellPopup(const Point& rPosPixel, const Link<SpellCallbackInfo&,void> &rCallBack)
@@ -1170,7 +1170,7 @@ bool EditView::ExecuteSpellPopup(const Point& rPosPixel, const Link<SpellCallbac
         return true;
     }
 
-    OString sId = xPopupMenu->popup_at_rect(pPopupParent, aTempRect);
+    OUString sId = xPopupMenu->popup_at_rect(pPopupParent, aTempRect);
 
     aPaM2 = pImpEditView->pEditEngine->pImpEditEngine->CreateEditPaM(aP2);
     aPaM = pImpEditView->pEditEngine->pImpEditEngine->CreateEditPaM(aP);

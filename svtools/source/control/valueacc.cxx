@@ -210,15 +210,15 @@ sal_Int64 SAL_CALL ValueItemAcc::getAccessibleStateSet()
         if ( !mbIsTransientChildrenDisabled )
             nStateSet |= accessibility::AccessibleStateType::TRANSIENT;
 
-        // SELECTABLE
         nStateSet |= accessibility::AccessibleStateType::SELECTABLE;
-        //      pStateSet->AddState( accessibility::AccessibleStateType::FOCUSABLE );
+        nStateSet |= accessibility::AccessibleStateType::FOCUSABLE;
 
-        // SELECTED
         if( mpParent->mrParent.GetSelectedItemId() == mpParent->mnId )
         {
+
             nStateSet |= accessibility::AccessibleStateType::SELECTED;
-            //              pStateSet->AddState( accessibility::AccessibleStateType::FOCUSED );
+            if (mpParent->mrParent.HasChildFocus())
+                nStateSet |= accessibility::AccessibleStateType::FOCUSED;
         }
     }
 
@@ -387,7 +387,7 @@ void ValueItemAcc::FireAccessibleEvent( short nEventId, const uno::Any& rOldValu
     accessibility::AccessibleEventObject                                                        aEvtObject;
 
     aEvtObject.EventId = nEventId;
-    aEvtObject.Source = static_cast<uno::XWeak*>(this);
+    aEvtObject.Source = getXWeak();
     aEvtObject.NewValue = rNewValue;
     aEvtObject.OldValue = rOldValue;
 
@@ -418,9 +418,10 @@ void ValueSetAcc::FireAccessibleEvent( short nEventId, const uno::Any& rOldValue
     accessibility::AccessibleEventObject                                                        aEvtObject;
 
     aEvtObject.EventId = nEventId;
-    aEvtObject.Source = static_cast<uno::XWeak*>(this);
+    aEvtObject.Source = getXWeak();
     aEvtObject.NewValue = rNewValue;
     aEvtObject.OldValue = rOldValue;
+    aEvtObject.IndexHint = -1;
 
     for (auto const& tmpListener : aTmpListeners)
     {
@@ -952,7 +953,7 @@ void ValueSetAcc::ThrowIfDisposed()
         SAL_WARN("svx", "Calling disposed object. Throwing exception:");
         throw lang::DisposedException (
             "object has been already disposed",
-            static_cast<uno::XWeak*>(this));
+            getXWeak());
     }
     else
     {

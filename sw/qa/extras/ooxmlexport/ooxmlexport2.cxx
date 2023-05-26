@@ -14,7 +14,7 @@
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
@@ -32,6 +32,7 @@
 #include <com/sun/star/text/XTextFieldsSupplier.hpp>
 
 #include <oox/drawingml/drawingmltypes.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 
 class Test : public SwModelTestBase
 {
@@ -578,17 +579,35 @@ DECLARE_OOXMLEXPORT_TEST(testTextframeGradient, "textframe-gradient.docx")
 
     uno::Reference<beans::XPropertySet> xFrame(getShape(1), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, getProperty<drawing::FillStyle>(xFrame, "FillStyle"));
-    awt::Gradient aGradient = getProperty<awt::Gradient>(xFrame, "FillGradient");
-    CPPUNIT_ASSERT_EQUAL(Color(0xC0504D), Color(ColorTransparency, aGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(Color(0xD99594), Color(ColorTransparency, aGradient.EndColor));
-    CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_AXIAL, aGradient.Style);
+    awt::Gradient2 aGradient(getProperty<awt::Gradient2>(xFrame, "FillGradient"));
+
+    // MCGR: Use the completely imported transparency gradient to check for correctness
+    basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.85098039215686272, 0.58431372549019611, 0.58039215686274515));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 0.5));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.75294117647058822, 0.31372549019607843, 0.30196078431372547));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[2].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[2].getStopColor(), basegfx::BColor(0.85098039215686272, 0.58431372549019611, 0.58039215686274515));
+    CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_LINEAR, aGradient.Style);
 
     xFrame.set(getShape(2), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, getProperty<drawing::FillStyle>(xFrame, "FillStyle"));
-    aGradient = getProperty<awt::Gradient>(xFrame, "FillGradient");
-    CPPUNIT_ASSERT_EQUAL(COL_BLACK, Color(ColorTransparency, aGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(Color(0x666666), Color(ColorTransparency, aGradient.EndColor));
-    CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_AXIAL, aGradient.Style);
+    aGradient = getProperty<awt::Gradient2>(xFrame, "FillGradient");
+
+    // MCGR: Use the completely imported transparency gradient to check for correctness
+    aColorStops = basegfx::BColorStops(aGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.40000000000000002, 0.40000000000000002, 0.40000000000000002));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 0.5));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.0, 0.0, 0.0));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[2].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[2].getStopColor(), basegfx::BColor(0.40000000000000002, 0.40000000000000002, 0.40000000000000002));
+    CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_LINEAR, aGradient.Style);
 
     // Left / right margin was incorrect: the attribute was missing and we
     // didn't have the right default (had 0 instead of the below one).
@@ -620,9 +639,9 @@ DECLARE_OOXMLEXPORT_TEST(testTableStylerPrSz, "table-style-rPr-sz.docx")
     uno::Reference<text::XTextRange> xCell(xTable->getCellByName("A1"), uno::UNO_QUERY);
     uno::Reference<container::XEnumerationAccess> xParaEnumAccess(xCell->getText(), uno::UNO_QUERY);
     uno::Reference<container::XEnumeration> xParaEnum = xParaEnumAccess->createEnumeration();
-    uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
 // disabled temporarily, next commit enables it again
 #if 0
+    uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(20.f, getProperty<float>(getRun(xPara, 1), "CharHeight"));
 #endif
 //    CPPUNIT_ASSERT_EQUAL(awt::FontUnderline::SINGLE, getProperty<short>(getRun(xPara, 1), "CharUnderline"));
@@ -841,8 +860,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo64238_b, "fdo64238_b.docx")
         xRunEnum->nextElement();
         numOfRuns++;
     }
-    // "This is the ", "ODD", " [", "LEFT", "] header" and the colored paragraph marker
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(6), numOfRuns);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), numOfRuns);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo56679, "fdo56679.docx")

@@ -292,7 +292,7 @@ SwMultiTOXTabDialog::~SwMultiTOXTabDialog()
     SW_MOD()->GetModuleConfig()->SetShowIndexPreview(m_xShowExampleCB->get_active());
 }
 
-void SwMultiTOXTabDialog::PageCreated(const OString& rId, SfxTabPage &rPage)
+void SwMultiTOXTabDialog::PageCreated(const OUString& rId, SfxTabPage &rPage)
 {
     if (rId == "background")
     {
@@ -1474,7 +1474,7 @@ IMPL_LINK_NOARG(SwTOXSelectTabPage, MenuEnableHdl, weld::Toggleable&, void)
     m_xAutoMarkPB->set_item_sensitive("edit", !m_sAutoMarkURL.isEmpty());
 }
 
-IMPL_LINK(SwTOXSelectTabPage, MenuExecuteHdl, const OString&, rIdent, void)
+IMPL_LINK(SwTOXSelectTabPage, MenuExecuteHdl, const OUString&, rIdent, void)
 {
     const OUString sSaveAutoMarkURL = m_sAutoMarkURL;
 
@@ -1899,8 +1899,8 @@ namespace
         STR_AUTH_FIELD_CUSTOM5,
         STR_AUTH_FIELD_ISBN,
         STR_AUTH_FIELD_LOCAL_URL,
+        STR_AUTH_FIELD_TARGET_TYPE,
         STR_AUTH_FIELD_TARGET_URL,
-        STR_AUTH_FIELD_USE_TARGET_URL,
     };
 }
 

@@ -814,7 +814,7 @@ class UrlEditEngine : public EditEngine
 public:
     explicit UrlEditEngine(SfxItemPool *pPool) : EditEngine(pPool) {}
 
-    virtual OUString CalcFieldValue( const SvxFieldItem&, sal_Int32, sal_Int32, std::optional<Color>&, std::optional<Color>& ) override
+    virtual OUString CalcFieldValue( const SvxFieldItem&, sal_Int32, sal_Int32, std::optional<Color>&, std::optional<Color>&, std::optional<FontLineStyle>& ) override
     {
         return "jim@bob.com"; // a sophisticated view of value:
     }
@@ -1146,7 +1146,7 @@ void Test::testUnderlineCopyPaste()
     aEditEngine.InsertText( xData, OUString(), rDoc.GetEndPaM(), true );
 
     // Assert changes
-    CPPUNIT_ASSERT_EQUAL( aTextLen + (OUString("textforunder")).getLength(), rDoc.GetTextLen() );
+    CPPUNIT_ASSERT_EQUAL( static_cast<sal_Int32>(aTextLen + strlen("textforunder")), rDoc.GetTextLen() );
     CPPUNIT_ASSERT_EQUAL( OUString(aParaText + "textforunder" ), rDoc.GetParaAsString(sal_Int32(0)) );
 
     // Check updated text for appropriate Underline

@@ -16,7 +16,10 @@
 #include <ndtxt.hxx>
 #include <wrtsh.hxx>
 
+#include <officecfg/Office/Common.hxx>
+#include <sfx2/bindings.hxx>
 #include <sfx2/AccessibilityIssue.hxx>
+#include <unotools/configmgr.hxx>
 #include <vcl/svapp.hxx>
 
 #include "A11yCheckIssuesPanel.hxx"
@@ -31,6 +34,7 @@ AccessibilityCheckEntry::AccessibilityCheckEntry(
     , m_xContainer(m_xBuilder->weld_container("accessibilityCheckEntryBox"))
     , m_xLabel(m_xBuilder->weld_label("accessibilityCheckEntryLabel"))
     , m_xGotoButton(m_xBuilder->weld_button("accessibilityCheckEntryGotoButton"))
+    , m_xFixButton(m_xBuilder->weld_button("accessibilityCheckEntryFixButton"))
     , m_pAccessibilityIssue(rAccessibilityIssue)
 {
     m_xLabel->set_label(m_pAccessibilityIssue->m_aIssueText);
@@ -38,11 +42,20 @@ AccessibilityCheckEntry::AccessibilityCheckEntry(
     m_xContainer->set_size_request(-1, m_xContainer->get_preferred_size().Height());
     m_xGotoButton->set_visible(m_pAccessibilityIssue->canGotoIssue());
     m_xGotoButton->connect_clicked(LINK(this, AccessibilityCheckEntry, GotoButtonClicked));
+    m_xFixButton->set_visible(m_pAccessibilityIssue->canQuickFixIssue());
+    m_xFixButton->connect_clicked(LINK(this, AccessibilityCheckEntry, FixButtonClicked));
+
+    m_pAccessibilityIssue->setParent(dynamic_cast<weld::Window*>(get_widget()));
 }
 
 IMPL_LINK_NOARG(AccessibilityCheckEntry, GotoButtonClicked, weld::Button&, void)
 {
     m_pAccessibilityIssue->gotoIssue();
+}
+
+IMPL_LINK_NOARG(AccessibilityCheckEntry, FixButtonClicked, weld::Button&, void)
+{
+    m_pAccessibilityIssue->quickFixIssue();
 }
 
 std::unique_ptr<PanelLayout> A11yCheckIssuesPanel::Create(weld::Widget* pParent,
@@ -57,21 +70,48 @@ std::unique_ptr<PanelLayout> A11yCheckIssuesPanel::Create(weld::Widget* pParent,
 A11yCheckIssuesPanel::A11yCheckIssuesPanel(weld::Widget* pParent, SfxBindings* pBindings)
     : PanelLayout(pParent, "A11yCheckIssuesPanel", "modules/swriter/ui/a11ycheckissuespanel.ui")
     , m_xAccessibilityCheckBox(m_xBuilder->weld_box("accessibilityCheckBox"))
-    , m_xScrolledWindow(m_xBuilder->weld_scrolled_window("scrolledwindow"))
+    , mpBindings(pBindings)
     , mpDoc(nullptr)
     , maA11yCheckController(FN_STAT_ACCESSIBILITY_CHECK, *pBindings, *this)
     , mnIssueCount(0)
+    , mbAutomaticCheckEnabled(false)
 {
     SwDocShell* pDocSh = dynamic_cast<SwDocShell*>(SfxObjectShell::Current());
     if (!pDocSh)
         return;
+
+    // Automatic a11y checking must be enabled for this panel to work properly
+    mbAutomaticCheckEnabled
+        = officecfg::Office::Common::Accessibility::OnlineAccessibilityCheck::get();
+    if (!mbAutomaticCheckEnabled)
+    {
+        std::shared_ptr<comphelper::ConfigurationChanges> batch(
+            comphelper::ConfigurationChanges::create());
+        officecfg::Office::Common::Accessibility::OnlineAccessibilityCheck::set(true, batch);
+        batch->commit();
+        pBindings->Invalidate(SID_ACCESSIBILITY_CHECK_ONLINE);
+    }
 
     mpDoc = pDocSh->GetDoc();
 
     populateIssues();
 }
 
-A11yCheckIssuesPanel::~A11yCheckIssuesPanel() { m_xAccessibilityCheckBox.reset(); }
+void A11yCheckIssuesPanel::ImplDestroy()
+{
+    // Restore state when this panel is no longer used
+    if (!mbAutomaticCheckEnabled)
+    {
+        std::shared_ptr<comphelper::ConfigurationChanges> batch(
+            comphelper::ConfigurationChanges::create());
+        officecfg::Office::Common::Accessibility::OnlineAccessibilityCheck::set(false, batch);
+        batch->commit();
+        mpBindings->Invalidate(SID_ACCESSIBILITY_CHECK_ONLINE);
+    }
+    m_xAccessibilityCheckBox.reset();
+}
+
+A11yCheckIssuesPanel::~A11yCheckIssuesPanel() { suppress_fun_call_w_exception(ImplDestroy()); }
 
 void A11yCheckIssuesPanel::populateIssues()
 {
@@ -93,20 +133,12 @@ void A11yCheckIssuesPanel::populateIssues()
         m_xAccessibilityCheckBox->reorder_child(xEntry->get_widget(), i++);
         m_aAccessibilityCheckEntries.push_back(std::move(xEntry));
     }
-
-    if (!m_aAccessibilityCheckEntries.empty())
-    {
-        auto nRowHeight
-            = m_aAccessibilityCheckEntries.back()->get_widget()->get_preferred_size().Height();
-        // 6 is the spacing set in the .ui
-        m_xScrolledWindow->vadjustment_set_step_increment(nRowHeight + 6);
-    }
 }
 
 void A11yCheckIssuesPanel::NotifyItemUpdate(const sal_uInt16 nSid, const SfxItemState /* eState */,
                                             const SfxPoolItem* pState)
 {
-    if (!m_xAccessibilityCheckBox) //disposed
+    if (!m_xAccessibilityCheckBox || !pState) //disposed
         return;
 
     switch (nSid)

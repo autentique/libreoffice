@@ -70,7 +70,7 @@ void SwTextPainter::CtorInitTextPainter( SwTextFrame *pNewFrame, SwTextPaintInfo
     m_bPaintDrop = false;
 }
 
-SwLinePortion *SwTextPainter::CalcPaintOfst( const SwRect &rPaint )
+SwLinePortion *SwTextPainter::CalcPaintOfst(const SwRect &rPaint, bool& rbSkippedNumPortions)
 {
     SwLinePortion *pPor = m_pCurr->GetFirstPortion();
     GetInfo().SetPaintOfst( 0 );
@@ -98,6 +98,11 @@ SwLinePortion *SwTextPainter::CalcPaintOfst( const SwRect &rPaint )
             }
             else
                 pPor->Move( GetInfo() );
+            if (pPor->InNumberGrp()
+                && !static_cast<SwNumberPortion const*>(pPor)->HasFollow())
+            {
+                rbSkippedNumPortions = true; // all numbering portions were skipped?
+            }
             pLast = pPor;
             pPor = pPor->GetNextPortion();
         }
@@ -145,7 +150,16 @@ void SwTextPainter::DrawTextLine( const SwRect &rPaint, SwSaveClip &rClip,
     // 6882: blank lines can't be optimized by removing them if Formatting Marks are shown
     const bool bEndPor = GetInfo().GetOpt().IsParagraph() && GetInfo().GetText().isEmpty();
 
-    SwLinePortion *pPor = bEndPor ? m_pCurr->GetFirstPortion() : CalcPaintOfst( rPaint );
+    bool bSkippedNumPortions(false);
+    SwLinePortion *pPor = bEndPor ? m_pCurr->GetFirstPortion() : CalcPaintOfst(rPaint, bSkippedNumPortions);
+
+    if (bSkippedNumPortions) // ugly but hard to check earlier in PaintSwFrame:
+    {   // there is a num portion but it is outside of the frame area and not painted
+        assert(!roTaggedLabel);
+        assert(!roTaggedParagraph);
+        Frame_Info aFrameInfo(*m_pFrame); // open LBody
+        roTaggedParagraph.emplace(nullptr, &aFrameInfo, nullptr, *GetInfo().GetOut());
+    }
 
     // Optimization!
     SwTwips nMaxRight = std::min<SwTwips>( rPaint.Right(), Right() );
@@ -391,11 +405,12 @@ void SwTextPainter::DrawTextLine( const SwRect &rPaint, SwSaveClip &rClip,
         }
 
         // multiple numbering portions are possible :(
-        if (pPor->InNumberGrp() // also footnote label
-            && !static_cast<SwNumberPortion const*>(pPor)->IsFollow())
+        if ((pPor->InNumberGrp() // also footnote label
+                // weird special case, bullet with soft hyphen
+             || (pPor->InHyphGrp() && pNext && pNext->InNumberGrp()))
+            && !roTaggedLabel) // note: CalcPaintOfst may skip some portions
         {
-            assert(!roTaggedLabel);
-            assert(isPDFTaggingEnabled); (void) isPDFTaggingEnabled;
+            assert(isPDFTaggingEnabled);
             Por_Info aPorInfo(*pPor, *this, true); // open Lbl
             roTaggedLabel.emplace(nullptr, nullptr, &aPorInfo, *pOut);
         }
@@ -443,6 +458,41 @@ void SwTextPainter::DrawTextLine( const SwRect &rPaint, SwSaveClip &rClip,
                  pNext && pNext->IsHolePortion() ) ?
                pNext :
                nullptr;
+        if (!pPor && isPDFTaggingEnabled && !roTaggedParagraph)
+        {   // check if the end of the list label is off-screen
+            auto FindEndOfNumbering = [&](SwLinePortion const* pP) {
+                while (pP)
+                {
+                    if (pP->InNumberGrp()
+                        && !static_cast<SwNumberPortion const*>(pP)->HasFollow())
+                    {
+                        if (roTaggedLabel)
+                        {
+                            roTaggedLabel.reset();
+                        } // else, if the numbering isn't visible at all, no Lbl
+                        Frame_Info aFrameInfo(*m_pFrame); // open LBody
+                        roTaggedParagraph.emplace(nullptr, &aFrameInfo, nullptr, *GetInfo().GetOut());
+                        return true;
+                    }
+                    pP = pP->GetNextPortion();
+                }
+                return false;
+            };
+            if (!FindEndOfNumbering(pNext)) // check rest of current line
+            {
+                // check lines that will be cut off
+                if (rPaint.Bottom() < Y() + GetLineHeight())
+                {
+                    for (SwLineLayout const* pLine = GetNext(); pLine; pLine = pLine->GetNext())
+                    {
+                        if (FindEndOfNumbering(pLine->GetFirstPortion()))
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // delete underline font

@@ -91,7 +91,7 @@ sal_Int32 FindEndPosR1C1(const sal_Unicode* p, sal_Int32 nStartPos, sal_Int32 nE
         if (*p == '\'')
         {
             // Skip until the closing quote.
-            for (; nNewEnd <= nEndPos; ++p, ++nNewEnd)
+            for (++p, ++nNewEnd; nNewEnd <= nEndPos; ++p, ++nNewEnd)
                 if (*p == '\'')
                     break;
             if (nNewEnd > nEndPos)
@@ -100,7 +100,7 @@ sal_Int32 FindEndPosR1C1(const sal_Unicode* p, sal_Int32 nStartPos, sal_Int32 nE
         else if (*p == '[')
         {
             // Skip until the closing bracket.
-            for (; nNewEnd <= nEndPos; ++p, ++nNewEnd)
+            for (++p, ++nNewEnd; nNewEnd <= nEndPos; ++p, ++nNewEnd)
                 if (*p == ']')
                     break;
             if (nNewEnd > nEndPos)
@@ -319,8 +319,7 @@ void ScRefFinder::ToggleRel( sal_Int32 nStartPos, sal_Int32 nEndPos )
 
         // assemble
 
-        aResult.append(aSep);
-        aResult.append(aExpr);
+        aResult.append(aSep + aExpr);
 
         nLoopStart = nEEnd;
     }

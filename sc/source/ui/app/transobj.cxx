@@ -677,6 +677,8 @@ void ScTransferObj::InitDocShell(bool bLimitToPageSize)
     m_pDoc->GetName( m_aBlock.aStart.Tab(), aTabName );
     rDestDoc.RenameTab( 0, aTabName );
 
+    pDocSh->MakeDrawLayer();
+
     rDestDoc.CopyStdStylesFrom(*m_pDoc);
 
     SCCOL nStartX = m_aBlock.aStart.Col();
@@ -715,9 +717,6 @@ void ScTransferObj::InitDocShell(bool bLimitToPageSize)
             rDestDoc.SetManualHeight(nRow, nRow, 0, bManual);
         }
     }
-
-    if (m_pDoc->GetDrawLayer() || m_pDoc->HasNotes())
-        pDocSh->MakeDrawLayer();
 
     //  cell range is copied to the original position, but on the first sheet
     //  -> bCutMode must be set

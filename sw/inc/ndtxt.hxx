@@ -278,6 +278,8 @@ public:
     OUString InsertText( const OUString & rStr, const SwPosition & rIdx,
                      const SwInsertFlags nMode
                          = SwInsertFlags::DEFAULT );
+    /// Add a dummy character to the redline of the table changes
+    void InsertDummy() { m_Text = OUStringChar(CH_TXT_TRACKED_DUMMY_CHAR); }
 
     /** delete text content
         ATTENTION: must not be called with a range that overlaps the start of
@@ -537,10 +539,6 @@ public:
     bool GetFirstLineOfsWithNum( short& rFirstOffset ) const;
 
     SwTwips GetAdditionalIndentForStartingNewList() const;
-
-    void ClearLRSpaceItemDueToListLevelIndents(
-        std::unique_ptr<SvxFirstLineIndentItem>& o_rFirstLineItem,
-        std::unique_ptr<SvxTextLeftMarginItem>& o_rTextLeftMarginItem) const;
 
     /** return left margin for tab stop position calculation
 

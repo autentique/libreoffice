@@ -80,6 +80,7 @@
 #include <comphelper/dispatchcommand.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/lok.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
 #include <salhelper/simplereferenceobject.hxx>
 #include <rtl/ref.hxx>
@@ -989,9 +990,15 @@ void SwModule::ConfigurationChanged( utl::ConfigurationBroadcaster* pBrdCst, Con
                 {
                     SwViewOption aNewOptions = *pSwView->GetWrtShell().GetViewOptions();
                     aNewOptions.SetThemeName(m_pColorConfig->GetCurrentSchemeName());
-                    aNewOptions.SetColorConfig(*m_pColorConfig);
+                    SwViewColors aViewColors(*m_pColorConfig);
+                    aNewOptions.SetColorConfig(aViewColors);
                     pSwView->GetWrtShell().ApplyViewOptions(aNewOptions);
                     pViewShell->GetWindow()->Invalidate();
+                    if (bOnlyInvalidateCurrentView)
+                    {
+                        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_APPLICATION_BACKGROUND_COLOR,
+                            aViewColors.m_aAppBackgroundColor.AsRGBHexString().toUtf8());
+                    }
                 }
             }
             if (bOnlyInvalidateCurrentView)
@@ -1112,11 +1119,11 @@ void NewXForms( SfxRequest& rReq )
     // copied & excerpted from SwModule::InsertLab(..)
 
     // create new document
-    SfxObjectShellLock xDocSh( new SwDocShell( SfxObjectCreateMode::STANDARD) );
+    SwDocShellRef xDocSh( new SwDocShell( SfxObjectCreateMode::STANDARD) );
     xDocSh->DoInitNew();
 
     // initialize XForms
-    static_cast<SwDocShell*>( &xDocSh )->GetDoc()->initXForms( true );
+    xDocSh->GetDoc()->initXForms(true);
 
     // load document into frame
     SfxViewFrame::DisplayNewDocument( *xDocSh, rReq );

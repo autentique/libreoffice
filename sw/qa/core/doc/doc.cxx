@@ -18,8 +18,6 @@
 #include <vcl/errinf.hxx>
 #include <vcl/event.hxx>
 #include <editeng/langitem.hxx>
-#include <sfx2/viewfrm.hxx>
-#include <sfx2/dispatch.hxx>
 #include <vcl/scheduler.hxx>
 #include <comphelper/propertyvalue.hxx>
 
@@ -31,10 +29,11 @@
 #include <view.hxx>
 #include <ndtxt.hxx>
 #include <swdtflvr.hxx>
-#include <cmdid.h>
 #include <unotxdoc.hxx>
 #include <UndoManager.hxx>
 #include <IDocumentRedlineAccess.hxx>
+#include <frmmgr.hxx>
+#include <formatflysplit.hxx>
 
 /// Covers sw/source/core/doc/ fixes.
 class SwCoreDocTest : public SwModelTestBase
@@ -58,7 +57,7 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testMathInsertAnchorType)
     pShell->InsertObject(svt::EmbeddedObjectRef(), &aGlobalName);
 
     // Then the anchor type should be as-char.
-    SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    sw::SpzFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rFormats.size());
     const SwFrameFormat& rFormat = *rFormats[0];
     const SwFormatAnchor& rAnchor = rFormat.GetAnchor();
@@ -75,7 +74,7 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextboxTextRotateAngle)
     // Check the writing direction of the only TextFrame in the document.
     createSwDoc("textbox-textrotateangle.odt");
     SwDoc* pDoc = getSwDoc();
-    SwFrameFormats& rFrameFormats = *pDoc->GetSpzFrameFormats();
+    sw::SpzFrameFormats& rFrameFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), rFrameFormats.size());
     CPPUNIT_ASSERT_EQUAL(o3tl::narrowing<sal_uInt16>(RES_DRAWFRMFMT), rFrameFormats[0]->Which());
     CPPUNIT_ASSERT_EQUAL(o3tl::narrowing<sal_uInt16>(RES_FLYFRMFMT), rFrameFormats[1]->Which());
@@ -135,9 +134,9 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testTextBoxZOrder)
 {
     createSwDoc("textbox-zorder.docx");
     SwDoc* pDoc = getSwDoc();
-    SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    sw::SpzFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(3), rFormats.size());
-    const SwFrameFormat* pEllipse = rFormats[2];
+    const sw::SpzFrameFormat* pEllipse = rFormats[2];
     const SdrObject* pEllipseShape = pEllipse->FindRealSdrObject();
     // Make sure we test the right shape.
     CPPUNIT_ASSERT_EQUAL(OUString("Shape3"), pEllipseShape->GetName());
@@ -294,10 +293,9 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testCopyBookmarks)
 
     // Also, when checking the # of non-copy images in the resulting doc model:
     nActual = 0;
-    SwFrameFormats& rFrameFormats = *pDoc->GetSpzFrameFormats();
-    for (size_t i = 0; i < rFrameFormats.size(); ++i)
+    for (auto pSpz : *pDoc->GetSpzFrameFormats())
     {
-        if (rFrameFormats[i]->GetName().indexOf("Copy") == -1)
+        if (pSpz->GetName().indexOf("Copy") == -1)
         {
             ++nActual;
         }
@@ -444,6 +442,44 @@ CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testHeaderFooterDelete)
     // Without the accompanying fix in place, this test would have crashed, an invalidated iterator
     // was used in sw::mark::MarkManager::deleteMarks().
     createSwDoc("header-footer-delete.docx");
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreDocTest, testSplitFlyChain)
+{
+    // Given a document with 2 fly frames, first is allowed to split, second is not:
+    createSwDoc();
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwFlyFrameAttrMgr aMgr(true, pWrtShell, Frmmgr_Type::TEXT, nullptr);
+    RndStdIds eAnchor = RndStdIds::FLY_AT_PARA;
+    aMgr.InsertFlyFrame(eAnchor, aMgr.GetPos(), aMgr.GetSize());
+    SwDoc* pDoc = getSwDoc();
+    auto& rFlys = *pDoc->GetSpzFrameFormats();
+    {
+        pWrtShell->StartAllAction();
+        auto pFly = rFlys[0];
+        SwAttrSet aSet(pFly->GetAttrSet());
+        aSet.Put(SwFormatFlySplit(true));
+        pDoc->SetAttr(aSet, *pFly);
+        pWrtShell->EndAllAction();
+    }
+    pWrtShell->UnSelectFrame();
+    pWrtShell->SttEndDoc(/*bStart=*/false);
+    aMgr.InsertFlyFrame(eAnchor, aMgr.GetPos(), aMgr.GetSize());
+    auto pFly = rFlys[0];
+    auto pFly2 = rFlys[1];
+
+    // When checking if chaining is allowed:
+    SwChainRet eActual = pDoc->Chainable(*pFly, *pFly2);
+    // Then make sure the source is rejected if it is a split fly:
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 5 (SwChainRet::SOURCE_CHAINED)
+    // - Actual  : 0 (SwChainRet::OK)
+    // i.e. the UI allowed chaining for floating tables, which doesn't make sense.
+    CPPUNIT_ASSERT_EQUAL(SwChainRet::SOURCE_CHAINED, eActual);
+
+    // Also test the other way around, that should not be OK, either.
+    eActual = pDoc->Chainable(*pFly2, *pFly);
+    CPPUNIT_ASSERT_EQUAL(SwChainRet::IS_IN_CHAIN, eActual);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -99,6 +99,7 @@
 
 #include <ndgrf.hxx>
 #include <ndole.hxx>
+#include <formatflysplit.hxx>
 
 #include <cstdio>
 
@@ -893,10 +894,15 @@ const SfxPoolItem& SwWW8AttrIter::GetItem(sal_uInt16 nWhich) const
 void WW8AttributeOutput::StartRuby( const SwTextNode& rNode, sal_Int32 /*nPos*/, const SwFormatRuby& rRuby )
 {
     WW8Ruby aWW8Ruby(rNode, rRuby, GetExport());
-    OUString aStr( FieldString( ww::eEQ ) + "\\* jc" );
-    aStr += OUString::number(aWW8Ruby.GetJC()) + " \\* \"Font:" + aWW8Ruby.GetFontFamily()
-        + "\" \\* hps";
-    aStr += OUString::number((aWW8Ruby.GetRubyHeight() + 5) / 10) + " \\o";
+    OUString aStr =
+        FieldString( ww::eEQ )
+        + "\\* jc"
+        + OUString::number(aWW8Ruby.GetJC())
+        + " \\* \"Font:"
+        + aWW8Ruby.GetFontFamily()
+        + "\" \\* hps"
+        + OUString::number((aWW8Ruby.GetRubyHeight() + 5) / 10)
+        + " \\o";
     if (aWW8Ruby.GetDirective())
     {
         aStr += OUString::Concat(u"\\a") + OUStringChar(aWW8Ruby.GetDirective());
@@ -3464,7 +3470,21 @@ void WW8AttributeOutput::OutputFlyFrame_Impl( const ww8::Frame& rFormat, const P
     if (bUseEscher)
     {
         // write as escher
-        m_rWW8Export.AppendFlyInFlys(rFormat, rNdTopLeft);
+        if (rFrameFormat.GetFlySplit().GetValue())
+        {
+            // The frame can split: this was originally from a floating table, write it back as
+            // such.
+            const SwNodeIndex* pNodeIndex = rFrameFormat.GetContent().GetContentIdx();
+            SwNodeOffset nStt = pNodeIndex ? pNodeIndex->GetIndex() + 1 : SwNodeOffset(0);
+            SwNodeOffset nEnd = pNodeIndex ? pNodeIndex->GetNode().EndOfSectionIndex() : SwNodeOffset(0);
+            m_rWW8Export.SaveData(nStt, nEnd);
+            GetExport().WriteText();
+            m_rWW8Export.RestoreData();
+        }
+        else
+        {
+            m_rWW8Export.AppendFlyInFlys(rFormat, rNdTopLeft);
+        }
     }
     else
     {

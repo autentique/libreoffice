@@ -51,6 +51,7 @@
 #include <fmtfollowtextflow.hxx>
 #include <unoprnms.hxx>
 #include <rootfrm.hxx>
+#include <bodyfrm.hxx>
 
 using namespace ::com::sun::star;
 
@@ -1554,10 +1555,31 @@ SwLayoutFrame *SwFrame::GetNextFlyLeaf( MakePageType eMakePage )
     assert(pFly->IsFlySplitAllowed() && "GetNextFlyLeaf: fly split not allowed");
 
     SwTextFrame* pFlyAnchor = pFly->FindAnchorCharFrame();
+
+    if (!pFlyAnchor)
+    {
+        // In case our fly frame is split already, but not yet moved, then FindAnchorCharFrame()
+        // won't find the anchor, since it wants a follow anchor, but there is no follow anchor yet.
+        // In this case work with a plain anchor, so FindSctFrame() works to find out we're in a
+        // section.
+        auto pAnchorFrame = const_cast<SwFrame*>(pFly->GetAnchorFrame());
+        if (pAnchorFrame && pAnchorFrame->IsTextFrame())
+        {
+            pFlyAnchor = static_cast<SwTextFrame*>(pAnchorFrame);
+        }
+    }
+
     bool bBody = pFlyAnchor && pFlyAnchor->IsInDocBody();
     SwLayoutFrame *pLayLeaf = nullptr;
     // Look up the first candidate.
-    if (IsTabFrame())
+    SwSectionFrame* pFlyAnchorSection = pFlyAnchor ? pFlyAnchor->FindSctFrame() : nullptr;
+    if (pFlyAnchorSection)
+    {
+        // We can't just move the split anchor to the next page, that would be outside the section.
+        // Rather split that section as well.
+        pLayLeaf = pFlyAnchorSection->GetNextSctLeaf(eMakePage);
+    }
+    else if (IsTabFrame())
     {
         // If we're in a table, try to find the next frame of the table's last content.
         SwFrame* pContent = static_cast<SwTabFrame*>(this)->FindLastContentOrTable();
@@ -1577,7 +1599,17 @@ SwLayoutFrame *SwFrame::GetNextFlyLeaf( MakePageType eMakePage )
             bool bLeftBody = bBody && !pLayLeaf->IsInDocBody();
             // If the candidate is in a fly, make sure that the candidate is a child of our follow.
             bool bLeftFly = pLayLeaf->IsInFly() && pLayLeaf->FindFlyFrame() != pFly->GetFollow();
-            if (bLeftBody || bLeftFly)
+            bool bSameBody = false;
+            if (bBody && pLayLeaf->IsInDocBody())
+            {
+                // Make sure the candidate is not inside the same body frame, that would prevent
+                // inserting a new page.
+                if (pFlyAnchor->FindBodyFrame() == pLayLeaf->FindBodyFrame())
+                {
+                    bSameBody = true;
+                }
+            }
+            if (bLeftBody || bLeftFly || bSameBody)
             {
                 // The above conditions are not held, reject.
                 pOldLayLeaf = pLayLeaf;
@@ -1609,7 +1641,8 @@ SwLayoutFrame *SwFrame::GetNextFlyLeaf( MakePageType eMakePage )
             // Split the anchor at char 0: all the content goes to the follow of the anchor.
             pFlyAnchor->SplitFrame(TextFrameIndex(0));
             auto pNext = static_cast<SwTextFrame*>(pFlyAnchor->GetNext());
-            pNext->MoveSubTree(pLayLeaf);
+            // Move the new anchor frame, before the first child of pLayLeaf.
+            pNext->MoveSubTree(pLayLeaf, pLayLeaf->Lower());
 
             // Now create the follow of the fly and anchor it in the master of the anchor.
             pNew = new SwFlyAtContentFrame(*pFly);
@@ -1624,6 +1657,23 @@ SwLayoutFrame *SwFrame::GetNextFlyLeaf( MakePageType eMakePage )
     return pLayLeaf;
 }
 
+void SwRootFrame::DeleteEmptyFlys_()
+{
+    assert(mpFlyDestroy);
+
+    while (!mpFlyDestroy->empty())
+    {
+        SwFlyFrame* pFly = *mpFlyDestroy->begin();
+        mpFlyDestroy->erase( mpFlyDestroy->begin() );
+        // Allow deletion of non-empty flys: a fly with no content is still formatted to have a
+        // height of MINLAY.
+        if (!pFly->ContainsContent() && !pFly->IsDeleteForbidden())
+        {
+            SwFrame::DestroyFrame(pFly);
+        }
+    }
+}
+
 const SwFlyAtContentFrame* SwFlyAtContentFrame::GetPrecede() const
 {
     return static_cast<const SwFlyAtContentFrame*>(SwFlowFrame::GetPrecede());
@@ -1632,6 +1682,55 @@ const SwFlyAtContentFrame* SwFlyAtContentFrame::GetPrecede() const
 SwFlyAtContentFrame* SwFlyAtContentFrame::GetPrecede()
 {
     return static_cast<SwFlyAtContentFrame*>(SwFlowFrame::GetPrecede());
+}
+
+void SwFlyAtContentFrame::DelEmpty()
+{
+    SwTextFrame* pAnchor = FindAnchorCharFrame();
+    if (pAnchor)
+    {
+        if (SwFlowFrame* pAnchorPrecede = pAnchor->GetPrecede())
+        {
+            // The anchor has a precede: invalidate it so that JoinFrame() is called on it.
+            pAnchorPrecede->GetFrame().InvalidateSize();
+        }
+    }
+
+    SwFlyAtContentFrame* pMaster = IsFollow() ? GetPrecede() : nullptr;
+    if (pMaster)
+    {
+        pMaster->SetFollow(GetFollow());
+    }
+
+    SwFlyAtContentFrame* pFollow = GetFollow();
+    if (pFollow)
+    {
+        // I'll be deleted, so invalidate the position of my follow, so it can move up.
+        pFollow->InvalidatePos();
+    }
+
+    SetFollow(nullptr);
+
+    {
+        SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+        aFrm.Height(0);
+    }
+    InvalidateObjRectWithSpaces();
+
+    if(getRootFrame())
+    {
+        getRootFrame()->InsertEmptyFly(this);
+    }
+}
+
+void SwRootFrame::InsertEmptyFly(SwFlyFrame* pDel)
+{
+    if (!mpFlyDestroy)
+    {
+        mpFlyDestroy.reset(new SwFlyDestroyList);
+    }
+
+    mpFlyDestroy->insert(pDel);
 }
 
 SwLayoutFrame* SwFrame::GetPrevFlyLeaf()

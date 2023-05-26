@@ -35,10 +35,12 @@
 #include <utility>
 
 #if defined LIBO_INTERNAL_ONLY
+#include <algorithm>
 #include <string_view>
 #include <type_traits>
 #endif
 
+#include "rtl/math.h"
 #include "rtl/ustring.h"
 #include "rtl/string.hxx"
 #include "rtl/stringutils.hxx"
@@ -46,6 +48,7 @@
 
 #ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
 #include "config_global.h"
+#include "o3tl/safeint.hxx"
 #include "rtl/stringconcat.hxx"
 #endif
 
@@ -251,6 +254,13 @@ public:
         pData = str;
         rtl_uString_acquire( pData );
     }
+
+#if defined LIBO_INTERNAL_ONLY
+    /// @cond INTERNAL
+    // Catch inadvertent conversions to the above ctor:
+    OUString(std::nullptr_t) = delete;
+    /// @endcond
+#endif
 
     /** New OUString from OUString data without acquiring it.  Takeover of ownership.
 
@@ -502,8 +512,8 @@ public:
      @overload
      @internal
     */
-    template< typename T, std::size_t N >
-    OUString( StringNumberBase< sal_Unicode, T, N >&& n )
+    template< std::size_t N >
+    OUString( OUStringNumber< N >&& n )
         : OUString( n.buf, n.length )
     {}
 #endif
@@ -649,8 +659,8 @@ public:
     }
     template<std::size_t N> OUString & operator =(OUStringLiteral<N> &&) = delete;
 
-    template <typename T, std::size_t N>
-    OUString & operator =(StringNumberBase<sal_Unicode, T, N> && n) {
+    template <std::size_t N>
+    OUString & operator =(OUStringNumber<N> && n) {
         // n.length should never be zero, so no need to add an optimization for that case
         rtl_uString_newFromStr_WithLength(&pData, n.buf, n.length);
         return *this;
@@ -781,8 +791,8 @@ public:
      @overload
      @internal
     */
-    template< typename T, std::size_t N >
-    OUString& operator+=( StringNumberBase< sal_Unicode, T, N >&& n ) & {
+    template< std::size_t N >
+    OUString& operator+=( OUStringNumber< N >&& n ) & {
         sal_Int32 l = n.length;
         if( l == 0 )
             return *this;
@@ -793,8 +803,8 @@ public:
         pData->length = l;
         return *this;
     }
-    template<typename T, std::size_t N> void operator +=(
-        StringNumberBase<sal_Unicode, T, N> &&) && = delete;
+    template<std::size_t N> void operator +=(
+        OUStringNumber<N> &&) && = delete;
 #endif
 
     /**
@@ -1299,6 +1309,15 @@ public:
         return rtl_ustr_ascii_compareIgnoreAsciiCase_WithLength( pData->buffer, pData->length, asciiStr ) == 0;
     }
 
+#if defined LIBO_INTERNAL_ONLY
+    bool equalsIgnoreAsciiCaseAscii( std::string_view asciiStr ) const
+    {
+        return o3tl::make_unsigned(pData->length) == asciiStr.length()
+               && rtl_ustr_ascii_compareIgnoreAsciiCase_WithLengths(
+                      pData->buffer, pData->length, asciiStr.data(), asciiStr.length()) == 0;
+    }
+#endif
+
     /**
       Compares two ASCII strings ignoring case
 
@@ -1321,6 +1340,18 @@ public:
     {
         return rtl_ustr_ascii_compareIgnoreAsciiCase_WithLength( pData->buffer, pData->length, asciiStr );
     }
+
+#if defined LIBO_INTERNAL_ONLY
+    sal_Int32 compareToIgnoreAsciiCaseAscii( std::string_view asciiStr ) const
+    {
+        sal_Int32 nMax = std::min<size_t>(asciiStr.length(), std::numeric_limits<sal_Int32>::max());
+        sal_Int32 result = rtl_ustr_ascii_compareIgnoreAsciiCase_WithLengths(
+            pData->buffer, pData->length, asciiStr.data(), nMax);
+        if (result == 0 && o3tl::make_unsigned(pData->length) < asciiStr.length())
+            result = -1;
+        return result;
+    }
+#endif
 
     /**
       Perform an ASCII lowercase comparison of two strings.
@@ -3051,37 +3082,29 @@ public:
 
 #ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
 
-    static OUStringNumber< int > number( int i, sal_Int16 radix = 10 )
+    static auto number( int i, sal_Int16 radix = 10 )
     {
-        return OUStringNumber< int >( i, radix );
+        return OUStringNumber<RTL_USTR_MAX_VALUEOFINT32>(rtl_ustr_valueOfInt32, i, radix);
     }
-    static OUStringNumber< long long > number( long long ll, sal_Int16 radix = 10 )
+    static auto number( long long ll, sal_Int16 radix = 10 )
     {
-        return OUStringNumber< long long >( ll, radix );
+        return OUStringNumber<RTL_USTR_MAX_VALUEOFINT64>(rtl_ustr_valueOfInt64, ll, radix);
     }
-    static OUStringNumber< unsigned long long > number( unsigned long long ll, sal_Int16 radix = 10 )
+    static auto number( unsigned long long ll, sal_Int16 radix = 10 )
     {
-        return OUStringNumber< unsigned long long >( ll, radix );
+        return OUStringNumber<RTL_USTR_MAX_VALUEOFUINT64>(rtl_ustr_valueOfUInt64, ll, radix);
     }
-    static OUStringNumber< unsigned long long > number( unsigned int i, sal_Int16 radix = 10 )
+    static auto number( unsigned int i, sal_Int16 radix = 10 )
     {
         return number( static_cast< unsigned long long >( i ), radix );
     }
-    static OUStringNumber< long long > number( long i, sal_Int16 radix = 10)
+    static auto number( long i, sal_Int16 radix = 10)
     {
         return number( static_cast< long long >( i ), radix );
     }
-    static OUStringNumber< unsigned long long > number( unsigned long i, sal_Int16 radix = 10 )
+    static auto number( unsigned long i, sal_Int16 radix = 10 )
     {
         return number( static_cast< unsigned long long >( i ), radix );
-    }
-    static OUStringNumber< float > number( float f )
-    {
-        return OUStringNumber< float >( f );
-    }
-    static OUStringNumber< double > number( double d )
-    {
-        return OUStringNumber< double >( d );
     }
 #else
     /**
@@ -3131,6 +3154,7 @@ public:
         sal_Unicode aBuf[RTL_USTR_MAX_VALUEOFUINT64];
         return OUString(aBuf, rtl_ustr_valueOfUInt64(aBuf, ll, radix));
     }
+#endif
 
     /**
       Returns the string representation of the float argument.
@@ -3143,8 +3167,15 @@ public:
     */
     static OUString number( float f )
     {
-        sal_Unicode aBuf[RTL_USTR_MAX_VALUEOFFLOAT];
-        return OUString(aBuf, rtl_ustr_valueOfFloat(aBuf, f));
+        rtl_uString* pNew = NULL;
+        // Same as rtl::str::valueOfFP, used for rtl_ustr_valueOfFloat
+        rtl_math_doubleToUString(&pNew, NULL, 0, f, rtl_math_StringFormat_G,
+                                 RTL_USTR_MAX_VALUEOFFLOAT - SAL_N_ELEMENTS("-x.E-xxx") + 1, '.',
+                                 NULL, 0, true);
+        if (pNew == NULL)
+            throw std::bad_alloc();
+
+        return OUString(pNew, SAL_NO_ACQUIRE);
     }
 
     /**
@@ -3158,11 +3189,23 @@ public:
     */
     static OUString number( double d )
     {
-        sal_Unicode aBuf[RTL_USTR_MAX_VALUEOFDOUBLE];
-        return OUString(aBuf, rtl_ustr_valueOfDouble(aBuf, d));
-    }
-#endif
+        rtl_uString* pNew = NULL;
+        // Same as rtl::str::valueOfFP, used for rtl_ustr_valueOfDouble
+        rtl_math_doubleToUString(&pNew, NULL, 0, d, rtl_math_StringFormat_G,
+                                 RTL_USTR_MAX_VALUEOFDOUBLE - SAL_N_ELEMENTS("-x.E-xxx") + 1, '.',
+                                 NULL, 0, true);
+        if (pNew == NULL)
+            throw std::bad_alloc();
 
+        return OUString(pNew, SAL_NO_ACQUIRE);
+    }
+
+#ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
+    static auto boolean(bool b)
+    {
+        return OUStringNumber<RTL_USTR_MAX_VALUEOFBOOLEAN>(rtl_ustr_valueOfBoolean, b);
+    }
+#else
     /**
       Returns the string representation of the sal_Bool argument.
 
@@ -3195,6 +3238,7 @@ public:
         sal_Unicode aBuf[RTL_USTR_MAX_VALUEOFBOOLEAN];
         return OUString(aBuf, rtl_ustr_valueOfBoolean(aBuf, b));
     }
+#endif
 
     /**
       Returns the string representation of the char argument.
@@ -3313,14 +3357,14 @@ public:
     // would not compile):
     template<typename T> [[nodiscard]] static
     OUStringConcat<OUStringConcatMarker, T>
-    Concat(T const & value) { return OUStringConcat<OUStringConcatMarker, T>({}, value); }
+    Concat(T const & value) { return OUStringConcat<OUStringConcatMarker, T>(value); }
 
     // This overload is needed so that an argument of type 'char const[N]' ends up as
     // 'OUStringConcat<rtl::OUStringConcatMarker, char const[N]>' rather than as
     // 'OUStringConcat<rtl::OUStringConcatMarker, char[N]>':
     template<typename T, std::size_t N> [[nodiscard]] static
     OUStringConcat<OUStringConcatMarker, T[N]>
-    Concat(T (& value)[N]) { return OUStringConcat<OUStringConcatMarker, T[N]>({}, value); }
+    Concat(T (& value)[N]) { return OUStringConcat<OUStringConcatMarker, T[N]>(value); }
 #endif
 
 private:

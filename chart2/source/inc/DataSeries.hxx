@@ -30,6 +30,7 @@
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/uno3.hxx>
 #include "ModifyListenerHelper.hxx"
+#include "PropertyHelper.hxx"
 
 // STL
 #include <vector>
@@ -59,9 +60,12 @@ typedef ::cppu::WeakImplHelper<
     DataSeries_Base;
 }
 
-class OOO_DLLPUBLIC_CHARTTOOLS DataSeries final :
-    public impl::DataSeries_Base,
-    public ::property::OPropertySet
+class OOO_DLLPUBLIC_CHARTTOOLS DataSeries
+#if !defined __GNUC__ || __GNUC__ >= 12 || defined __clang__
+    final
+#endif
+    : public impl::DataSeries_Base
+    , public ::property::OPropertySet
 {
 public:
     explicit DataSeries();
@@ -180,6 +184,8 @@ private:
 
     rtl::Reference<ModifyEventForwarder> m_xModifyEventForwarder;
 };
+
+OOO_DLLPUBLIC_CHARTTOOLS const tPropertyValueMap & StaticDataSeriesDefaults();
 
 }  // namespace chart
 

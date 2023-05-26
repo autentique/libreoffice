@@ -89,7 +89,7 @@ protected:
     SAL_DLLPRIVATE const sal_uInt8* FindNextStmnt( const sal_uInt8*, sal_uInt16&, sal_uInt16&,
                                     bool bFollowJumps, const SbiImage* pImg=nullptr ) const;
     SAL_DLLPRIVATE virtual bool LoadData( SvStream&, sal_uInt16 ) override;
-    SAL_DLLPRIVATE virtual bool StoreData( SvStream& ) const override;
+    SAL_DLLPRIVATE virtual std::pair<bool, sal_uInt32> StoreData( SvStream& ) const override;
     SAL_DLLPRIVATE virtual bool LoadCompleted() override;
     SAL_DLLPRIVATE virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
     SAL_DLLPRIVATE void handleProcedureProperties( SfxBroadcaster& rBC, const SfxHint& rHint );
@@ -135,7 +135,7 @@ public:
     void     GetCodeCompleteDataFromParse(CodeCompleteDataCache& aCache);
     const SbxArrayRef& GetMethods() const { return pMethods;}
     SbMethod*       FindMethod( const OUString&, SbxClassType );
-    static OUString GetKeywordCase( const OUString& sKeyword );
+    static OUString GetKeywordCase( std::u16string_view sKeyword );
 };
 
 typedef tools::SvRef<SbModule> SbModuleRef;

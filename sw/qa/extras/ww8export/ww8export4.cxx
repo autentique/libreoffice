@@ -13,8 +13,10 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/style/ParagraphAdjust.hpp>
 #include <com/sun/star/text/TextContentAnchorType.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
 
 #include <comphelper/sequenceashashmap.hxx>
 #include <o3tl/string_view.hxx>
@@ -75,6 +77,70 @@ DECLARE_WW8EXPORT_TEST(testTdf141649_conditionalText, "tdf141649_conditionalText
     getParagraph(1, "trueResult");
 }
 
+DECLARE_WW8EXPORT_TEST(testTdf90408, "tdf90408.doc")
+{
+    uno::Reference<beans::XPropertySet> xRun(getRun(getParagraph(1), 1), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("checkbox is 16pt", 16.f, getProperty<float>(xRun, "CharHeight"));
+    xRun.set(getRun(getParagraph(1), 2, "unchecked"), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("text is 12pt", 12.f, getProperty<float>(xRun, "CharHeight"));
+}
+
+DECLARE_WW8EXPORT_TEST(testTdf90408B, "tdf90408B.doc")
+{
+    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
+    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xCell(xTable->getCellByName("A1"), uno::UNO_QUERY);
+
+    uno::Reference<container::XEnumerationAccess> xParaEnumAccess(xCell->getText(), uno::UNO_QUERY);
+    uno::Reference<container::XEnumeration> xParaEnum = xParaEnumAccess->createEnumeration();
+    uno::Reference<text::XTextRange> xPara(xParaEnum->nextElement(), uno::UNO_QUERY);
+
+    uno::Reference<beans::XPropertySet> xRun(getRun(xPara, 1), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("checkbox is 28pt", 28.f, getProperty<float>(xRun, "CharHeight"));
+    xRun.set(getRun(xPara, 2, u" Κατάψυξη,  "), uno::UNO_QUERY_THROW);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("text is 10pt", 10.f, getProperty<float>(xRun, "CharHeight"));
+}
+
+DECLARE_WW8EXPORT_TEST(testTdf155465_paraAdjustDistribute, "tdf155465_paraAdjustDistribute.doc")
+{
+    // Without the accompanying fix in place, this test would have failed with
+    // 'Expected: 2; Actual  : 0', i.e. the first paragraph's ParaAdjust was left, not block.
+    const style::ParagraphAdjust eBlock = style::ParagraphAdjust_BLOCK;
+    auto nAdjust = getProperty<sal_Int16>(getParagraph(1), "ParaAdjust");
+    CPPUNIT_ASSERT_EQUAL(eBlock, static_cast<style::ParagraphAdjust>(nAdjust));
+
+    nAdjust = getProperty<sal_Int16>(getParagraph(1), "ParaLastLineAdjust");
+    CPPUNIT_ASSERT_EQUAL(eBlock, static_cast<style::ParagraphAdjust>(nAdjust));
+
+    nAdjust = getProperty<sal_Int16>(getParagraph(2), "ParaAdjust");
+    CPPUNIT_ASSERT_EQUAL(eBlock, static_cast<style::ParagraphAdjust>(nAdjust));
+
+    nAdjust = getProperty<sal_Int16>(getParagraph(2), "ParaLastLineAdjust");
+    CPPUNIT_ASSERT_EQUAL(style::ParagraphAdjust_LEFT, static_cast<style::ParagraphAdjust>(nAdjust));
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testDontBreakWrappedTables)
+{
+    // Given a document with the DO_NOT_BREAK_WRAPPED_TABLES compat mode enabled:
+    createSwDoc();
+    {
+        SwDoc* pDoc = getSwDoc();
+        IDocumentSettingAccess& rIDSA = pDoc->getIDocumentSettingAccess();
+        rIDSA.set(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES, true);
+    }
+
+    // When saving to doc:
+    reload(mpFilter, "dont-break-wrapped-tables.doc");
+
+    // Then make sure the compat flag is serialized:
+    SwDoc* pDoc = getSwDoc();
+    IDocumentSettingAccess& rIDSA = pDoc->getIDocumentSettingAccess();
+    bool bDontBreakWrappedTables = rIDSA.get(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES);
+    // Without the accompanying fix in place, this test would have failed, the compat flag was not
+    // set.
+    CPPUNIT_ASSERT(bDontBreakWrappedTables);
+}
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

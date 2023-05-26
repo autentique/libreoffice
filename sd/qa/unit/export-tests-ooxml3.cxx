@@ -233,7 +233,7 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testFontScale)
     // Rounding errors possible, approximate value (+/- 1%)
     OUString sScale = getXPath(
         pXmlDocContent, "/p:sld/p:cSld/p:spTree/p:sp/p:txBody/a:bodyPr/a:normAutofit", "fontScale");
-    CPPUNIT_ASSERT_DOUBLES_EQUAL(sal_Int32(76000), sScale.toInt32(), 1000);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(sal_Int32(81111), sScale.toInt32(), 1000);
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testShapeAutofitPPTX)
@@ -1243,10 +1243,17 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf127372)
     createSdImpressDoc("odp/tdf127372.odp");
     saveAndReload("Impress Office Open XML");
     uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0));
-    awt::Gradient aTransparenceGradient;
+    awt::Gradient2 aTransparenceGradient;
     xShape->getPropertyValue("FillTransparenceGradient") >>= aTransparenceGradient;
-    CPPUNIT_ASSERT_EQUAL(COL_BLACK, Color(ColorTransparency, aTransparenceGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(COL_BLACK, Color(ColorTransparency, aTransparenceGradient.EndColor));
+
+    // MCGR: Use the completely imported gradient to check for correctness
+    const basegfx::BColorStops aColorStops(aTransparenceGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.0, 0.0, 0.0));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.0, 0.0, 0.0));
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf127379)
@@ -1268,10 +1275,19 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf127379)
     aXBackgroundPropSet->getPropertyValue("FillStyle") >>= aFillStyle;
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_GRADIENT, aFillStyle);
 
-    awt::Gradient aGradient;
+    awt::Gradient2 aGradient;
     CPPUNIT_ASSERT(aXBackgroundPropSet->getPropertyValue("FillGradient") >>= aGradient);
-    CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, Color(ColorTransparency, aGradient.StartColor));
-    CPPUNIT_ASSERT_EQUAL(Color(0x2A6099), Color(ColorTransparency, aGradient.EndColor));
+
+    // MCGR: Use the completely imported gradient to check for correctness
+    const basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(1.0, 0.0, 0.0));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(
+        aColorStops[1].getStopColor(),
+        basegfx::BColor(0.16470588235294117, 0.37647058823529411, 0.59999999999999998));
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf98603)
@@ -1914,15 +1930,12 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testAutofittedTextboxIndent)
 
     save("Impress Office Open XML");
 
-    // Without the accompanying fix in place, these tests would have failed with:
-    // - Expected: 691200
-    // - Actual  : 1080000
-    // i.e. paragraph indent wasn't scaled proportionally to autofitted textbox
-    // font scale on export
+    // Check that the indent hasn't changed and wasn't scaled when exporting
+    // (the behaviour changed).
 
     xmlDocUniquePtr pXmlDocContent1 = parseExport("ppt/slides/slide1.xml");
     assertXPath(pXmlDocContent1, "/p:sld/p:cSld/p:spTree/p:sp/p:txBody/a:p[1]/a:pPr", "marL",
-                "712800");
+                "1080000");
 }
 
 CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf151622_oleIcon)
@@ -1985,6 +1998,18 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTdf102261_testParaTabStopDefaultDis
             sal_Int32{ 2540 },
             xPropSet->getPropertyValue("ParaTabStopDefaultDistance").get<sal_Int32>());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest3, testTableCellVerticalPropertyRoundtrip)
+{
+    createSdImpressDoc("pptx/tcPr-vert-roundtrip.pptx");
+    saveAndReload("Impress Office Open XML");
+
+    xmlDocUniquePtr pXml = parseExport("ppt/slides/slide1.xml");
+
+    assertXPath(pXml, "(//a:tcPr)[1]", "vert", "vert");
+    assertXPath(pXml, "(//a:tcPr)[2]", "vert", "vert270");
+    assertXPath(pXml, "(//a:tcPr)[3]", "vert", "wordArtVert");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

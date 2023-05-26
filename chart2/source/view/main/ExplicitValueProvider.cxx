@@ -35,8 +35,6 @@ namespace chart
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::uno::Any;
 
 namespace
 {
@@ -68,7 +66,7 @@ bool lcl_getPropertySwapXAndYAxis(const rtl::Reference<Diagram>& xDiagram)
 } // end anonymous namespace
 
 sal_Int32 ExplicitValueProvider::getExplicitNumberFormatKeyForAxis(
-    const Reference<chart2::XAxis>& xAxis,
+    const rtl::Reference<::chart::Axis>& xAxis,
     const rtl::Reference<::chart::BaseCoordinateSystem>& xCorrespondingCoordinateSystem,
     const rtl::Reference<::chart::ChartModel>& xChartDoc)
 {

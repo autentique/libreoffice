@@ -10,8 +10,6 @@
 #include <swmodeltestbase.hxx>
 
 #include <unotools/mediadescriptor.hxx>
-#include <sfx2/viewfrm.hxx>
-#include <sfx2/dispatch.hxx>
 
 #include <unotxdoc.hxx>
 #include <docsh.hxx>
@@ -19,8 +17,6 @@
 #include <swdtflvr.hxx>
 #include <frameformats.hxx>
 #include <fmtcntnt.hxx>
-#include <view.hxx>
-#include <cmdid.h>
 
 /// Covers sw/source/core/undo/ fixes.
 class SwCoreUndoTest : public SwModelTestBase
@@ -70,7 +66,7 @@ CPPUNIT_TEST_FIXTURE(SwCoreUndoTest, testTextboxCutUndo)
     selectShape(1);
     rtl::Reference<SwTransferable> pTransfer = new SwTransferable(*pWrtShell);
     pTransfer->Cut();
-    SwFrameFormats& rSpzFrameFormats = *pDoc->GetSpzFrameFormats();
+    auto& rSpzFrameFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(0), rSpzFrameFormats.size());
 
     pWrtShell->Undo();

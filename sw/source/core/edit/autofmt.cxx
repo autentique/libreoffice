@@ -98,7 +98,7 @@ class SwAutoFormat
     SwTextFrame* m_pCurTextFrame;     // frame of the current TextNode
     bool m_bIsRightToLeft;      // text direction of the current frame
     SwNodeOffset m_nEndNdIdx;      // for the percentage-display
-    mutable std::unique_ptr<CharClass> m_pCharClass; // Character classification
+    mutable std::optional<CharClass> m_oCharClass; // Character classification
     mutable LanguageType m_eCharClassLang;
 
     sal_uInt16 m_nRedlAutoFormatSeqId;
@@ -121,12 +121,12 @@ class SwAutoFormat
 
     CharClass& GetCharClass( LanguageType eLang ) const
     {
-        if( !m_pCharClass || eLang != m_eCharClassLang )
+        if( !m_oCharClass || eLang != m_eCharClassLang )
         {
-            m_pCharClass.reset( new CharClass( LanguageTag( eLang ) ) );
+            m_oCharClass.emplace( LanguageTag( eLang ) );
             m_eCharClassLang = eLang;
         }
-        return *m_pCharClass;
+        return *m_oCharClass;
     }
 
     static bool IsSpace( const sal_Unicode c )
@@ -2189,7 +2189,11 @@ void SwAutoFormat::AutoCorrect(TextFrameIndex nPos)
                 ( m_aFlags.bSetINetAttr &&
                     (nPos == TextFrameIndex(pText->getLength()) || IsSpace((*pText)[sal_Int32(nPos)])) &&
                     SetRedlineText( STR_AUTOFMTREDL_DETECT_URL ) &&
-                    pATst->FnSetINetAttr(aACorrDoc, *pText, sal_Int32(nLastBlank), sal_Int32(nPos), eLang)))
+                    pATst->FnSetINetAttr(aACorrDoc, *pText, sal_Int32(nLastBlank), sal_Int32(nPos), eLang)) ||
+                ( m_aFlags.bSetDOIAttr &&
+                    (nPos == TextFrameIndex(pText->getLength()) || IsSpace((*pText)[sal_Int32(nPos)])) &&
+                    SetRedlineText( STR_AUTOFMTREDL_DETECT_DOI ) &&
+                    pATst->FnSetDOIAttr(aACorrDoc, *pText, sal_Int32(nLastBlank), sal_Int32(nPos), eLang)))
             {
                 nPos = m_pCurTextFrame->MapModelToViewPos(*m_aDelPam.GetPoint());
             }
@@ -2396,6 +2400,8 @@ SwAutoFormat::SwAutoFormat( SwEditShell* pEdShell, SvxSwAutoFormatFlags aFlags,
                     // delete all blanks at beginning/end and in between
                     //JP 29.04.98: first only "all in between"
                     DelMoreLinesBlanks();
+                    // auto correct paragraphs that fail to enter state HAS_FMTCOLL
+                    AutoCorrect();
                     break;
                 }
 
@@ -2678,6 +2684,8 @@ SwAutoFormat::SwAutoFormat( SwEditShell* pEdShell, SvxSwAutoFormatFlags aFlags,
                             BuildText();
                     }
                 }
+                // force auto correct
+                AutoCorrect();
             }
             break;
 
@@ -2779,7 +2787,8 @@ void SwEditShell::AutoFormatBySplitNode()
         SvxAutoCorrect* pACorr = SvxAutoCorrCfg::Get().GetAutoCorrect();
         if( pACorr && !pACorr->IsAutoCorrFlag( ACFlags::CapitalStartSentence | ACFlags::CapitalStartWord |
                                 ACFlags::AddNonBrkSpace | ACFlags::ChgOrdinalNumber | ACFlags::TransliterateRTL |
-                                ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect ))
+                                ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect |
+                                ACFlags::SetDOIAttr ))
             pACorr = nullptr;
 
         if( pACorr )

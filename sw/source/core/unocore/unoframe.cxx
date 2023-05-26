@@ -183,12 +183,12 @@ bool BaseFrameProperties_Impl::FillBaseProperties(SfxItemSet& rToSet, const SfxI
     // always add an anchor to the set
     SwFormatAnchor aAnchor ( rFromSet.Get ( RES_ANCHOR ) );
     {
-        const ::uno::Any* pAnchorPgNo;
-        if(GetProperty(RES_ANCHOR, MID_ANCHOR_PAGENUM, pAnchorPgNo))
-            bRet &= static_cast<SfxPoolItem&>(aAnchor).PutValue(*pAnchorPgNo, MID_ANCHOR_PAGENUM);
         const ::uno::Any* pAnchorType;
         if(GetProperty(RES_ANCHOR, MID_ANCHOR_ANCHORTYPE, pAnchorType))
             bRet &= static_cast<SfxPoolItem&>(aAnchor).PutValue(*pAnchorType, MID_ANCHOR_ANCHORTYPE);
+        const ::uno::Any* pAnchorPgNo;
+        if(GetProperty(RES_ANCHOR, MID_ANCHOR_PAGENUM, pAnchorPgNo))
+            bRet &= static_cast<SfxPoolItem&>(aAnchor).PutValue(*pAnchorPgNo, MID_ANCHOR_PAGENUM);
     }
 
     rToSet.Put(aAnchor);
@@ -377,8 +377,8 @@ bool BaseFrameProperties_Impl::FillBaseProperties(SfxItemSet& rToSet, const SfxI
         {
             if(pXFillGradientItem)
             {
-                // XGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
-                const XGradient aNullGrad;
+                // basegfx::BGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
+                const basegfx::BGradient aNullGrad;
                 XFillGradientItem aXFillGradientItem(aNullGrad);
 
                 aXFillGradientItem.PutValue(*pXFillGradientItem, MID_FILLGRADIENT);
@@ -520,8 +520,8 @@ bool BaseFrameProperties_Impl::FillBaseProperties(SfxItemSet& rToSet, const SfxI
         {
             if(pXFillFloatTransparenceItem)
             {
-                // XGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
-                const XGradient aNullGrad;
+                // basegfx::BGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
+                const basegfx::BGradient aNullGrad;
                 XFillFloatTransparenceItem aXFillFloatTransparenceItem(aNullGrad, false);
 
                 aXFillFloatTransparenceItem.PutValue(*pXFillFloatTransparenceItem, MID_FILLGRADIENT);
@@ -3290,15 +3290,8 @@ const SwStartNode *SwXTextFrame::GetStartNode() const
     return pSttNd;
 }
 
-uno::Reference< text::XTextCursor >
-SwXTextFrame::CreateCursor()
+rtl::Reference<SwXTextCursor>  SwXTextFrame::createXTextCursor()
 {
-    return createTextCursor();
-}
-
-uno::Reference< text::XTextCursor >  SwXTextFrame::createTextCursor()
-{
-    SolarMutexGuard aGuard;
     SwFrameFormat* pFormat = GetFrameFormat();
     if(!pFormat)
         throw uno::RuntimeException();
@@ -3327,13 +3320,12 @@ uno::Reference< text::XTextCursor >  SwXTextFrame::createTextCursor()
         throw aExcept;
     }
 
-    return static_cast<text::XWordCursor*>(new SwXTextCursor(
-             *pFormat->GetDoc(), this, CursorType::Frame, *aPam.GetPoint()));
+    return new SwXTextCursor(
+             *pFormat->GetDoc(), this, CursorType::Frame, *aPam.GetPoint());
 }
 
-uno::Reference< text::XTextCursor >  SwXTextFrame::createTextCursorByRange(const uno::Reference< text::XTextRange > & aTextPosition)
+rtl::Reference< SwXTextCursor > SwXTextFrame::createXTextCursorByRange(const uno::Reference< text::XTextRange > & aTextPosition)
 {
-    SolarMutexGuard aGuard;
     SwFrameFormat* pFormat = GetFrameFormat();
     if (!pFormat)
         throw uno::RuntimeException();
@@ -3341,13 +3333,12 @@ uno::Reference< text::XTextCursor >  SwXTextFrame::createTextCursorByRange(const
     if (!::sw::XTextRangeToSwPaM(aPam, aTextPosition))
         throw uno::RuntimeException();
 
-    uno::Reference<text::XTextCursor>  aRef;
+    rtl::Reference< SwXTextCursor > aRef;
     SwNode& rNode = pFormat->GetContent().GetContentIdx()->GetNode();
     if(aPam.GetPointNode().FindFlyStartNode() == rNode.FindFlyStartNode())
     {
-        aRef = static_cast<text::XWordCursor*>(
-                new SwXTextCursor(*pFormat->GetDoc(), this, CursorType::Frame,
-                    *aPam.GetPoint(), aPam.GetMark()));
+        aRef = new SwXTextCursor(*pFormat->GetDoc(), this, CursorType::Frame,
+                    *aPam.GetPoint(), aPam.GetMark());
     }
 
     return aRef;

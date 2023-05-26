@@ -30,17 +30,17 @@ namespace drawinglayer::attribute
             double                                  mfOffsetX;
             double                                  mfOffsetY;
             double                                  mfAngle;
-            basegfx::ColorStops                     maColorStops;
-            GradientStyle                           meStyle;
+            basegfx::BColorStops                    maColorStops;
+            css::awt::GradientStyle                 meStyle;
             sal_uInt16                              mnSteps;
 
             ImpFillGradientAttribute(
-                GradientStyle eStyle,
+                css::awt::GradientStyle eStyle,
                 double fBorder,
                 double fOffsetX,
                 double fOffsetY,
                 double fAngle,
-                const basegfx::ColorStops& rColorStops,
+                const basegfx::BColorStops& rColorStops,
                 sal_uInt16 nSteps)
             :   mfBorder(fBorder),
                 mfOffsetX(fOffsetX),
@@ -57,7 +57,7 @@ namespace drawinglayer::attribute
                 // This is what the usages of this in primitives need.
                 // Since FillGradientAttribute is read-only doing this
                 // once here in the constructor is sufficient
-                basegfx::utils::sortAndCorrectColorStops(maColorStops);
+                maColorStops.sortAndCorrect();
 
                 // sortAndCorrectColorStops is rigid and can return
                 // an empty result. To keep things simple, add a single
@@ -74,7 +74,7 @@ namespace drawinglayer::attribute
                 mfOffsetY(0.0),
                 mfAngle(0.0),
                 maColorStops(),
-                meStyle(GradientStyle::Linear),
+                meStyle(css::awt::GradientStyle_LINEAR),
                 mnSteps(0)
             {
                 // always add a fallback color, see above
@@ -82,22 +82,13 @@ namespace drawinglayer::attribute
             }
 
             // data read access
-            GradientStyle getStyle() const { return meStyle; }
+            css::awt::GradientStyle getStyle() const { return meStyle; }
             double getBorder() const { return mfBorder; }
             double getOffsetX() const { return mfOffsetX; }
             double getOffsetY() const { return mfOffsetY; }
             double getAngle() const { return mfAngle; }
-            const basegfx::ColorStops& getColorStops() const { return maColorStops; }
+            const basegfx::BColorStops& getColorStops() const { return maColorStops; }
             sal_uInt16 getSteps() const { return mnSteps; }
-
-            bool hasSingleColor() const
-            {
-                // No entry (should not happen, see comments for startColor above)
-                // or single entry -> no gradient.
-                // No need to check for all-the-same color since this is checked/done
-                // in the constructor already, see there
-                return maColorStops.size() < 2;
-            }
 
             bool operator==(const ImpFillGradientAttribute& rCandidate) const
             {
@@ -121,12 +112,12 @@ namespace drawinglayer::attribute
         }
 
         FillGradientAttribute::FillGradientAttribute(
-            GradientStyle eStyle,
+            css::awt::GradientStyle eStyle,
             double fBorder,
             double fOffsetX,
             double fOffsetY,
             double fAngle,
-            const basegfx::ColorStops& rColorStops,
+            const basegfx::BColorStops& rColorStops,
             sal_uInt16 nSteps)
         :   mpFillGradientAttribute(ImpFillGradientAttribute(
                 eStyle, fBorder, fOffsetX, fOffsetY, fAngle, rColorStops, nSteps))
@@ -147,11 +138,6 @@ namespace drawinglayer::attribute
         bool FillGradientAttribute::isDefault() const
         {
             return mpFillGradientAttribute.same_object(theGlobalDefault());
-        }
-
-        bool FillGradientAttribute::hasSingleColor() const
-        {
-            return mpFillGradientAttribute->hasSingleColor();
         }
 
         // MCGR: Check if rendering cannot be handled by old vcl stuff
@@ -179,9 +165,9 @@ namespace drawinglayer::attribute
             // is different from processing the gradient manually by drawinglayer
             // (and the Writer unittest for it fails). Keep using the drawinglayer code
             // until somebody founds out what's wrong and fixes it.
-            if (getStyle() != drawinglayer::attribute::GradientStyle::Linear
-                && getStyle() != drawinglayer::attribute::GradientStyle::Axial
-                && getStyle() != drawinglayer::attribute::GradientStyle::Radial)
+            if (getStyle() != css::awt::GradientStyle_LINEAR
+                && getStyle() != css::awt::GradientStyle_AXIAL
+                && getStyle() != css::awt::GradientStyle_RADIAL)
             {
                 return true;
             }
@@ -202,7 +188,7 @@ namespace drawinglayer::attribute
             return rCandidate.mpFillGradientAttribute == mpFillGradientAttribute;
         }
 
-        const basegfx::ColorStops& FillGradientAttribute::getColorStops() const
+        const basegfx::BColorStops& FillGradientAttribute::getColorStops() const
         {
             return mpFillGradientAttribute->getColorStops();
         }
@@ -227,7 +213,7 @@ namespace drawinglayer::attribute
             return mpFillGradientAttribute->getAngle();
         }
 
-        GradientStyle FillGradientAttribute::getStyle() const
+        css::awt::GradientStyle FillGradientAttribute::getStyle() const
         {
             return mpFillGradientAttribute->getStyle();
         }

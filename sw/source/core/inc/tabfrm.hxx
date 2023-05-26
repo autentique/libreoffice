@@ -115,6 +115,8 @@ class SW_DLLPUBLIC SwTabFrame final: public SwLayoutFrame, public SwFlowFrame
         const SfxPoolItem*, SwTabFrameInvFlags &,
         SwAttrSetChg *pa = nullptr,
         SwAttrSetChg *pb = nullptr );
+    void Invalidate(SwTabFrameInvFlags);
+    void HandleTableHeadlineChange();
 
     virtual bool ShouldBwdMoved( SwLayoutFrame *pNewUpper, bool &rReformat ) override;
 
@@ -237,6 +239,7 @@ public:
     sal_uInt16 GetBottomLineSize() const;
 
     virtual void dumpAsXmlAttributes(xmlTextWriterPtr writer) const override;
+    void dumpAsXml(xmlTextWriterPtr writer = nullptr) const override;
 };
 
 inline const SwFrame *SwTabFrame::FindLastContentOrTable() const

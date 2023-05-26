@@ -149,8 +149,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testCreateTextRangeByPixelPositionGraphic)
         = xController->createTextRangeByPixelPosition(aPoint);
 
     // Then make sure that the anchor of the image is returned:
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
-    const SwFrameFormat* pFormat = rFormats[0];
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto pFormat = rFormats[0];
     SwPosition aAnchorPos(*pFormat->GetAnchor().GetContentAnchor());
     auto pTextRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
     SwPaM aPaM(pDoc->GetNodes());
@@ -234,8 +234,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetTextFormFields)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we find the 2 items and ignore the bibliography:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -267,8 +267,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetDocumentProperties)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we find the 2 properties and ignore the other one:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -308,8 +308,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetBookmarks)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we get the 2 references but not the bibliography:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -345,8 +345,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetFields)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we get the 1 refmark:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -400,8 +400,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetTextFormField)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we find the inserted fieldmark:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -432,8 +432,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetSections)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Make sure we find our just inserted section:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     // Without the accompanying fix in place, this test would have failed with:
@@ -464,8 +464,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetBookmark)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we find the inserted bookmark:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     boost::property_tree::ptree aBookmark = aTree.get_child("bookmark");
@@ -498,8 +498,8 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetField)
     pXTextDocument->getCommandValues(aJsonWriter, aCommand);
 
     // Then make sure we find the inserted refmark:
-    std::unique_ptr<char[], o3tl::free_delete> pJSON(aJsonWriter.extractData());
-    std::stringstream aStream(pJSON.get());
+    OString pJSON(aJsonWriter.finishAndGetAsOString());
+    std::stringstream aStream((std::string(pJSON)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     boost::property_tree::ptree aBookmark = aTree.get_child("setRef");
@@ -508,6 +508,30 @@ CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testGetField)
     // i.e. the returned JSON was an empty object.
     CPPUNIT_ASSERT_EQUAL(std::string("ZOTERO_ITEM CSL_CITATION {} refmark"),
                          aBookmark.get<std::string>("name"));
+}
+
+CPPUNIT_TEST_FIXTURE(SwUibaseUnoTest, testDoNotBreakWrappedTables)
+{
+    // Given an empty document:
+    createSwDoc();
+
+    // When checking the state of the DoNotBreakWrappedTables compat flag:
+    uno::Reference<lang::XMultiServiceFactory> xDocument(mxComponent, uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xSettings(
+        xDocument->createInstance("com.sun.star.document.Settings"), uno::UNO_QUERY);
+    bool bDoNotBreakWrappedTables{};
+    // Without the accompanying fix in place, this test would have failed with:
+    // An uncaught exception of type com.sun.star.beans.UnknownPropertyException
+    // i.e. the compat flag was not recognized.
+    xSettings->getPropertyValue("DoNotBreakWrappedTables") >>= bDoNotBreakWrappedTables;
+    // Then make sure it's false by default:
+    CPPUNIT_ASSERT(!bDoNotBreakWrappedTables);
+
+    // And when setting DoNotBreakWrappedTables=true:
+    xSettings->setPropertyValue("DoNotBreakWrappedTables", uno::Any(true));
+    // Then make sure it gets enabled:
+    xSettings->getPropertyValue("DoNotBreakWrappedTables") >>= bDoNotBreakWrappedTables;
+    CPPUNIT_ASSERT(bDoNotBreakWrappedTables);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

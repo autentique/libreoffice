@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SW_INC_SWABSTDLG_HXX
 #define INCLUDED_SW_INC_SWABSTDLG_HXX
 
+#include <editeng/svxenum.hxx>
 #include <rtl/ustring.hxx>
 #include <sfx2/sfxdlg.hxx>
 #include <com/sun/star/uno/Reference.h>
@@ -114,7 +115,7 @@ public:
     virtual OUString    GetFontName() = 0;
     virtual bool        IsEndNote() = 0;
     virtual OUString    GetStr() = 0;
-    virtual void        SetHelpId( const OString& sHelpId ) = 0;
+    virtual void        SetHelpId( const OUString& sHelpId ) = 0;
     virtual void        SetText( const OUString& rStr ) = 0;
 };
 
@@ -237,6 +238,10 @@ protected:
 public:
     virtual int GetPageNumberPosition() const = 0;
     virtual int GetPageNumberAlignment() const = 0;
+    virtual bool GetMirrorOnEvenPages() const = 0;
+    virtual bool GetIncludePageTotal() const = 0;
+    virtual SvxNumType GetPageNumberType() const = 0;
+    virtual void SetPageNumberType(SvxNumType nSet) = 0;
 };
 
 /**
@@ -458,7 +463,7 @@ public:
                                                          SwView& rVw,
                                                          const SfxItemSet& rCoreSet,
                                                          bool bDraw,
-                                                         const OString& sDefPage = OString() ) = 0;
+                                                         const OUString& sDefPage = {}) = 0;
 
     virtual VclPtr<VclAbstractDialog> CreateSwAutoMarkDialog(weld::Window *pParent, SwWrtShell &rSh) = 0;
 
@@ -492,14 +497,14 @@ public:
                                                 SfxViewFrame& rFrame, weld::Window *pParent,
                                                 const SfxItemSet& rCoreSet,
                                                 bool bNewFrame = true,
-                                                const OString& sDefPage = OString()) = 0;
+                                                const OUString& sDefPage = {}) = 0;
     /// @param nSlot
     /// Identifies optional Slot by which the creation of the Template (Style) dialog is triggered.
     /// Currently used, if nRegion == SfxStyleFamily::Page in order to activate certain dialog pane
     virtual VclPtr<SfxAbstractApplyTabDialog>  CreateTemplateDialog(weld::Window* pParent,
                                                 SfxStyleSheetBase&  rBase,
                                                 SfxStyleFamily      nRegion,
-                                                const OString&      sPage,
+                                                const OUString&     sPage,
                                                 SwWrtShell*         pActShell,
                                                 bool                bNew) = 0;
     virtual VclPtr<AbstractGlossaryDlg>        CreateGlossaryDlg(SfxViewFrame& rViewFrame,

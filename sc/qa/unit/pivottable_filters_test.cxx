@@ -34,121 +34,14 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
+using ::std::cerr;
+using ::std::cout;
+using ::std::endl;
 
 class ScPivotTableFiltersTest : public ScModelTestBase
 {
 public:
     ScPivotTableFiltersTest();
-
-    // Import
-    void testPivotTableBasicODS();
-    void testPivotTableNamedRangeSourceODS();
-    void testPivotTableSharedCacheGroupODS();
-    void testGetPivotDataXLS();
-    void testPivotTableSharedGroupXLSX();
-    void testPivotTableSharedDateGroupXLSX(); // + export
-    void testPivotTableSharedNestedDateGroupXLSX(); // + export
-    void testPivotTableSharedNumGroupXLSX();
-    void testPivotTableNoColumnsLayout();
-    void testTdf112501();
-
-    // Export
-    void testPivotTableExportXLSX();
-    void testPivotTableExportXLSXSingleDataField();
-    void testPivotTableExportXLSXMultipleDataFields();
-    void testPivotCacheExportXLSX();
-    void testPivotTableXLSX();
-    void testPivotTableTwoDataFieldsXLSX();
-    void testPivotTableMedianODS();
-    void testPivotTableRowHeaderXLS();
-    void testPivotTableDoubleFieldFilter();
-    void testPivotTableStringFieldFilter();
-    void testPivotTableDateFieldFilter();
-    void testPivotTableBoolFieldFilter();
-    void testPivotTableRowColPageFieldFilter();
-    void testPivotTableEmptyItem();
-    void testPivotTablePageFieldFilter();
-    void testPivotTableFirstHeaderRowXLSX();
-    void testPivotTableDoubleFieldFilterXLSX();
-    void testPivotTableStringFieldFilterXLSX();
-    void testPivotTableDateFieldFilterXLSX();
-    void testPivotTableBoolFieldFilterXLSX();
-    void testPivotTableRowColPageFieldFilterXLSX();
-    void testPivotTableErrorItemFilterXLSX();
-    void testPivotTableErrorItemFilterXLSB();
-    void testPivotTableErrorItem2FilterXLSX();
-    void testPivotTableOutlineModeXLSX();
-    void testPivotTableDuplicatedMemberFilterXLSX();
-    void testPivotTableTabularModeXLSX();
-    void testPivotTableDuplicateFields();
-    void testTdf112106();
-    void testTdf123923();
-    void testTdf123939();
-    void testTdf124651();
-    void testTdf124736();
-    void tesTtdf124772NumFmt();
-    void testTdf124810();
-    void testTdf124883();
-    void testTdf125046();
-    void testTdf125055();
-    void testTdf125086();
-    void testTdf73845();
-
-    CPPUNIT_TEST_SUITE(ScPivotTableFiltersTest);
-
-    CPPUNIT_TEST(testPivotTableBasicODS);
-    CPPUNIT_TEST(testPivotTableNamedRangeSourceODS);
-    CPPUNIT_TEST(testPivotTableSharedCacheGroupODS);
-    CPPUNIT_TEST(testGetPivotDataXLS);
-    CPPUNIT_TEST(testPivotTableSharedGroupXLSX);
-    CPPUNIT_TEST(testPivotTableSharedDateGroupXLSX);
-    CPPUNIT_TEST(testPivotTableSharedNestedDateGroupXLSX);
-    CPPUNIT_TEST(testPivotTableSharedNumGroupXLSX);
-    CPPUNIT_TEST(testPivotTableNoColumnsLayout);
-    CPPUNIT_TEST(testTdf112501);
-
-    CPPUNIT_TEST(testPivotTableExportXLSX);
-    CPPUNIT_TEST(testPivotTableExportXLSXSingleDataField);
-    CPPUNIT_TEST(testPivotTableExportXLSXMultipleDataFields);
-    CPPUNIT_TEST(testPivotCacheExportXLSX);
-    CPPUNIT_TEST(testPivotTableXLSX);
-    CPPUNIT_TEST(testPivotTableTwoDataFieldsXLSX);
-    CPPUNIT_TEST(testPivotTableMedianODS);
-    CPPUNIT_TEST(testPivotTableRowHeaderXLS);
-    CPPUNIT_TEST(testPivotTableDoubleFieldFilter);
-    CPPUNIT_TEST(testPivotTableStringFieldFilter);
-    CPPUNIT_TEST(testPivotTableDateFieldFilter);
-    CPPUNIT_TEST(testPivotTableBoolFieldFilter);
-    CPPUNIT_TEST(testPivotTableRowColPageFieldFilter);
-    CPPUNIT_TEST(testPivotTableEmptyItem);
-    CPPUNIT_TEST(testPivotTablePageFieldFilter);
-    CPPUNIT_TEST(testPivotTableFirstHeaderRowXLSX);
-    CPPUNIT_TEST(testPivotTableDoubleFieldFilterXLSX);
-    CPPUNIT_TEST(testPivotTableStringFieldFilterXLSX);
-    CPPUNIT_TEST(testPivotTableDateFieldFilterXLSX);
-    CPPUNIT_TEST(testPivotTableBoolFieldFilterXLSX);
-    CPPUNIT_TEST(testPivotTableRowColPageFieldFilterXLSX);
-    CPPUNIT_TEST(testPivotTableErrorItemFilterXLSX);
-    CPPUNIT_TEST(testPivotTableErrorItemFilterXLSB);
-    CPPUNIT_TEST(testPivotTableErrorItem2FilterXLSX);
-    CPPUNIT_TEST(testPivotTableOutlineModeXLSX);
-    CPPUNIT_TEST(testPivotTableDuplicatedMemberFilterXLSX);
-    CPPUNIT_TEST(testPivotTableTabularModeXLSX);
-    CPPUNIT_TEST(testPivotTableDuplicateFields);
-    CPPUNIT_TEST(testTdf112106);
-    CPPUNIT_TEST(testTdf123923);
-    CPPUNIT_TEST(testTdf123939);
-    CPPUNIT_TEST(testTdf124651);
-    CPPUNIT_TEST(testTdf124736);
-    CPPUNIT_TEST(tesTtdf124772NumFmt);
-    CPPUNIT_TEST(testTdf124810);
-    CPPUNIT_TEST(testTdf124883);
-    CPPUNIT_TEST(testTdf125046);
-    CPPUNIT_TEST(testTdf125055);
-    CPPUNIT_TEST(testTdf125086);
-    CPPUNIT_TEST(testTdf73845);
-
-    CPPUNIT_TEST_SUITE_END();
 };
 
 ScPivotTableFiltersTest::ScPivotTableFiltersTest()
@@ -177,7 +70,7 @@ bool hasDimension(const std::vector<const ScDPSaveDimension*>& rDims, const OUSt
 }
 }
 
-void ScPivotTableFiltersTest::testPivotTableBasicODS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableBasicODS)
 {
     createScDoc("ods/pivot-table-basic.ods");
 
@@ -233,7 +126,7 @@ void ScPivotTableFiltersTest::testPivotTableBasicODS()
                                  sal_uInt16(pDim->GetFunction()));
 }
 
-void ScPivotTableFiltersTest::testPivotTableNamedRangeSourceODS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableNamedRangeSourceODS)
 {
     createScDoc("ods/pivot-table-named-range-source.ods");
 
@@ -284,7 +177,7 @@ bool checkVisiblePageFieldMember(const ScDPSaveDimension::MemberList& rMembers,
 }
 }
 
-void ScPivotTableFiltersTest::testPivotTableSharedCacheGroupODS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableSharedCacheGroupODS)
 {
     createScDoc("ods/pivot-table-shared-cache-with-group.ods");
     ScDocument* pDoc = getScDoc();
@@ -416,7 +309,7 @@ void ScPivotTableFiltersTest::testPivotTableSharedCacheGroupODS()
     CPPUNIT_ASSERT_MESSAGE("Pivot cache doesn't have an additional month group.", bHasMonths);
 }
 
-void ScPivotTableFiltersTest::testGetPivotDataXLS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testGetPivotDataXLS)
 {
     createScDoc("xls/pivot-getpivotdata.xls");
     ScDocument* pDoc = getScDoc();
@@ -430,7 +323,7 @@ void ScPivotTableFiltersTest::testGetPivotDataXLS()
                              pDoc->GetValue(ScAddress(5, nRow, 1)));
 }
 
-void ScPivotTableFiltersTest::testPivotTableSharedGroupXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableSharedGroupXLSX)
 {
     createScDoc("xlsx/pivot-table/shared-group-field.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -467,7 +360,7 @@ void ScPivotTableFiltersTest::testPivotTableSharedGroupXLSX()
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), pCache->GetGroupFieldCount());
 }
 
-void ScPivotTableFiltersTest::testPivotTableSharedDateGroupXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableSharedDateGroupXLSX)
 {
     auto testThis = [](ScDocument& rDoc) {
         // Check whether right date labels are imported for both tables
@@ -507,31 +400,27 @@ void ScPivotTableFiltersTest::testPivotTableSharedDateGroupXLSX()
     testThis(*getScDoc());
 }
 
-void ScPivotTableFiltersTest::testPivotTableSharedNestedDateGroupXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableSharedNestedDateGroupXLSX)
 {
     auto testThis = [](ScDocument& rDoc) {
         // Check whether right date groups are imported for both tables
         // First table
-        CPPUNIT_ASSERT_EQUAL(OUString("Years"), rDoc.GetString(ScAddress(0, 3, 1)));
+        // Years, Quarters, 'a' have compact layout so the only header contains a multi-field filter.
         CPPUNIT_ASSERT_EQUAL(OUString("1965"), rDoc.GetString(ScAddress(0, 4, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("1989"), rDoc.GetString(ScAddress(0, 11, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("2000"), rDoc.GetString(ScAddress(0, 18, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("2004"), rDoc.GetString(ScAddress(0, 21, 1)));
         // TODO: check why this fails with the empty string
         //CPPUNIT_ASSERT_EQUAL(OUString("2007"), rDoc.GetString(ScAddress(0,32,1)));
-        CPPUNIT_ASSERT_EQUAL(OUString("Quarters"), rDoc.GetString(ScAddress(1, 3, 1)));
-        CPPUNIT_ASSERT_EQUAL(OUString("a"), rDoc.GetString(ScAddress(2, 3, 1)));
 
         // Second table
-        CPPUNIT_ASSERT_EQUAL(OUString("Years"), rDoc.GetString(ScAddress(6, 3, 1)));
+        // Years, Quarters, 'a' have compact layout so the only row header contains a multi-field filter.
         CPPUNIT_ASSERT_EQUAL(OUString("1965"), rDoc.GetString(ScAddress(6, 4, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("1989"), rDoc.GetString(ScAddress(6, 11, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("2000"), rDoc.GetString(ScAddress(6, 18, 1)));
         CPPUNIT_ASSERT_EQUAL(OUString("2004"), rDoc.GetString(ScAddress(6, 21, 1)));
         // TODO: check why this fails with the empty string
         //CPPUNIT_ASSERT_EQUAL(OUString("2007"), rDoc.GetString(ScAddress(6,31,1)));
-        CPPUNIT_ASSERT_EQUAL(OUString("Quarters"), rDoc.GetString(ScAddress(7, 3, 1)));
-        CPPUNIT_ASSERT_EQUAL(OUString("a"), rDoc.GetString(ScAddress(8, 3, 1)));
 
         // There should be exactly 2 pivot tables and 1 cache.
         ScDPCollection* pDPs = rDoc.GetDPCollection();
@@ -554,7 +443,7 @@ void ScPivotTableFiltersTest::testPivotTableSharedNestedDateGroupXLSX()
     testThis(*getScDoc());
 }
 
-void ScPivotTableFiltersTest::testPivotTableSharedNumGroupXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableSharedNumGroupXLSX)
 {
     createScDoc("xlsx/pivot-table/shared-numgroup.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -588,7 +477,7 @@ void ScPivotTableFiltersTest::testPivotTableSharedNumGroupXLSX()
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(10), pCache->GetFieldCount());
 }
 
-void ScPivotTableFiltersTest::testPivotTableNoColumnsLayout()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableNoColumnsLayout)
 {
     // tdf#113268 - Pivot table: Missing popup button after opening a pivot table from ODS
     createScDoc("ods/pivottable_no_columns_layout.ods");
@@ -615,7 +504,7 @@ void ScPivotTableFiltersTest::testPivotTableNoColumnsLayout()
     }
 }
 
-void ScPivotTableFiltersTest::testTdf112501()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf112501)
 {
     createScDoc("xls/tdf112501.xls");
     ScDocument* pDoc = getScDoc();
@@ -680,7 +569,7 @@ void ScPivotTableFiltersTest::testTdf112501()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableExportXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableExportXLSX)
 {
     // tdf#89139: pivot table definition needs to list items, including hidden
 
@@ -697,7 +586,7 @@ void ScPivotTableFiltersTest::testPivotTableExportXLSX()
                 "h", "1");
 }
 
-void ScPivotTableFiltersTest::testPivotTableExportXLSXSingleDataField()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableExportXLSXSingleDataField)
 {
     createScDoc("ods/tdf123421_1datafield.ods");
 
@@ -716,7 +605,7 @@ void ScPivotTableFiltersTest::testPivotTableExportXLSXSingleDataField()
     assertXPath(pTable, "/x:pivotTableDefinition/x:colFields", 0);
 }
 
-void ScPivotTableFiltersTest::testPivotTableExportXLSXMultipleDataFields()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableExportXLSXMultipleDataFields)
 {
     createScDoc("ods/tdf123421_2datafields.ods");
 
@@ -739,7 +628,7 @@ void ScPivotTableFiltersTest::testPivotTableExportXLSXMultipleDataFields()
     assertXPath(pTable, "/x:pivotTableDefinition/x:colFields/x:field", "x", "-2");
 }
 
-void ScPivotTableFiltersTest::testPivotCacheExportXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotCacheExportXLSX)
 {
     // tdf#89139 FILESAVE xlsx pivot table corrupted after save with LO and re-open with MS Office
     // MS Excel is very sensitive for proper values of fields:
@@ -985,7 +874,7 @@ void ScPivotTableFiltersTest::testPivotCacheExportXLSX()
                 "count", "1");
 }
 
-void ScPivotTableFiltersTest::testPivotTableXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableXLSX)
 {
     struct
     {
@@ -1120,7 +1009,7 @@ void ScPivotTableFiltersTest::testPivotTableXLSX()
     CPPUNIT_ASSERT_MESSAGE("Reload check failed.", bCheck);
 }
 
-void ScPivotTableFiltersTest::testPivotTableTwoDataFieldsXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableTwoDataFieldsXLSX)
 {
     struct
     {
@@ -1239,7 +1128,7 @@ void ScPivotTableFiltersTest::testPivotTableTwoDataFieldsXLSX()
     CPPUNIT_ASSERT_MESSAGE("Reload check failed.", bCheck);
 }
 
-void ScPivotTableFiltersTest::testPivotTableMedianODS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableMedianODS)
 {
     createScDoc("ods/pivot-table-median.ods");
 
@@ -1273,7 +1162,7 @@ void ScPivotTableFiltersTest::testPivotTableMedianODS()
                                  sal_uInt16(pDim->GetFunction()));
 }
 
-void ScPivotTableFiltersTest::testPivotTableRowHeaderXLS()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableRowHeaderXLS)
 {
     createScDoc("xls/pivot_row_header.xls");
     ScDocument* pDoc = getScDoc();
@@ -1339,7 +1228,7 @@ void ScPivotTableFiltersTest::testPivotTableRowHeaderXLS()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableDoubleFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDoubleFieldFilter)
 {
     createScDoc("xls/pivottable_double_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1437,7 +1326,7 @@ void ScPivotTableFiltersTest::testPivotTableDoubleFieldFilter()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableStringFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableStringFieldFilter)
 {
     createScDoc("xls/pivottable_string_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1469,7 +1358,7 @@ void ScPivotTableFiltersTest::testPivotTableStringFieldFilter()
     CPPUNIT_ASSERT(pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableDateFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDateFieldFilter)
 {
     createScDoc("xls/pivottable_date_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1556,7 +1445,7 @@ void ScPivotTableFiltersTest::testPivotTableDateFieldFilter()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableBoolFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableBoolFieldFilter)
 {
     createScDoc("xls/pivottable_bool_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1588,7 +1477,7 @@ void ScPivotTableFiltersTest::testPivotTableBoolFieldFilter()
     CPPUNIT_ASSERT(pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableRowColPageFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableRowColPageFieldFilter)
 {
     createScDoc("xls/pivottable_rowcolpage_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1694,7 +1583,7 @@ void ScPivotTableFiltersTest::testPivotTableRowColPageFieldFilter()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableEmptyItem()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableEmptyItem)
 {
     createScDoc("xls/pivottable_empty_item.xls");
     ScDocument* pDoc = getScDoc();
@@ -1730,7 +1619,7 @@ void ScPivotTableFiltersTest::testPivotTableEmptyItem()
     CPPUNIT_ASSERT(!pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTablePageFieldFilter()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTablePageFieldFilter)
 {
     createScDoc("xls/pivottable_page_field_filter.xls");
     ScDocument* pDoc = getScDoc();
@@ -1831,7 +1720,7 @@ void ScPivotTableFiltersTest::testPivotTablePageFieldFilter()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableFirstHeaderRowXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableFirstHeaderRowXLSX)
 {
     // tdf#112733: We have different tables here, but have the same value as firstHeaderRow
     // The documentation is not clear about what firstHeaderRow actually means, but MS Excel works on this way
@@ -1851,7 +1740,7 @@ void ScPivotTableFiltersTest::testPivotTableFirstHeaderRowXLSX()
     assertXPath(pTable, "/x:pivotTableDefinition/x:location", "firstHeaderRow", "1");
 }
 
-void ScPivotTableFiltersTest::testPivotTableDoubleFieldFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDoubleFieldFilterXLSX)
 {
     createScDoc("xlsx/pivottable_double_field_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -1949,7 +1838,7 @@ void ScPivotTableFiltersTest::testPivotTableDoubleFieldFilterXLSX()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableStringFieldFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableStringFieldFilterXLSX)
 {
     createScDoc("xlsx/pivottable_string_field_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -1981,7 +1870,7 @@ void ScPivotTableFiltersTest::testPivotTableStringFieldFilterXLSX()
     CPPUNIT_ASSERT(pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableDateFieldFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDateFieldFilterXLSX)
 {
     createScDoc("xlsx/pivottable_date_field_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2053,7 +1942,7 @@ void ScPivotTableFiltersTest::testPivotTableDateFieldFilterXLSX()
     }
 }
 
-void ScPivotTableFiltersTest::testPivotTableBoolFieldFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableBoolFieldFilterXLSX)
 {
     createScDoc("xlsx/pivottable_bool_field_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2086,7 +1975,7 @@ void ScPivotTableFiltersTest::testPivotTableBoolFieldFilterXLSX()
     CPPUNIT_ASSERT(pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableRowColPageFieldFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableRowColPageFieldFilterXLSX)
 {
     createScDoc("xlsx/pivottable_rowcolpage_field_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2190,7 +2079,7 @@ void ScPivotTableFiltersTest::testPivotTableRowColPageFieldFilterXLSX()
     }*/
 }
 
-void ScPivotTableFiltersTest::testPivotTableErrorItemFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableErrorItemFilterXLSX)
 {
     createScDoc("xlsx/pivottable_error_item_filter.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2217,7 +2106,7 @@ void ScPivotTableFiltersTest::testPivotTableErrorItemFilterXLSX()
     CPPUNIT_ASSERT(!pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableErrorItemFilterXLSB()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableErrorItemFilterXLSB)
 {
     createScDoc("xlsb/pivottable_error_item_filter.xlsb");
     ScDocument* pDoc = getScDoc();
@@ -2238,7 +2127,7 @@ void ScPivotTableFiltersTest::testPivotTableErrorItemFilterXLSB()
     CPPUNIT_ASSERT(!pMember->GetIsVisible());
 }
 
-void ScPivotTableFiltersTest::testPivotTableErrorItem2FilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableErrorItem2FilterXLSX)
 {
     createScDoc("xlsx/tdf122471.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2262,7 +2151,7 @@ void ScPivotTableFiltersTest::testPivotTableErrorItem2FilterXLSX()
     CPPUNIT_ASSERT_EQUAL(size_t(21), rMembers.size());
 }
 
-void ScPivotTableFiltersTest::testPivotTableOutlineModeXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableOutlineModeXLSX)
 {
     createScDoc("xlsx/pivottable_outline_mode.xlsx");
 
@@ -2278,7 +2167,7 @@ void ScPivotTableFiltersTest::testPivotTableOutlineModeXLSX()
     assertXPath(pTable, "/x:pivotTableDefinition/x:pivotFields/x:pivotField[1]", "compact", "0");
 }
 
-void ScPivotTableFiltersTest::testPivotTableDuplicatedMemberFilterXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDuplicatedMemberFilterXLSX)
 {
     createScDoc("xlsx/pivottable_duplicated_member_filter.xlsx");
 
@@ -2293,7 +2182,7 @@ void ScPivotTableFiltersTest::testPivotTableDuplicatedMemberFilterXLSX()
                 "21");
 }
 
-void ScPivotTableFiltersTest::testPivotTableTabularModeXLSX()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableTabularModeXLSX)
 {
     createScDoc("xlsx/pivottable_tabular_mode.xlsx");
 
@@ -2310,7 +2199,7 @@ void ScPivotTableFiltersTest::testPivotTableTabularModeXLSX()
     assertXPath(pTable, "/x:pivotTableDefinition/x:pivotFields/x:pivotField[1]", "outline", "0");
 }
 
-void ScPivotTableFiltersTest::testPivotTableDuplicateFields()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableDuplicateFields)
 {
     createScDoc("ods/caseinsensitive-duplicate-fields.ods");
 
@@ -2331,7 +2220,7 @@ void ScPivotTableFiltersTest::testPivotTableDuplicateFields()
                 "Method3");
 }
 
-void ScPivotTableFiltersTest::testTdf112106()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf112106)
 {
     createScDoc("xlsx/tdf112106.xlsx");
     ScDocument* pDoc = getScDoc();
@@ -2356,7 +2245,7 @@ void ScPivotTableFiltersTest::testTdf112106()
     CPPUNIT_ASSERT_EQUAL(ScResId(STR_PIVOT_DATA), (*pLayoutName));
 }
 
-void ScPivotTableFiltersTest::testTdf123923()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf123923)
 {
     // tdf#123923: Excel fails when it finds "Err:504" instead of "#REF!" in pivot table cache
 
@@ -2370,7 +2259,7 @@ void ScPivotTableFiltersTest::testTdf123923()
                 "v", "#REF!");
 }
 
-void ScPivotTableFiltersTest::testTdf123939()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf123939)
 {
     // tdf#123939: Excel warns on containsMixedTypes="1" if sharedItems has only strings and errors
 
@@ -2393,7 +2282,7 @@ void ScPivotTableFiltersTest::testTdf123939()
                 "containsMixedTypes", "1");
 }
 
-void ScPivotTableFiltersTest::testTdf124651()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf124651)
 {
     createScDoc("ods/tdf124651_simplePivotTable.ods");
 
@@ -2406,7 +2295,7 @@ void ScPivotTableFiltersTest::testTdf124651()
     assertXPath(pDoc, "/x:pivotTableDefinition/x:dataFields/x:dataField", "name", "Sum - num");
 }
 
-void ScPivotTableFiltersTest::testTdf124736()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf124736)
 {
     createScDoc("xlsx/pivot-table/shared-dategroup.xlsx");
 
@@ -2456,7 +2345,7 @@ void ScPivotTableFiltersTest::testTdf124736()
                 "t", "default");
 }
 
-void ScPivotTableFiltersTest::tesTtdf124772NumFmt()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf124772NumFmt)
 {
     createScDoc("ods/pivot-table-num-fmt.ods");
 
@@ -2477,7 +2366,7 @@ void ScPivotTableFiltersTest::tesTtdf124772NumFmt()
                 "formatCode", "\\$#,##0");
 }
 
-void ScPivotTableFiltersTest::testTdf124810()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf124810)
 {
     {
         // First, test that we roundtrip existing pivot table style information from XLSX.
@@ -2518,7 +2407,7 @@ void ScPivotTableFiltersTest::testTdf124810()
     }
 }
 
-void ScPivotTableFiltersTest::testTdf124883()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf124883)
 {
     createScDoc("xlsx/pivot-table/two-data-fields.xlsx");
 
@@ -2533,7 +2422,7 @@ void ScPivotTableFiltersTest::testTdf124883()
                 "Count of Value2");
 }
 
-void ScPivotTableFiltersTest::testTdf125046()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf125046)
 {
     createScDoc("xlsx/pivottable_long_text.xlsx");
 
@@ -2544,7 +2433,7 @@ void ScPivotTableFiltersTest::testTdf125046()
                 "longText", "1");
 }
 
-void ScPivotTableFiltersTest::testTdf125055()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf125055)
 {
     createScDoc("xlsx/pivottable_1s_difference.xlsx");
 
@@ -2579,7 +2468,7 @@ void ScPivotTableFiltersTest::testTdf125055()
                pDoc, "/x:pivotCacheDefinition/x:cacheFields/x:cacheField[2]/x:sharedItems", "m"));
 }
 
-void ScPivotTableFiltersTest::testTdf125086()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf125086)
 {
     createScDoc("ods/pivottable_fieldInRowsAndData.ods");
 
@@ -2591,7 +2480,7 @@ void ScPivotTableFiltersTest::testTdf125086()
     assertXPath(pDoc, "/x:pivotTableDefinition/x:pivotFields/x:pivotField[2]", "dataField", "1");
 }
 
-void ScPivotTableFiltersTest::testTdf73845()
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testTdf73845)
 {
     // Query filter is set for individual pivot table in this ODS document.
     // This test checks the query filter is restored for ByEmpty and ByNonEmpty query.
@@ -2627,7 +2516,75 @@ void ScPivotTableFiltersTest::testTdf73845()
     }
 }
 
-CPPUNIT_TEST_SUITE_REGISTRATION(ScPivotTableFiltersTest);
+CPPUNIT_TEST_FIXTURE(ScPivotTableFiltersTest, testPivotTableCompactLayoutXLSX)
+{
+    auto testThis = [](ScDocument& rDoc) {
+        ScDPCollection* pDPs = rDoc.GetDPCollection();
+        CPPUNIT_ASSERT_MESSAGE("Failed to get a live ScDPCollection instance.", pDPs);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("There should be exactly one pivot table instance.", size_t(1),
+                                     pDPs->GetCount());
+
+        const ScDPObject* pDPObj = &(*pDPs)[0];
+        CPPUNIT_ASSERT_MESSAGE("Failed to get a pivot table object.", pDPObj);
+        const ScDPSaveData* pSaveData = pDPObj->GetSaveData();
+        CPPUNIT_ASSERT_MESSAGE("The show expand/collapse buttons option must be true",
+                               pSaveData->GetExpandCollapse());
+
+        CPPUNIT_ASSERT_EQUAL(OUString("Row Labels"), rDoc.GetString(ScAddress(10, 1, 0)));
+
+        // Check some row fields
+        struct RowFieldLabel
+        {
+            OUString aContent;
+            ScAddress aAddr;
+            bool bIndented;
+        };
+
+        constexpr int nCases = 6;
+        const RowFieldLabel aCases[nCases] = {
+            { "aaa", ScAddress(10, 2, 0), true },
+
+            { "bbb", ScAddress(10, 3, 0), true },
+
+            { "ccc", ScAddress(10, 4, 0), true },
+
+            { "aax", ScAddress(10, 10, 0), true },
+
+            { "bbx", ScAddress(10, 14, 0), true },
+
+            { "ccc", ScAddress(10, 15, 0), true },
+        };
+
+        for (int nCaseNum = 0; nCaseNum < nCases; ++nCaseNum)
+        {
+            auto& rCase = aCases[nCaseNum];
+            CPPUNIT_ASSERT_EQUAL(rCase.aContent, rDoc.GetString(rCase.aAddr));
+            const ScIndentItem* pIndent = rDoc.GetAttr(rCase.aAddr, ATTR_INDENT);
+            if (rCase.bIndented)
+            {
+                CPPUNIT_ASSERT(pIndent);
+                CPPUNIT_ASSERT(pIndent->GetValue() > 0);
+            }
+            else
+            {
+                CPPUNIT_ASSERT(!pIndent || pIndent->GetValue() == 0);
+            }
+        }
+
+        // check col fields
+        CPPUNIT_ASSERT_EQUAL(OUString("ddd"), rDoc.GetString(ScAddress(11, 1, 0)));
+        CPPUNIT_ASSERT_EQUAL(OUString("ddx"), rDoc.GetString(ScAddress(12, 1, 0)));
+    };
+
+    createScDoc("xlsx/pivot-table/pivotcompact.xlsx");
+    testThis(*getScDoc());
+
+    saveAndReload("calc8");
+    testThis(*getScDoc());
+
+    saveAndReload("Calc Office Open XML");
+    testThis(*getScDoc());
+}
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

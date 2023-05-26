@@ -25,6 +25,7 @@
 #include <com/sun/star/xml/sax/XFastAttributeList.hpp>
 
 #include <o3tl/string_view.hxx>
+#include <optional>
 #include <osl/diagnose.h>
 #include <sax/tools/converter.hxx>
 #include <oox/token/tokens.hxx>
@@ -376,6 +377,19 @@ const char* GetHatchPattern( const drawing::Hatch& rHatch )
     return sPattern;
 }
 
+std::optional<OString> GetTextVerticalType(sal_Int32 nRotateAngle)
+{
+    switch (nRotateAngle)
+    {
+      case 9000:
+          return "vert270";
+      case 27000:
+          return "vert";
+      default:
+          return {};
+    }
+}
+
 namespace
 {
 // ISO/IEC-29500 Part 1 ST_Percentage, and [MS-OI29500] 2.1.1324
@@ -420,6 +434,26 @@ IndexRange GetIndexRange( const Reference< XFastAttributeList >& xAttributes )
     range.start = xAttributes->getOptionalValue( XML_st ).toInt32();
     range.end = xAttributes->getOptionalValue( XML_end ).toInt32();
     return range;
+}
+
+
+model::RectangleAlignment convertToRectangleAlignment(sal_Int32 nToken)
+{
+    switch (nToken)
+    {
+        case XML_tl: return model::RectangleAlignment::TopLeft;
+        case XML_t: return model::RectangleAlignment::Top;
+        case XML_tr: return model::RectangleAlignment::TopRight;
+        case XML_l: return model::RectangleAlignment::Left;
+        case XML_ctr: return model::RectangleAlignment::Center;
+        case XML_r: return model::RectangleAlignment::Right;
+        case XML_bl: return model::RectangleAlignment::BottomLeft;
+        case XML_b: return model::RectangleAlignment::Bottom;
+        case XML_br: return model::RectangleAlignment::BottomRight;
+        default:
+            break;
+    }
+    return model::RectangleAlignment::Unset;
 }
 
 } // namespace oox::drawingml

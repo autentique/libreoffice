@@ -43,7 +43,6 @@
 #include <unotools/pathoptions.hxx>
 #include <map>
 
-using namespace desktop;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
@@ -93,9 +92,7 @@ void Desktop::RegisterServices()
     CommandLineArgs& rCmdLine = GetCommandLineArgs();
 
     // Headless mode for FAT Office, auto cancels any dialogs that popup
-    if (rCmdLine.IsEventTesting())
-        Application::EnableEventTestingMode();
-    else if (rCmdLine.IsHeadless())
+    if (rCmdLine.IsHeadless())
         Application::EnableHeadlessMode(false);
 
     // read accept string from configuration

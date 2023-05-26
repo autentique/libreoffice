@@ -34,7 +34,7 @@
 #include <QtCore/QObject>
 
 #if CHECK_ANY_QT_USING_X11
-#include <unx/screensaverinhibitor.hxx>
+#include <unx/sessioninhibitor.hxx>
 // any better way to get rid of the X11 / Qt type clashes?
 #undef Bool
 #undef CursorShape
@@ -102,7 +102,7 @@ class VCLPLUG_QT_PUBLIC QtFrame : public QObject, public SalFrame
     QRect m_aRestoreGeometry;
 
 #if CHECK_ANY_QT_USING_X11
-    ScreenSaverInhibitor m_ScreenSaverInhibitor;
+    SessionManagerInhibitor m_SessionManagerInhibitor;
     ModKeyFlags m_nKeyModifiers;
 #endif
 
@@ -131,6 +131,7 @@ class VCLPLUG_QT_PUBLIC QtFrame : public QObject, public SalFrame
     bool isMinimized() const;
     bool isMaximized() const;
     void SetWindowStateImpl(Qt::WindowStates eState);
+    int menuBarOffset() const;
 
     void fixICCCMwindowGroup();
 
@@ -145,8 +146,6 @@ public:
     QtMainWindow* GetTopLevelWindow() const { return m_pTopLevel; }
     QWidget* asChild() const;
     qreal devicePixelRatioF() const;
-    QPoint mapToParent(const QPoint&) const;
-    QPoint mapFromParent(const QPoint&) const;
 
     void Damage(sal_Int32 nExtentsX, sal_Int32 nExtentsY, sal_Int32 nExtentsWidth,
                 sal_Int32 nExtentsHeight) const;

@@ -93,7 +93,7 @@ void RestFlyInRange( SaveFlyArr & rArr, const SwPosition& rStartPos,
         }
 
         aAnchor.SetAnchor( &aPos );
-        pFormat->GetDoc()->GetSpzFrameFormats()->push_back( pFormat );
+        pFormat->GetDoc()->GetSpzFrameFormats()->push_back(static_cast<sw::SpzFrameFormat*>(pFormat));
         // SetFormatAttr should call Modify() and add it to the node
         pFormat->SetFormatAttr( aAnchor );
         SwContentNode* pCNd = aPos.GetNode().GetContentNode();
@@ -105,11 +105,11 @@ void RestFlyInRange( SaveFlyArr & rArr, const SwPosition& rStartPos,
 
 void SaveFlyInRange( const SwNodeRange& rRg, SaveFlyArr& rArr )
 {
-    SwFrameFormats& rFormats = *rRg.aStart.GetNode().GetDoc().GetSpzFrameFormats();
-    for( SwFrameFormats::size_type n = 0; n < rFormats.size(); ++n )
+    sw::SpzFrameFormats& rSpzs = *rRg.aStart.GetNode().GetDoc().GetSpzFrameFormats();
+    for(sw::FrameFormats<sw::SpzFrameFormat*>::size_type n = 0; n < rSpzs.size(); ++n )
     {
-        SwFrameFormat *const pFormat = rFormats[n];
-        SwFormatAnchor const*const pAnchor = &pFormat->GetAnchor();
+        auto pSpz = rSpzs[n];
+        SwFormatAnchor const*const pAnchor = &pSpz->GetAnchor();
         SwNode const*const pAnchorNode = pAnchor->GetAnchorNode();
         if (pAnchorNode &&
             ((RndStdIds::FLY_AT_PARA == pAnchor->GetAnchorId()) ||
@@ -120,14 +120,14 @@ void SaveFlyInRange( const SwNodeRange& rRg, SaveFlyArr& rArr )
                             (RndStdIds::FLY_AT_CHAR == pAnchor->GetAnchorId())
                                 ? pAnchor->GetAnchorContentOffset()
                                 : 0,
-                            pFormat, false );
+                            pSpz, false );
             rArr.push_back( aSave );
-            pFormat->DelFrames();
+            pSpz->DelFrames();
             // set a dummy anchor position to maintain anchoring invariants
-            SwFormatAnchor aAnchor( pFormat->GetAnchor() );
+            SwFormatAnchor aAnchor( pSpz->GetAnchor() );
             aAnchor.SetAnchor(nullptr);
-            pFormat->SetFormatAttr(aAnchor);
-            rFormats.erase( rFormats.begin() + n-- );
+            pSpz->SetFormatAttr(aAnchor);
+            rSpzs.erase( rSpzs.begin() + n-- );
         }
     }
     sw::CheckAnchoredFlyConsistency(rRg.aStart.GetNode().GetDoc());
@@ -136,8 +136,8 @@ void SaveFlyInRange( const SwNodeRange& rRg, SaveFlyArr& rArr )
 void SaveFlyInRange( const SwPaM& rPam, const SwPosition& rInsPos,
         SaveFlyArr& rArr, bool bMoveAllFlys, SwHistory *const pHistory)
 {
-    SwFrameFormats& rFormats = *rPam.GetPoint()->GetNode().GetDoc().GetSpzFrameFormats();
-    SwFrameFormat* pFormat;
+    sw::SpzFrameFormats& rFormats = *rPam.GetPoint()->GetNode().GetDoc().GetSpzFrameFormats();
+    sw::SpzFrameFormat* pFormat;
     const SwFormatAnchor* pAnchor;
 
     const SwPosition* pPos = rPam.Start();
@@ -151,7 +151,7 @@ void SaveFlyInRange( const SwPaM& rPam, const SwPosition& rInsPos,
         atParaEnd.Adjust(SwNodeOffset(1));
     }
 
-    for( SwFrameFormats::size_type n = 0; n < rFormats.size(); ++n )
+    for(sw::FrameFormats<sw::SpzFrameFormat*>::size_type n = 0; n < rFormats.size(); ++n )
     {
         pFormat = rFormats[n];
         pAnchor = &pFormat->GetAnchor();
@@ -220,10 +220,10 @@ void DelFlyInRange( SwNode& rMkNd,
     SwPosition const& rEnd   = mark <= point ? point : mark;
 
     SwDoc& rDoc = rMkNd.GetDoc();
-    SwFrameFormats& rTable = *rDoc.GetSpzFrameFormats();
+    sw::SpzFrameFormats& rTable = *rDoc.GetSpzFrameFormats();
     for ( auto i = rTable.size(); i; )
     {
-        SwFrameFormat *pFormat = rTable[--i];
+        sw::SpzFrameFormat* pFormat = rTable[--i];
         const SwFormatAnchor &rAnch = pFormat->GetAnchor();
         SwPosition const*const pAPos = rAnch.GetContentAnchor();
         if (pAPos &&
@@ -248,7 +248,7 @@ void DelFlyInRange( SwNode& rMkNd,
                 if (i > rTable.size())
                     i = rTable.size();
                 else if (i == rTable.size() || pFormat != rTable[i])
-                    i = std::distance(rTable.begin(), rTable.find( pFormat ));
+                    i = std::distance(rTable.begin(), rTable.find(pFormat));
             }
 
             rDoc.getIDocumentLayoutAccess().DelLayoutFormat( pFormat );
@@ -652,8 +652,10 @@ uno::Any SwDoc::Spell( SwPaM& rPaM,
                                     aRet <<= aResult;
                                     //put the cursor to the current error
                                     const linguistic2::SingleProofreadingError &rError = aResult.aErrors[0];
-                                    pSttPos->Assign(*pNd->GetTextNode(), aConversionMap.ConvertToModelPosition( rError.nErrorStart ).mnPos );
-                                    pEndPos->Assign(*pNd->GetTextNode(), aConversionMap.ConvertToModelPosition( rError.nErrorStart + rError.nErrorLength ).mnPos );
+                                    pSttPos->Assign(nCurrNd, pSttPos->GetContentIndex());
+                                    pEndPos->Assign(nCurrNd, pEndPos->GetContentIndex());
+                                    pSpellArgs->pStartPos->Assign(*pNd->GetTextNode(), aConversionMap.ConvertToModelPosition( rError.nErrorStart ).mnPos );
+                                    pSpellArgs->pEndPos->Assign(*pNd->GetTextNode(), aConversionMap.ConvertToModelPosition( rError.nErrorStart + rError.nErrorLength ).mnPos );
                                     nCurrNd = nEndNd;
                                 }
                             }

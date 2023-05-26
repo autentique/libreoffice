@@ -202,11 +202,11 @@ struct WW8FlyPara
                         // Attention: *DO NOT* reorder, since parts will be
                         // compared using memcmp
     bool bVer67;
-    sal_Int16 nSp26, nSp27;         // raw position
+    sal_Int16 nTDxaAbs, nTDyaAbs;         // raw position
     sal_Int16 nSp45, nSp28;         // width / height
-    sal_Int16 nLeMgn, nRiMgn, nUpMgn, nLoMgn;           // borders
-    sal_uInt8 nSp29;                 // raw binding + alignment
-    sal_uInt8 nSp37;                 // Wrap-Mode ( 1 / 2; 0 = no Apo ? )
+    sal_Int16 nLeftMargin, nRightMargin, nUpperMargin, nLowerMargin;           // borders
+    sal_uInt8 nTPc;                 // raw binding + alignment
+    sal_uInt8 nPWr;                 // Wrap-Mode ( 1 / 2; 0 = no Apo ? )
     WW8_BRCVer9_5 brc;          // borders Top, Left, Bottom, Right, Between
     bool bBorderLines;          // border lines
     bool bGrafApo;              // true: this frame is only used to position
@@ -215,9 +215,9 @@ struct WW8FlyPara
 
     WW8FlyPara(bool bIsVer67, const WW8FlyPara* pSrc = nullptr);
     bool operator==(const WW8FlyPara& rSrc) const;
-    void Read(sal_uInt8 nSprm29, WW8PLCFx_Cp_FKP* pPap);
+    void Read(sal_uInt8 nSprmTPc, WW8PLCFx_Cp_FKP* pPap);
     void ReadFull(sal_uInt8 nSprm29, SwWW8ImplReader* pIo);
-    void Read(sal_uInt8 nSprm29, WW8RStyle const * pStyle);
+    void Read(sal_uInt8 nSprmTPc, WW8RStyle const * pStyle);
     void ApplyTabPos(const WW8_TablePos *pTabPos);
     bool IsEmpty() const;
 };
@@ -1824,7 +1824,7 @@ public:     // really private, but can only be done public
 
     void Read_TabRowEnd(        sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_TabCellEnd(        sal_uInt16, const sal_uInt8* pData, short nLen );
-    bool ParseTabPos(WW8_TablePos *aTabPos, WW8PLCFx_Cp_FKP* pPap);
+    static bool ParseTabPos(WW8_TablePos *aTabPos, WW8PLCFx_Cp_FKP* pPap);
     void Read_Shade(            sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_ANLevelNo(        sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_ANLevelDesc(      sal_uInt16, const sal_uInt8* pData, short nLen );
@@ -1916,9 +1916,6 @@ public:     // really private, but can only be done public
     short ImportSprm(const sal_uInt8* pPos, sal_Int32 nMemLen, sal_uInt16 nId = 0);
 
     bool SearchRowEnd(WW8PLCFx_Cp_FKP* pPap,WW8_CP &rStartCp, int nLevel) const;
-    /// Seek to the end of the table with pPap, returns true on success.
-    bool SearchTableEnd(WW8PLCFx_Cp_FKP* pPap) const;
-    bool FloatingTableConversion(WW8PLCFx_Cp_FKP* pPap);
 
     const WW8Fib& GetFib() const    { return *m_xWwFib; }
     SwDoc& GetDoc() const           { return m_rDoc; }

@@ -378,6 +378,9 @@ ScColorScaleFormat::ScColorScaleFormat(ScDocument* pDoc, const ScColorScaleForma
     {
         maColorScales.emplace_back(new ScColorScaleEntry(pDoc, *rxEntry));
     }
+
+    auto aCache = rFormat.GetCache();
+    SetCache(aCache);
 }
 
 ScColorFormat* ScColorScaleFormat::Clone(ScDocument* pDoc) const
@@ -402,6 +405,24 @@ void ScColorScaleFormat::AddEntry( ScColorScaleEntry* pEntry )
 {
     maColorScales.push_back(std::unique_ptr<ScColorScaleEntry, o3tl::default_delete<ScColorScaleEntry>>(pEntry));
     maColorScales.back()->SetRepaintCallback(mpParent);
+}
+
+bool ScColorScaleFormat::IsEqual(const ScFormatEntry& rOther, bool /*bIgnoreSrcPos*/) const
+{
+    if (GetType() != rOther.GetType())
+        return false;
+
+    const ScColorScaleFormat& r = static_cast<const ScColorScaleFormat&>(rOther);
+
+    for (size_t i = 0; i < maColorScales.size(); ++i)
+    {
+        if (!maColorScales[i]->GetColor().IsRGBEqual(r.maColorScales[i]->GetColor().GetRGBColor())
+            || maColorScales[i]->GetType() != r.maColorScales[i]->GetType()
+            || maColorScales[i]->GetValue() != r.maColorScales[i]->GetValue())
+            return false;
+    }
+
+    return true;
 }
 
 double ScColorScaleFormat::GetMinValue() const
@@ -437,6 +458,18 @@ void ScColorScaleFormat::calcMinMax(double& rMin, double& rMax) const
 const ScRangeList& ScColorFormat::GetRange() const
 {
     return mpParent->GetRange();
+}
+
+std::vector<double> ScColorFormat::GetCache() const
+{
+    std::vector<double> empty;
+    return mpCache ? mpCache->maValues : empty;
+}
+
+void ScColorFormat::SetCache(const std::vector<double>& aValues)
+{
+    mpCache.reset(new ScColorFormatCache);
+    mpCache->maValues = aValues;
 }
 
 std::vector<double>& ScColorFormat::getValues() const
@@ -509,6 +542,12 @@ void ScColorFormat::startRendering()
 void ScColorFormat::endRendering()
 {
     mpCache.reset();
+}
+
+void ScColorFormat::updateValues()
+{
+    getMinValue();
+    getMaxValue();
 }
 
 namespace {
@@ -761,6 +800,41 @@ void ScDataBarFormat::SetParent(ScConditionalFormat* pFormat)
 ScFormatEntry::Type ScDataBarFormat::GetType() const
 {
     return Type::Databar;
+}
+
+bool ScDataBarFormat::IsEqual(const ScFormatEntry& rOther, bool /*bIgnoreSrcPos*/) const
+{
+    if (GetType() != rOther.GetType())
+        return false;
+
+    const ScDataBarFormat& r = static_cast<const ScDataBarFormat&>(rOther);
+
+    bool bEq = (mpFormatData->maAxisColor.IsRGBEqual(r.mpFormatData->maAxisColor)
+                && mpFormatData->maPositiveColor.IsRGBEqual(r.mpFormatData->maPositiveColor)
+                && mpFormatData->mxNegativeColor == r.mpFormatData->mxNegativeColor
+                && mpFormatData->meAxisPosition == r.mpFormatData->meAxisPosition
+                && mpFormatData->mbGradient == r.mpFormatData->mbGradient
+                && mpFormatData->mbOnlyBar == r.mpFormatData->mbOnlyBar);
+
+    if (mpFormatData->mpUpperLimit->GetType() == r.mpFormatData->mpUpperLimit->GetType()
+        && bEq)
+    {
+        bEq = (mpFormatData->mpUpperLimit->GetColor().IsRGBEqual(
+                   r.mpFormatData->mpUpperLimit->GetColor())
+               && mpFormatData->mpUpperLimit->GetValue()
+                      == r.mpFormatData->mpUpperLimit->GetValue());
+    }
+
+    if (mpFormatData->mpLowerLimit->GetType() == r.mpFormatData->mpLowerLimit->GetType()
+        && bEq)
+    {
+        bEq = (mpFormatData->mpLowerLimit->GetColor().IsRGBEqual(
+                   r.mpFormatData->mpLowerLimit->GetColor())
+               && mpFormatData->mpLowerLimit->GetValue()
+                      == r.mpFormatData->mpLowerLimit->GetValue());
+    }
+
+    return bEq;
 }
 
 void ScDataBarFormat::UpdateReference( sc::RefUpdateContext& rCxt )

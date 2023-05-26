@@ -608,16 +608,16 @@ const SvxShapeControlPropertyMapping[] =
     { "CharCaseMap", "CharCaseMap" },
     { "CharColorTheme", "CharColorTheme" },
     { "CharColorTintOrShade", "CharColorTintOrShade" },
-    { UNO_NAME_EDIT_CHAR_COLOR_THEME_REFERENCE, "CharColorThemeReference" },
+    { UNO_NAME_EDIT_CHAR_COMPLEX_COLOR, "CharComplexColor" },
 };
 
 namespace
 {
-    bool lcl_convertPropertyName( const OUString& rApiName, OUString& rInternalName )
+    bool lcl_convertPropertyName( std::u16string_view rApiName, OUString& rInternalName )
     {
         for( const auto & rEntry : SvxShapeControlPropertyMapping )
         {
-            if( rApiName.reverseCompareTo( rEntry.msAPIName ) == 0 )
+            if( rApiName == rEntry.msAPIName )
             {
                 rInternalName = rEntry.msFormName;
             }

@@ -511,50 +511,53 @@ void SwSectionFrame::MergeNext( SwSectionFrame* pNxt )
 }
 
 /**
-|*  Divides a SectionFrame into two parts. The second one starts with the
-|*  passed frame.
+|*  Divides a SectionFrame into two parts. The content of the second one
+|*  starts after pFrameStartAfter; the created second section frame itself
+|*  is put after pFramePutAfter.
+|*  If pFrameStartAfter is nullptr, the split happens at the start.
 |*  This is required when inserting an inner section, because the MoveFwd
 |*  cannot have the desired effect within a frame or a table cell.
+|*  Splitting at the start/end makes sense, because the empty frame would
+|*  be removed after the InsertCnt_ finished.
 |*/
-bool SwSectionFrame::SplitSect( SwFrame* pFrame, bool bApres )
+SwSectionFrame* SwSectionFrame::SplitSect( SwFrame* pFrameStartAfter, SwFrame* pFramePutAfter )
 {
-    assert(pFrame && "SplitSect: Why?");
-    SwFrame* pOther = bApres ? pFrame->FindNext() : pFrame->FindPrev();
-    if( !pOther )
-        return false;
-    SwSectionFrame* pSect = pOther->FindSctFrame();
-    if( pSect != this )
-        return false;
+    assert(!pFrameStartAfter || IsAnLower(pFrameStartAfter));
+    SwFrame* pSav = pFrameStartAfter ? pFrameStartAfter->FindNext() : ContainsAny();
+    if (pSav && !IsAnLower(pSav))
+        pSav = nullptr; // we are at the very end
+
     // Put the content aside
-    SwFrame* pSav = ::SaveContent( this, bApres ? pOther : pFrame );
-    OSL_ENSURE( pSav, "SplitSect: What's on?" );
-    if( pSav ) // be robust
-    {   // Create a new SctFrame, not as a Follower/master
-        SwSectionFrame* pNew = new SwSectionFrame( *pSect->GetSection(), pSect );
-        pNew->InsertBehind( pSect->GetUpper(), pSect );
-        pNew->Init();
-        SwRectFnSet aRectFnSet(this);
-        aRectFnSet.MakePos( *pNew, nullptr, pSect, true );
-        // OD 25.03.2003 #108339# - restore content:
-        // determine layout frame for restoring content after the initialization
-        // of the section frame. In the section initialization the columns are
-        // created.
-        {
-            SwLayoutFrame* pLay = pNew;
-            // Search for last layout frame, e.g. for columned sections.
-            while( pLay->Lower() && pLay->Lower()->IsLayoutFrame() )
-                pLay = static_cast<SwLayoutFrame*>(pLay->Lower());
-            ::RestoreContent( pSav, pLay, nullptr );
-        }
-        InvalidateSize_();
-        if( HasFollow() )
-        {
-            pNew->SetFollow( GetFollow() );
-            SetFollow( nullptr );
-        }
-        return true;
+    if (pSav)
+        pSav = ::SaveContent( this, pSav );
+
+    // Create a new SctFrame, not as a Follower/master
+    if (!pFramePutAfter)
+        pFramePutAfter = this;
+    SwSectionFrame* pNew = new SwSectionFrame( *GetSection(), this );
+    pNew->InsertBehind( pFramePutAfter->GetUpper(), pFramePutAfter );
+    pNew->Init();
+    SwRectFnSet aRectFnSet(this);
+    aRectFnSet.MakePos( *pNew, nullptr, pFramePutAfter, true );
+    // OD 25.03.2003 #108339# - restore content:
+    // determine layout frame for restoring content after the initialization
+    // of the section frame. In the section initialization the columns are
+    // created.
+    if (pSav)
+    {
+        SwLayoutFrame* pLay = pNew;
+        // Search for last layout frame, e.g. for columned sections.
+        while( pLay->Lower() && pLay->Lower()->IsLayoutFrame() )
+            pLay = static_cast<SwLayoutFrame*>(pLay->Lower());
+        ::RestoreContent( pSav, pLay, nullptr );
     }
-    return false;
+    InvalidateSize_();
+    if( HasFollow() )
+    {
+        pNew->SetFollow( GetFollow() );
+        SetFollow( nullptr );
+    }
+    return pNew;
 }
 
 /**
@@ -1739,7 +1742,8 @@ SwLayoutFrame *SwFrame::GetNextSctLeaf( MakePageType eMakePage )
             // case pLayLeaf points to our section's cell's follow, which is
             // fine to be on the same page. New page creation is handled when
             // creating / moving the cell frame.
-            if( WrongPageDesc( pNxtPg ) && !bLayLeafTableAllowed )
+            // It doesn't make sense to move to a page that starts with break?
+            if ((WrongPageDesc(pNxtPg) || HasPageBreakBefore(*pNxtPg)) && !bLayLeafTableAllowed)
             {
                 if( bWrongPage )
                     break; // there's a column between me and my right page
@@ -2936,6 +2940,19 @@ bool SwSectionFrame::IsBalancedSection() const
         bRet = !GetSection()->GetFormat()->GetBalancedColumns().GetValue();
     }
     return bRet;
+}
+
+void SwSectionFrame::dumpAsXml(xmlTextWriterPtr writer) const
+{
+    (void)xmlTextWriterStartElement(writer, reinterpret_cast<const xmlChar*>("section"));
+    dumpAsXmlAttributes(writer);
+
+    (void)xmlTextWriterStartElement(writer, BAD_CAST("infos"));
+    dumpInfosAsXml(writer);
+    (void)xmlTextWriterEndElement(writer);
+    dumpChildrenAsXml(writer);
+
+    (void)xmlTextWriterEndElement(writer);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

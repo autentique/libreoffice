@@ -63,12 +63,10 @@
 #include <vcl/svapp.hxx>
 #include <vcl/taskpanelist.hxx>
 #include <vcl/help.hxx>
-#include <o3tl/string_view.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <vector>
 #include <com/sun/star/reflection/theCoreReflection.hpp>
 #include <unotools/charclass.hxx>
-#include <o3tl/string_view.hxx>
 #include "textwindowpeer.hxx"
 #include "uiobject.hxx"
 #include <basegfx/utils/zoomtools.hxx>
@@ -505,7 +503,7 @@ void EditorWindow::Command( const CommandEvent& rCEvt )
         const CommandWheelData* pData = rCEvt.GetWheelData();
 
         // Check if it is a Ctrl+Wheel zoom command
-        if (pData->IsMod1())
+        if (pData && pData->IsMod1())
         {
             const sal_uInt16 nOldZoom = GetCurrentZoom();
             sal_uInt16 nNewZoom;
@@ -1476,7 +1474,7 @@ void BreakPointWindow::ShowMarker(vcl::RenderContext& rRenderContext)
     aMarkerOff.setX( (aOutSz.Width() - aMarkerSz.Width()) / 2 );
     aMarkerOff.setY( (nLineHeight - aMarkerSz.Height()) / 2 );
 
-    sal_uLong nY = nMarkerPos * nLineHeight - nCurYOffset;
+    tools::Long nY = nMarkerPos * nLineHeight - nCurYOffset;
     Point aPos(0, nY);
     aPos += aMarkerOff;
 
@@ -1531,7 +1529,7 @@ void BreakPointWindow::MouseButtonDown( const MouseEvent& rMEvt )
         {
             tools::Long nYPos = aMousePos.Y() + nCurYOffset;
             tools::Long nLine = nYPos / nLineHeight + 1;
-            rModulWindow.ToggleBreakPoint( static_cast<sal_uLong>(nLine) );
+            rModulWindow.ToggleBreakPoint( static_cast<sal_uInt16>(nLine) );
             Invalidate();
         }
     }
@@ -1555,7 +1553,7 @@ void BreakPointWindow::Command( const CommandEvent& rCEvt )
         // test if break point is enabled...
         std::unique_ptr<weld::Menu> xBrkPropMenu = xUIBuilder->weld_menu("breakmenu");
         xBrkPropMenu->set_active("active", pBrk->bEnabled);
-        OString sCommand = xBrkPropMenu->popup_at_rect(pPopupParent, aRect);
+        OUString sCommand = xBrkPropMenu->popup_at_rect(pPopupParent, aRect);
         if (sCommand == "active")
         {
             pBrk->bEnabled = !pBrk->bEnabled;
@@ -1573,7 +1571,7 @@ void BreakPointWindow::Command( const CommandEvent& rCEvt )
     else
     {
         std::unique_ptr<weld::Menu> xBrkListMenu = xUIBuilder->weld_menu("breaklistmenu");
-        OString sCommand = xBrkListMenu->popup_at_rect(pPopupParent, aRect);
+        OUString sCommand = xBrkListMenu->popup_at_rect(pPopupParent, aRect);
         if (sCommand == "manage")
         {
             BreakPointDialog aBrkDlg(pPopupParent, GetBreakPoints());
@@ -2091,10 +2089,10 @@ void ComplexEditorWindow::SetLineNumberDisplay(bool b)
     Resize();
 }
 
-uno::Reference< awt::XWindowPeer >
+uno::Reference< awt::XVclWindowPeer >
 EditorWindow::GetComponentInterface(bool bCreate)
 {
-    uno::Reference< awt::XWindowPeer > xPeer(
+    uno::Reference< awt::XVclWindowPeer > xPeer(
         Window::GetComponentInterface(false));
     if (!xPeer.is() && bCreate)
     {

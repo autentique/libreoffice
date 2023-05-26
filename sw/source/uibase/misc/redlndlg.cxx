@@ -553,9 +553,9 @@ SwRedlineTable::size_type SwRedlineAcceptDlg::CalcDiff(SwRedlineTable::size_type
     {
         if (&pSh->GetRedline(i).GetRedlineData() == pRedlineData)
         {
+            rTreeView.thaw();
             // insert entries from nStart to i-1
             InsertParents(nStart, i - 1);
-            rTreeView.thaw();
             return nStart - 1;
         }
     }
@@ -1288,9 +1288,9 @@ IMPL_LINK(SwRedlineAcceptDlg, CommandHdl, const CommandEvent&, rCEvt, bool)
     if (nColumn == -1)
         nColumn = 4;
     for (sal_Int32 i = 0; i < 5; ++i)
-        m_xSortMenu->set_active("writersort" + OString::number(i), i == nColumn);
+        m_xSortMenu->set_active(u"writersort" + OUString::number(i), i == nColumn);
 
-    OString sCommand = m_xPopup->popup_at_rect(&rTreeView, tools::Rectangle(rCEvt.GetMousePosPixel(), Size(1,1)));
+    OUString sCommand = m_xPopup->popup_at_rect(&rTreeView, tools::Rectangle(rCEvt.GetMousePosPixel(), Size(1,1)));
 
     if (sCommand == "writeredit")
     {

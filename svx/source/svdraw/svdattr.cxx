@@ -29,6 +29,8 @@
 #include <com/sun/star/drawing/MeasureTextVertPos.hpp>
 #include <com/sun/star/drawing/CircleKind.hpp>
 
+#include <docmodel/theme/FormatScheme.hxx>
+
 #include <editeng/boxitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/lineitem.hxx>
@@ -42,6 +44,8 @@
 #include <unotools/localedatawrapper.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+
+#include <svl/grabbagitem.hxx>
 
 #include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
@@ -93,6 +97,7 @@
 #include <svx/sxmtritm.hxx>
 #include <svx/sxmuitm.hxx>
 #include <svx/xcolit.hxx>
+#include <svx/RectangleAlignmentItem.hxx>
 #include <sxoneitm.hxx>
 #include <sxopitm.hxx>
 #include <sxreaitm.hxx>
@@ -133,6 +138,7 @@ SdrItemPool::SdrItemPool(
     rPoolDefaults[SDRATTR_SHADOWSIZEY       -SDRATTR_START]=new SdrMetricItem(SDRATTR_SHADOWSIZEY, 100000);
     rPoolDefaults[SDRATTR_SHADOWTRANSPARENCE-SDRATTR_START]=new SdrPercentItem(SDRATTR_SHADOWTRANSPARENCE, 0);
     rPoolDefaults[SDRATTR_SHADOWBLUR        -SDRATTR_START]=new SdrMetricItem(SDRATTR_SHADOWBLUR, 0);
+    rPoolDefaults[SDRATTR_SHADOWALIGNMENT   -SDRATTR_START]=new SvxRectangleAlignmentItem(SDRATTR_SHADOWALIGNMENT, model::RectangleAlignment::Unset);
     rPoolDefaults[SDRATTR_SHADOW3D          -SDRATTR_START]=new SfxVoidItem(SDRATTR_SHADOW3D    );
     rPoolDefaults[SDRATTR_SHADOWPERSP       -SDRATTR_START]=new SfxVoidItem(SDRATTR_SHADOWPERSP );
     rPoolDefaults[SDRATTR_CAPTIONTYPE      -SDRATTR_START]=new SdrCaptionTypeItem      ;
@@ -171,6 +177,7 @@ SdrItemPool::SdrItemPool(
     rPoolDefaults[SDRATTR_TEXT_CHAINNEXTNAME    -SDRATTR_START]=new SfxStringItem(SDRATTR_TEXT_CHAINNEXTNAME, "");
     rPoolDefaults[SDRATTR_TEXT_USEFIXEDCELLHEIGHT -SDRATTR_START]=new SdrTextFixedCellHeightItem;
     rPoolDefaults[SDRATTR_TEXT_WORDWRAP         -SDRATTR_START]=new SdrOnOffItem(SDRATTR_TEXT_WORDWRAP, true);
+    rPoolDefaults[SDRATTR_TEXT_CLIPVERTOVERFLOW-SDRATTR_START]=new SdrOnOffItem(SDRATTR_TEXT_CLIPVERTOVERFLOW, false);
     rPoolDefaults[SDRATTR_EDGEKIND         -SDRATTR_START]=new SdrEdgeKindItem;
     rPoolDefaults[SDRATTR_EDGENODE1HORZDIST-SDRATTR_START]=new SdrEdgeNode1HorzDistItem(nDefEdgeDist);
     rPoolDefaults[SDRATTR_EDGENODE1VERTDIST-SDRATTR_START]=new SdrEdgeNode1VertDistItem(nDefEdgeDist);
@@ -326,6 +333,7 @@ SdrItemPool::SdrItemPool(
     rPoolDefaults[ SDRATTR_TABLE_BORDER_TLBR - SDRATTR_START ] = new SvxLineItem( SDRATTR_TABLE_BORDER_TLBR );
     rPoolDefaults[ SDRATTR_TABLE_BORDER_BLTR - SDRATTR_START ] = new SvxLineItem( SDRATTR_TABLE_BORDER_BLTR );
     rPoolDefaults[ SDRATTR_TABLE_TEXT_ROTATION - SDRATTR_START ] = new SvxTextRotateItem(0_deg10, SDRATTR_TABLE_TEXT_ROTATION);
+    rPoolDefaults[ SDRATTR_TABLE_CELL_GRABBAG - SDRATTR_START ] = new SfxGrabBagItem(SDRATTR_TABLE_CELL_GRABBAG);
 
     rPoolDefaults[ SDRATTR_GLOW_RADIUS - SDRATTR_START ] = new SdrMetricItem(SDRATTR_GLOW_RADIUS, 0);
     rPoolDefaults[ SDRATTR_GLOW_COLOR - SDRATTR_START ] = new XColorItem(SDRATTR_GLOW_COLOR, aNullCol);

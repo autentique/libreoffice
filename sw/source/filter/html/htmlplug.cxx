@@ -333,7 +333,7 @@ void SwHTMLParser::SetSpace( const Size& rPixSpace,
     }
 }
 
-OUString SwHTMLParser::StripQueryFromPath(const OUString& rBase, const OUString& rPath)
+OUString SwHTMLParser::StripQueryFromPath(std::u16string_view rBase, const OUString& rPath)
 {
     if (!comphelper::isFileUrl(rBase))
         return rPath;
@@ -1190,7 +1190,7 @@ void SwHTMLParser::InsertFloatingFrame()
     ++m_nFloatingFrames;
 }
 
-sal_uInt16 SwHTMLWriter::GuessOLENodeFrameType( const SwNode& rNode )
+SwHTMLFrameType SwHTMLWriter::GuessOLENodeFrameType( const SwNode& rNode )
 {
     SwHTMLFrameType eType = HTML_FRMTYPE_OLE;
 
@@ -1215,7 +1215,7 @@ sal_uInt16 SwHTMLWriter::GuessOLENodeFrameType( const SwNode& rNode )
     }
 #endif
 
-    return static_cast< sal_uInt16 >(eType);
+    return eType;
 }
 
 SwHTMLWriter& OutHTML_FrameFormatOLENode( SwHTMLWriter& rWrt, const SwFrameFormat& rFrameFormat,
@@ -1255,8 +1255,7 @@ SwHTMLWriter& OutHTML_FrameFormatOLENode( SwHTMLWriter& rWrt, const SwFrameForma
                                   "ole" );
     uno::Any aAny;
     SvGlobalName aGlobName( xObj->getClassID() );
-    OStringBuffer sOut;
-    sOut.append('<');
+    OStringBuffer sOut("<");
     if( aGlobName == SvGlobalName( SO3_PLUGIN_CLASSID ) )
     {
         // first the plug-in specifics
@@ -1407,7 +1406,7 @@ SwHTMLWriter& OutHTML_FrameFormatOLENode( SwHTMLWriter& rWrt, const SwFrameForma
                 const OUString& rValue = rCommand.GetArgument();
                 rWrt.Strm().WriteChar( ' ' );
                 HTMLOutFuncs::Out_String( rWrt.Strm(), rName );
-                rWrt.Strm().WriteCharPtr( "=\"" );
+                rWrt.Strm().WriteOString( "=\"" );
                 HTMLOutFuncs::Out_String( rWrt.Strm(), rValue ).WriteChar( '\"' );
             }
             else if( SwHtmlOptType::PARAM == nType )
@@ -1427,16 +1426,17 @@ SwHTMLWriter& OutHTML_FrameFormatOLENode( SwHTMLWriter& rWrt, const SwFrameForma
             const OUString& rName = rCommand.GetCommand();
             const OUString& rValue = rCommand.GetArgument();
             rWrt.OutNewLine();
-            OStringBuffer sBuf;
-            sBuf.append("<" + rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_param
-                    " " OOO_STRING_SVTOOLS_HTML_O_name
-                    "=\"");
-            rWrt.Strm().WriteOString( sBuf );
+            sOut.append(
+                "<" + rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_param
+                " " OOO_STRING_SVTOOLS_HTML_O_name
+                "=\"");
+            rWrt.Strm().WriteOString( sOut );
             sOut.setLength(0);
             HTMLOutFuncs::Out_String( rWrt.Strm(), rName );
-            sBuf.append("\" " OOO_STRING_SVTOOLS_HTML_O_value "=\"");
-            rWrt.Strm().WriteOString( sBuf );
-            HTMLOutFuncs::Out_String( rWrt.Strm(), rValue ).WriteCharPtr( "\">" );
+            sOut.append("\" " OOO_STRING_SVTOOLS_HTML_O_value "=\"");
+            rWrt.Strm().WriteOString( sOut );
+            sOut.setLength(0);
+            HTMLOutFuncs::Out_String( rWrt.Strm(), rValue ).WriteOString( "\">" );
         }
 
         rWrt.DecIndentLevel(); // indent the applet content
@@ -1464,7 +1464,7 @@ SwHTMLWriter& OutHTML_FrameFormatOLENode( SwHTMLWriter& rWrt, const SwFrameForma
                 const OUString& rValue = rCommand.GetArgument();
                 rWrt.Strm().WriteChar( ' ' );
                 HTMLOutFuncs::Out_String( rWrt.Strm(), rName );
-                rWrt.Strm().WriteCharPtr( "=\"" );
+                rWrt.Strm().WriteOString( "=\"" );
                 HTMLOutFuncs::Out_String( rWrt.Strm(), rValue ).WriteChar( '\"' );
             }
         }

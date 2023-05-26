@@ -349,9 +349,17 @@ void WorkbookFragment::finalizeImport()
 
     // read the theme substream
     OUString aThemeFragmentPath = getFragmentPathFromFirstTypeFromOfficeDoc( u"theme" );
-    model::Theme aTheme;
+    auto& rOoxTheme = getTheme();
+
+    auto pTheme = rOoxTheme.oox::drawingml::Theme::getTheme(); // needed full name here because a conflict with WorkbookHelper and Theme in ThemeBuffer
+    if (!pTheme)
+    {
+        pTheme = std::make_shared<model::Theme>();
+        rOoxTheme.setTheme(pTheme);
+    }
+
     if( !aThemeFragmentPath.isEmpty() )
-        importOoxFragment(new ThemeFragmentHandler(getFilter(), aThemeFragmentPath, getTheme(), aTheme));
+        importOoxFragment(new ThemeFragmentHandler(getFilter(), aThemeFragmentPath, rOoxTheme, *pTheme));
     xGlobalSegment->setPosition( 0.25 );
 
     // read the styles substream (requires finalized theme buffer)
@@ -534,7 +542,7 @@ class MessageWithCheck : public weld::MessageDialogController
 private:
     std::unique_ptr<weld::CheckButton> m_xWarningOnBox;
 public:
-    MessageWithCheck(weld::Window *pParent, const OUString& rUIFile, const OString& rDialogId)
+    MessageWithCheck(weld::Window *pParent, const OUString& rUIFile, const OUString& rDialogId)
         : MessageDialogController(pParent, rUIFile, rDialogId, "ask")
         , m_xWarningOnBox(m_xBuilder->weld_check_button("ask"))
     {

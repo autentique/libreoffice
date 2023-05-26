@@ -21,6 +21,7 @@
 #define INCLUDED_OOX_DRAWINGML_DRAWINGMLTYPES_HXX
 
 #include <memory>
+#include <optional>
 #include <string_view>
 
 #include <com/sun/star/awt/Point.hpp>
@@ -149,6 +150,8 @@ OOX_DLLPUBLIC const char* GetTextVerticalAdjust( css::drawing::TextVerticalAdjus
 // Converts a Hatch object to an ooxml pattern.
 const char* GetHatchPattern( const css::drawing::Hatch& rHatch );
 
+/// Converts nRotate angle to TextVerticalType string appearing in ooxml
+std::optional<OString> GetTextVerticalType(sal_Int32 nRotateAngle);
 
 // CT_IndexRange
 struct IndexRange {
@@ -231,6 +234,7 @@ struct EmuRectangle : public EmuPoint, public EmuSize
     void         setSize( const EmuSize& rSize ) { static_cast< EmuSize& >( *this ) = rSize; }
 };
 
+model::RectangleAlignment convertToRectangleAlignment(sal_Int32 nToken);
 
 } // namespace oox::drawingml
 

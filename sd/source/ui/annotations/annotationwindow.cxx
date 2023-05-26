@@ -77,7 +77,7 @@ void AnnotationTextWindow::Paint(vcl::RenderContext& rRenderContext, const ::too
     if (!bHighContrast)
     {
         rRenderContext.DrawGradient(::tools::Rectangle(Point(0,0), rRenderContext.PixelToLogic(aSize)),
-                                    Gradient(GradientStyle::Linear, mrContents.maColorLight, mrContents.maColor));
+                                    Gradient(css::awt::GradientStyle_LINEAR, mrContents.maColorLight, mrContents.maColor));
     }
 
     DoPaint(rRenderContext, rRect);
@@ -297,7 +297,7 @@ void AnnotationWindow::InitControls()
     mxTextControl->GrabFocus();
 }
 
-IMPL_LINK(AnnotationWindow, MenuItemSelectedHdl, const OString&, rIdent, void)
+IMPL_LINK(AnnotationWindow, MenuItemSelectedHdl, const OUString&, rIdent, void)
 {
     SfxDispatcher* pDispatcher = mpDocShell->GetViewShell()->GetViewFrame()->GetDispatcher();
     if (!pDispatcher)

@@ -61,6 +61,7 @@
 #include <sax/tools/converter.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/mediamimetype.hxx>
 
 #include <xmloff/families.hxx>
 #include<xmloff/xmlnamespace.hxx>
@@ -589,9 +590,9 @@ void SdXMLShapeContext::SetTransformation()
     aUnoMatrix.Line2.Column2 = aB2DHomMatrix.get(1, 1);
     aUnoMatrix.Line2.Column3 = aB2DHomMatrix.get(1, 2);
 
-    aUnoMatrix.Line3.Column1 = aB2DHomMatrix.get(2, 0);
-    aUnoMatrix.Line3.Column2 = aB2DHomMatrix.get(2, 1);
-    aUnoMatrix.Line3.Column3 = aB2DHomMatrix.get(2, 2);
+    aUnoMatrix.Line3.Column1 = 0;
+    aUnoMatrix.Line3.Column2 = 0;
+    aUnoMatrix.Line3.Column3 = 1;
 
     xPropSet->setPropertyValue("Transformation", Any(aUnoMatrix));
 }
@@ -1531,46 +1532,46 @@ void SdXMLTextBoxShapeContext::startFastElement (sal_Int32 nElement,
         {
             if( IsXMLToken( maPresentationClass, XML_SUBTITLE ))
             {
-                // XmlShapeTypePresSubtitleShape
+                // XmlShapeType::PresSubtitleShape
                 service = "com.sun.star.presentation.SubtitleShape";
             }
             else if( IsXMLToken( maPresentationClass, XML_PRESENTATION_OUTLINE ) )
             {
-                // XmlShapeTypePresOutlinerShape
+                // XmlShapeType::PresOutlinerShape
                 service = "com.sun.star.presentation.OutlinerShape";
             }
             else if( IsXMLToken( maPresentationClass, XML_NOTES ) )
             {
-                // XmlShapeTypePresNotesShape
+                // XmlShapeType::PresNotesShape
                 service = "com.sun.star.presentation.NotesShape";
             }
             else if( IsXMLToken( maPresentationClass, XML_HEADER ) )
             {
-                // XmlShapeTypePresHeaderShape
+                // XmlShapeType::PresHeaderShape
                 service = "com.sun.star.presentation.HeaderShape";
                 bClearText = true;
             }
             else if( IsXMLToken( maPresentationClass, XML_FOOTER ) )
             {
-                // XmlShapeTypePresFooterShape
+                // XmlShapeType::PresFooterShape
                 service = "com.sun.star.presentation.FooterShape";
                 bClearText = true;
             }
             else if( IsXMLToken( maPresentationClass, XML_PAGE_NUMBER ) )
             {
-                // XmlShapeTypePresSlideNumberShape
+                // XmlShapeType::PresSlideNumberShape
                 service = "com.sun.star.presentation.SlideNumberShape";
                 bClearText = true;
             }
             else if( IsXMLToken( maPresentationClass, XML_DATE_TIME ) )
             {
-                // XmlShapeTypePresDateTimeShape
+                // XmlShapeType::PresDateTimeShape
                 service = "com.sun.star.presentation.DateTimeShape";
                 bClearText = true;
             }
             else //  IsXMLToken( maPresentationClass, XML_TITLE ) )
             {
-                // XmlShapeTypePresTitleTextShape
+                // XmlShapeType::PresTitleTextShape
                 service = "com.sun.star.presentation.TitleTextShape";
             }
             bIsPresShape = true;
@@ -2890,7 +2891,7 @@ void SdXMLPluginShapeContext::startFastElement (sal_Int32 /*nElement*/,
     {
         if( aIter.getToken() == XML_ELEMENT(DRAW, XML_MIME_TYPE) )
         {
-            if( aIter.toView() == "application/vnd.sun.star.media" )
+            if (::comphelper::IsMediaMimeType(aIter.toView()))
                 mbMedia = true;
             // leave this loop
             break;
@@ -3132,10 +3133,36 @@ SdXMLFloatingFrameShapeContext::~SdXMLFloatingFrameShapeContext()
 {
 }
 
+uno::Reference<drawing::XShape> SdXMLFloatingFrameShapeContext::CreateFloatingFrameShape() const
+{
+    uno::Reference<lang::XMultiServiceFactory> xServiceFact(GetImport().GetModel(), uno::UNO_QUERY);
+    if (!xServiceFact.is())
+        return nullptr;
+    uno::Reference<drawing::XShape> xShape(
+            xServiceFact->createInstance("com.sun.star.drawing.FrameShape"), uno::UNO_QUERY);
+    return xShape;
+}
+
 void SdXMLFloatingFrameShapeContext::startFastElement (sal_Int32 /*nElement*/,
     const css::uno::Reference< css::xml::sax::XFastAttributeList >& /*xAttrList*/)
 {
-    AddShape("com.sun.star.drawing.FrameShape");
+    uno::Reference<drawing::XShape> xShape(SdXMLFloatingFrameShapeContext::CreateFloatingFrameShape());
+
+    uno::Reference< beans::XPropertySet > xProps(xShape, uno::UNO_QUERY);
+    // set FrameURL before AddShape, we have to do it again later because it
+    // gets cleared when the SdrOle2Obj is attached to the XShape.  But we want
+    // FrameURL to exist when AddShape triggers SetPersistName which itself
+    // triggers SdrOle2Obj::CheckFileLink_Impl and at that point we want to
+    // know what URL will end up being used. So bodge this by setting FrameURL
+    // to the temp pre-SdrOle2Obj attached properties and we can smuggle it
+    // eventually into SdrOle2Obj::SetPersistName at the right point after
+    // PersistName is set but before SdrOle2Obj::CheckFileLink_Impl is called
+    // in order to inform the link manager that this is an IFrame that links to
+    // a URL
+    if (xProps && !maHref.isEmpty())
+        xProps->setPropertyValue("FrameURL", Any(maHref));
+
+    AddShape(xShape);
 
     if( !mxShape.is() )
         return;
@@ -3145,7 +3172,6 @@ void SdXMLFloatingFrameShapeContext::startFastElement (sal_Int32 /*nElement*/,
     // set pos, size, shear and rotate
     SetTransformation();
 
-    uno::Reference< beans::XPropertySet > xProps( mxShape, uno::UNO_QUERY );
     if( xProps.is() )
     {
         if( !maFrameName.isEmpty() )
@@ -3335,7 +3361,7 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > SdXMLFrameShapeContext
                 mxImplContext = nullptr;
                 return new SvXMLImportContext(GetImport());
             }
-            else if (pPluginContext && pPluginContext->getMimeType() == "application/vnd.sun.star.media")
+            else if (pPluginContext && ::comphelper::IsMediaMimeType(pPluginContext->getMimeType()))
             {
                 // The media may have a preview, import it.
                 bMedia = true;

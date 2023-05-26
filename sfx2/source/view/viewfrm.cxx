@@ -596,7 +596,10 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
             }
 
             rReq.AppendItem( SfxBoolItem(SID_FORCERELOAD,
-                    rReq.GetSlot() == SID_EDITDOC || bNeedsReload) );
+                    (rReq.GetSlot() == SID_EDITDOC
+                     // tdf#151715 exclude files loaded from /tmp to avoid Notebookbar bugs
+                     && (!pSh->IsOriginallyReadOnlyMedium() || pSh->IsOriginallyLoadedReadOnlyMedium()))
+                    || bNeedsReload) );
             rReq.AppendItem( SfxBoolItem( SID_SILENT, true ));
 
             [[fallthrough]]; //TODO ???
@@ -3024,11 +3027,11 @@ void SfxViewFrame::AddDispatchMacroToBasic_Impl( const OUString& sMacro )
         }
 
         // append new method
-        sRoutine.append( "\nsub " );
-        sRoutine.append(aMacroName);
-        sRoutine.append( "\n" );
-        sRoutine.append(sMacro);
-        sRoutine.append( "\nend sub\n" );
+        sRoutine.append( "\nsub "
+            + aMacroName
+            + "\n"
+            + sMacro
+            + "\nend sub\n" );
 
         // create the module inside the library and insert the macro routine
         aTemp <<= sRoutine.makeStringAndClear();
@@ -3410,6 +3413,16 @@ void SfxViewFrame::ChildWindowExecute( SfxRequest &rReq )
                                             GetFrame().GetFrameInterface(), true);
         rReq.Done();
         return;
+    }
+    if (nSID == SID_NAVIGATOR)
+    {
+        if (comphelper::LibreOfficeKit::isActive())
+        {
+            ShowChildWindow(SID_SIDEBAR);
+            ::sfx2::sidebar::Sidebar::ShowDeck(u"NavigatorDeck", this, true);
+            rReq.Done();
+            return;
+        }
     }
 
     bool bHasChild = HasChildWindow(nSID);

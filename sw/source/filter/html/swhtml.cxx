@@ -2678,15 +2678,12 @@ SwViewShell *SwHTMLParser::CallEndAction( bool bChkAction, bool bChkPtr )
     if( !m_pActionViewShell || (bChkAction && !m_pActionViewShell->ActionPend()) )
         return m_pActionViewShell;
 
-    if( dynamic_cast< const SwEditShell *>( m_pActionViewShell ) !=  nullptr )
+    if (SwEditShell* pEditShell = dynamic_cast<SwEditShell*>(m_pActionViewShell))
     {
         // Already scrolled?, then make sure that the view doesn't move!
         const bool bOldLock = m_pActionViewShell->IsViewLocked();
         m_pActionViewShell->LockView( true );
-        const bool bOldEndActionByVirDev = m_pActionViewShell->IsEndActionByVirDev();
-        m_pActionViewShell->SetEndActionByVirDev( true );
-        static_cast<SwEditShell*>(m_pActionViewShell)->EndAction();
-        m_pActionViewShell->SetEndActionByVirDev( bOldEndActionByVirDev );
+        pEditShell->EndAction();
         m_pActionViewShell->LockView( bOldLock );
 
         // bChkJumpMark is only set when the object was also found
@@ -4551,12 +4548,10 @@ bool SwHTMLParser::HasCurrentParaFlys( bool bNoSurroundOnly,
 {
     SwNode& rNode = m_pPam->GetPoint()->GetNode();
 
-    const SwFrameFormats& rFrameFormatTable = *m_xDoc->GetSpzFrameFormats();
 
     bool bFound = false;
-    for ( size_t i=0; i<rFrameFormatTable.size(); i++ )
+    for(sw::SpzFrameFormat* pFormat: *m_xDoc->GetSpzFrameFormats())
     {
-        const SwFrameFormat *const pFormat = rFrameFormatTable[i];
         SwFormatAnchor const*const pAnchor = &pFormat->GetAnchor();
         // A frame was found, when
         // - it is paragraph-bound, and
@@ -5460,21 +5455,21 @@ void SwHTMLParser::ParseMoreMetaOptions()
         return;
     }
 
-    OUStringBuffer sText;
-    sText.append("HTML: <");
-    sText.append(OOO_STRING_SVTOOLS_HTML_meta);
-    sText.append(' ');
+    OUStringBuffer sText(
+        "HTML: <"
+        OOO_STRING_SVTOOLS_HTML_meta
+        " ");
     if( bHTTPEquiv  )
         sText.append(OOO_STRING_SVTOOLS_HTML_O_httpequiv);
     else
         sText.append(OOO_STRING_SVTOOLS_HTML_O_name);
-    sText.append("=\"");
-    sText.append(aName);
-    sText.append("\" ");
-    sText.append(OOO_STRING_SVTOOLS_HTML_O_content);
-    sText.append("=\"");
-    sText.append(aContent);
-    sText.append("\">");
+    sText.append(
+        "=\"" + aName
+        + "\" "
+        OOO_STRING_SVTOOLS_HTML_O_content
+        "=\""
+        + aContent
+        + "\">");
 
     SwPostItField aPostItField(
         static_cast<SwPostItFieldType*>(m_xDoc->getIDocumentFieldsAccess().GetSysFieldType( SwFieldIds::Postit )),

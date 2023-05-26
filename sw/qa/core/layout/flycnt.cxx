@@ -9,6 +9,9 @@
 
 #include <swmodeltestbase.hxx>
 
+#include <svx/svdview.hxx>
+#include <comphelper/propertyvalue.hxx>
+
 #include <IDocumentLayoutAccess.hxx>
 #include <anchoredobject.hxx>
 #include <flyfrms.hxx>
@@ -26,6 +29,7 @@
 #include <frameformats.hxx>
 #include <cellfrm.hxx>
 #include <ndtxt.hxx>
+#include <dflyobj.hxx>
 
 namespace
 {
@@ -37,12 +41,63 @@ public:
         : SwModelTestBase("/sw/qa/core/layout/data/")
     {
     }
+
+    /// Creates a document with a multi-page floating table: 1 columns and 2 rows.
+    void Create1x2SplitFly();
 };
+
+void Test::Create1x2SplitFly()
+{
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    SwPageDesc aStandard(pDoc->GetPageDesc(0));
+    SwFormatFrameSize aPageSize(aStandard.GetMaster().GetFrameSize());
+    // 10 cm for the page height, 2cm are the top and bottom margins, so 6cm remains for the body
+    // frame:
+    aPageSize.SetHeight(5669);
+    aStandard.GetMaster().SetFormatAttr(aPageSize);
+    pDoc->ChgPageDesc(0, aStandard);
+    // Insert a table:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    SwInsertTableOptions aTableOptions(SwInsertTableFlags::DefaultBorder, 0);
+    pWrtShell->InsertTable(aTableOptions, /*nRows=*/2, /*nCols=*/1);
+    pWrtShell->MoveTable(GotoPrevTable, fnTableStart);
+    pWrtShell->GoPrevCell();
+    pWrtShell->Insert("A1");
+    SwFormatFrameSize aRowSize(SwFrameSize::Minimum);
+    // 4 cm, so 2 rows don't fit 1 page.
+    aRowSize.SetHeight(2267);
+    pWrtShell->SetRowHeight(aRowSize);
+    pWrtShell->GoNextCell();
+    pWrtShell->Insert("A2");
+    pWrtShell->SetRowHeight(aRowSize);
+    // Select cell:
+    pWrtShell->SelAll();
+    // Select table:
+    pWrtShell->SelAll();
+    // Wrap the table in a text frame:
+    SwFlyFrameAttrMgr aMgr(true, pWrtShell, Frmmgr_Type::TEXT, nullptr);
+    pWrtShell->StartAllAction();
+    aMgr.InsertFlyFrame(RndStdIds::FLY_AT_PARA, aMgr.GetPos(), aMgr.GetSize());
+    pWrtShell->EndAllAction();
+    // Allow the text frame to split:
+    pWrtShell->StartAllAction();
+    auto& rFlys = *pDoc->GetSpzFrameFormats();
+    auto pFly = rFlys[0];
+    SwAttrSet aSet(pFly->GetAttrSet());
+    aSet.Put(SwFormatFlySplit(true));
+    pDoc->SetAttr(aSet, *pFly);
+    pWrtShell->EndAllAction();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    // We have 2 pages:
+    CPPUNIT_ASSERT(pPage1->GetNext());
+}
 
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWithTable)
 {
     // Given a document with a multi-page floating table:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable.docx");
 
     // When laying out that document:
@@ -91,7 +146,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWithTable)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyVertOffset)
 {
     // Given a document with a floattable, split on 2 pages and a positive vertical offset:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-vertoffset.docx");
 
     // When laying out that document:
@@ -135,7 +189,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyVertOffset)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFly3Pages)
 {
     // Given a document with a floattable, split on 3 pages:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-3pages.docx");
 
     // When laying out that document:
@@ -191,7 +244,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFly3Pages)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyRow)
 {
     // Given a document with a floattable, single row split on 2 pages:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-rowsplit.docx");
 
     // When laying out that document:
@@ -235,38 +287,10 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyRow)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyEnable)
 {
     // Given a document with a table in a textframe:
-    createSwDoc();
-    SwDocShell* pDocShell = getSwDocShell();
-    SwDoc* pDoc = getSwDoc();
-    SwPageDesc aStandard(pDoc->GetPageDesc(0));
-    SwFormatFrameSize aPageSize(aStandard.GetMaster().GetFrameSize());
-    // 5cm for the page height, 2cm are the top and bottom margins, so 1cm remains for the body
-    // frame:
-    aPageSize.SetHeight(2834);
-    aStandard.GetMaster().SetFormatAttr(aPageSize);
-    pDoc->ChgPageDesc(0, aStandard);
-    // Insert a table:
-    SwWrtShell* pWrtShell = pDocShell->GetWrtShell();
-    SwInsertTableOptions aTableOptions(SwInsertTableFlags::DefaultBorder, 0);
-    pWrtShell->InsertTable(aTableOptions, /*nRows=*/2, /*nCols=*/1);
-    pWrtShell->MoveTable(GotoPrevTable, fnTableStart);
-    pWrtShell->SelAll();
-    // Wrap it in a text frame:
-    SwFlyFrameAttrMgr aMgr(true, pWrtShell, Frmmgr_Type::TEXT, nullptr);
-    pWrtShell->StartAllAction();
-    aMgr.InsertFlyFrame(RndStdIds::FLY_AT_PARA, aMgr.GetPos(), aMgr.GetSize());
-    pWrtShell->EndAllAction();
-
-    // When allowing the text frame to split:
-    pWrtShell->StartAllAction();
-    SwFrameFormats& rFlys = *pDoc->GetSpzFrameFormats();
-    SwFrameFormat* pFly = rFlys[0];
-    SwAttrSet aSet(pFly->GetAttrSet());
-    aSet.Put(SwFormatFlySplit(true));
-    pDoc->SetAttr(aSet, *pFly);
-    pWrtShell->EndAllAction();
+    Create1x2SplitFly();
 
     // Then make sure that the layout is updated and we have 2 pages:
+    SwDoc* pDoc = getSwDoc();
     SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
     auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
     CPPUNIT_ASSERT(pPage1);
@@ -275,10 +299,45 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyEnable)
     CPPUNIT_ASSERT(pPage2);
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyDisable)
+{
+    // Given a document with a floating table, table split on 2 pages:
+    Create1x2SplitFly();
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    CPPUNIT_ASSERT(pPage1->GetNext());
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage1Fly = dynamic_cast<SwFlyAtContentFrame*>(rPage1Objs[0]);
+    CPPUNIT_ASSERT(pPage1Fly);
+    CPPUNIT_ASSERT(pPage1Fly->GetFollow());
+
+    // When turning the "split fly" checkbox off:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->StartAllAction();
+    auto& rFlys = *pDoc->GetSpzFrameFormats();
+    auto pFly = rFlys[0];
+    SwAttrSet aSet(pFly->GetAttrSet());
+    // Note how the UI puts a SwFormatFrameSize into this item set with a slightly different size
+    // (e.g. 3823 twips width -> 3821). This means that by accident the UI works even without the
+    // explicit RES_FLY_SPLIT handling in SwFlyFrame::UpdateAttr_(), but this test will fail when
+    // that is missing.
+    aSet.Put(SwFormatFlySplit(false));
+    pDoc->SetAttr(aSet, *pFly);
+    pWrtShell->EndAllAction();
+
+    // Then make sure the extra page and follow fly frame is joined:
+    CPPUNIT_ASSERT(!pPage1->GetNext());
+    // Without the accompanying fix in place, this test would have failed, the follow fly frame was
+    // moved to page 1, but it wasn't deleted.
+    CPPUNIT_ASSERT(!pPage1Fly->GetFollow());
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFooter)
 {
     // Given a document with a floattable, table split on 2 pages with headers/footers:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-footer.docx");
 
     // When laying out that document:
@@ -317,7 +376,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFooter)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFooter2Rows)
 {
     // Given a document with a 2nd page that contains the second half of a split row + a last row:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-footer-2rows.docx");
 
     // When laying out that document:
@@ -338,7 +396,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFooter2Rows)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFly2Cols)
 {
     // Given a document with a 2nd page that contains the second half of a split row and 2 columns:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-2cols.docx");
 
     // When laying out that document:
@@ -359,7 +416,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFly2Cols)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWidow)
 {
     // Given a document with a 2nd page that contains 2 lines, due to widow control:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-widow.docx");
 
     // When laying out that document:
@@ -405,7 +461,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWidow)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14)
 {
     // Given a Word 2010 document with 2 pages, one table row each:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-compat14.docx");
 
     // When laying out that document:
@@ -444,7 +499,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14Nosplit)
 {
     // Given a Word 2010 document with 2 pages, 2 rows on page 1, 1 row on page 2:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-compat14-nosplit.docx");
 
     // When laying out that document:
@@ -477,7 +531,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14Nosplit)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14Body)
 {
     // Given a Word 2010 document with 2 pages, 1 row on page 1, 1 row on page 2:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-compat14-body.docx");
 
     // When laying out that document:
@@ -514,7 +567,6 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14Body)
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFollowHorizontalPosition)
 {
     // Given a document with 2 pages, master fly on page 1, follow fly on page 2:
-    SwModelTestBase::FlySplitGuard aGuard;
     createSwDoc("floattable-hori-pos.docx");
 
     // When laying out that document:
@@ -548,43 +600,10 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyFollowHorizontalPosition)
 CPPUNIT_TEST_FIXTURE(Test, testCursorTraversal)
 {
     // Given a document with a multi-page floating table:
-    createSwDoc();
-    SwDoc* pDoc = getSwDoc();
-    SwPageDesc aStandard(pDoc->GetPageDesc(0));
-    SwFormatFrameSize aPageSize(aStandard.GetMaster().GetFrameSize());
-    // 5cm for the page height, 2cm are the top and bottom margins, so 1cm remains for the body
-    // frame:
-    aPageSize.SetHeight(2834);
-    aStandard.GetMaster().SetFormatAttr(aPageSize);
-    pDoc->ChgPageDesc(0, aStandard);
-    // Insert a table:
-    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
-    SwInsertTableOptions aTableOptions(SwInsertTableFlags::DefaultBorder, 0);
-    pWrtShell->InsertTable(aTableOptions, /*nRows=*/2, /*nCols=*/1);
-    pWrtShell->MoveTable(GotoPrevTable, fnTableStart);
-    pWrtShell->GoPrevCell();
-    pWrtShell->Insert("A1");
-    pWrtShell->GoNextCell();
-    pWrtShell->Insert("A2");
-    // Select cell:
-    pWrtShell->SelAll();
-    // Select table:
-    pWrtShell->SelAll();
-    // Wrap the table in a text frame:
-    SwFlyFrameAttrMgr aMgr(true, pWrtShell, Frmmgr_Type::TEXT, nullptr);
-    pWrtShell->StartAllAction();
-    aMgr.InsertFlyFrame(RndStdIds::FLY_AT_PARA, aMgr.GetPos(), aMgr.GetSize());
-    pWrtShell->EndAllAction();
-    // Allow the text frame to split:
-    pWrtShell->StartAllAction();
-    SwFrameFormats& rFlys = *pDoc->GetSpzFrameFormats();
-    SwFrameFormat* pFly = rFlys[0];
-    SwAttrSet aSet(pFly->GetAttrSet());
-    aSet.Put(SwFormatFlySplit(true));
-    pDoc->SetAttr(aSet, *pFly);
-    pWrtShell->EndAllAction();
+    Create1x2SplitFly();
 
     // When going from A1 to A2:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
     pWrtShell->GotoTable("Table1");
     SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
     CPPUNIT_ASSERT_EQUAL(OUString("A1"), pTextNode->GetText());
@@ -597,6 +616,310 @@ CPPUNIT_TEST_FIXTURE(Test, testCursorTraversal)
     // - Actual  : A1
     // i.e. the cursor didn't get from A1 to A2.
     CPPUNIT_ASSERT_EQUAL(OUString("A2"), pTextNode->GetText());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyRowDelete)
+{
+    // Given a document with a multi-page floating table:
+    Create1x2SplitFly();
+
+    // When deleting the row of A2:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GotoTable("Table1");
+    pWrtShell->Down(/*bSelect=*/false);
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    // We delete the right row:
+    CPPUNIT_ASSERT_EQUAL(OUString("A2"), pTextNode->GetText());
+    pWrtShell->DeleteRow();
+
+    // Then make sure we only have 1 page:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    CPPUNIT_ASSERT(!pPage1->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFly1stRowDelete)
+{
+    // Given a document with a multi-page floating table:
+    Create1x2SplitFly();
+
+    // When deleting the row of A1:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GotoTable("Table1");
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    // We delete the right row:
+    CPPUNIT_ASSERT_EQUAL(OUString("A1"), pTextNode->GetText());
+    pWrtShell->DeleteRow();
+
+    // Then make sure we only have 1 page:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    // Without the accompanying fix in place, this test would have failed, the follow fly was still
+    // on page 2.
+    CPPUNIT_ASSERT(!pPage1->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFly3rdRowDelete)
+{
+    // Given a document with a floattable, split on 3 pages:
+    createSwDoc("floattable-3pages.docx");
+
+    // When deleting the row of A3:
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->GotoTable("Table1");
+    pWrtShell->Down(/*bSelect=*/false);
+    pWrtShell->Down(/*bSelect=*/false);
+    SwTextNode* pTextNode = pWrtShell->GetCursor()->GetPointNode().GetTextNode();
+    // We delete the right row:
+    CPPUNIT_ASSERT_EQUAL(OUString("A3"), pTextNode->GetText());
+    pWrtShell->DeleteRow();
+
+    // Then make sure we only have 2 pages:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    // Without the accompanying fix in place, this test would have failed, page 3 was not deleted.
+    CPPUNIT_ASSERT(!pPage2->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFly2ndRowSelect)
+{
+    // Given a document with a multi-page floating table:
+    createSwDoc("floattable.docx");
+
+    // When selecting the second row:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
+    auto pPage2Fly = dynamic_cast<SwFlyAtContentFrame*>(rPage2Objs[0]);
+    const SwRect& aFollowArea = pPage2Fly->getFrameArea();
+    Point aTopCenter((aFollowArea.Left() + aFollowArea.Right()) / 2, aFollowArea.Top());
+    SwWrtShell* pWrtShell = getSwDocShell()->GetWrtShell();
+    pWrtShell->SelectObj(aTopCenter);
+
+    // Then make sure the first row is selected:
+    const SdrMarkList& rMarkList = pWrtShell->GetDrawView()->GetMarkedObjectList();
+    SdrObject* pSelectedObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
+    auto pSelectedVirtObj = dynamic_cast<SwVirtFlyDrawObj*>(pSelectedObj);
+    auto pSelected = static_cast<SwFlyAtContentFrame*>(pSelectedVirtObj->GetFlyFrame());
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 5
+    // - Actual  : 17
+    // i.e. a follow fly was possible to select (instead of its master)
+    CPPUNIT_ASSERT_EQUAL(pPage2Fly->GetPrecede()->GetFrameId(), pSelected->GetFrameId());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyInSection)
+{
+    // This crashed, the layout assumed that the floating table is directly under the body frame.
+    createSwDoc("floattable-in-section.docx");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyThenTable)
+{
+    // Given a document with a 2 page floating table, followed by an other table:
+    // Intentionally load the document as hidden to avoid layout during load (see TestTdf150616):
+    uno::Sequence<beans::PropertyValue> aFilterOptions = {
+        comphelper::makePropertyValue("Hidden", true),
+    };
+    mxComponent = loadFromDesktop(m_directories.getURLFromSrc(u"/sw/qa/core/layout/data/")
+                                      + "floattable-then-table.docx",
+                                  "com.sun.star.text.TextDocument", aFilterOptions);
+
+    // When layout is calculated during PDF export:
+    // Then make sure that finishes without errors:
+    // This crashed, due to a stack overflow in layout code.
+    save("writer_pdf_Export");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyInTextSection)
+{
+    // The document contains a DOCX cont sect break, which is mapped to a TextSection.
+    // This crashed, the anchor was split directly, so the follow anchor was moved outside the
+    // section frame, which is broken.
+    createSwDoc("floattable-in-text-section.docx");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyTableRowKeep)
+{
+    // Given a document with a floating table, 2.5 rows on the first page:
+    createSwDoc("floattable-table-row-keep.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that the expected amount of rows is on the first page:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage1Fly = dynamic_cast<SwFlyAtContentFrame*>(rPage1Objs[0]);
+    CPPUNIT_ASSERT(pPage1Fly);
+    SwFrame* pTab1 = pPage1Fly->GetLower();
+    SwFrame* pRow1 = pTab1->GetLower();
+    CPPUNIT_ASSERT(pRow1);
+    SwFrame* pRow2 = pRow1->GetNext();
+    // Without the accompanying fix in place, this test would have failed, the table on the first
+    // page only had 1 row, due to TableRowKeep kicking in for floating tables, which is incorrect.
+    CPPUNIT_ASSERT(pRow2);
+    SwFrame* pRow3 = pRow2->GetNext();
+    CPPUNIT_ASSERT(pRow3);
+    auto pCell3 = dynamic_cast<SwCellFrame*>(pRow3->GetLower());
+    CPPUNIT_ASSERT(pCell3->GetFollowCell());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyDeletedAnchor)
+{
+    // Given a document with a floating table that spans over 3 pages:
+    createSwDoc("floattable-deleted-anchor.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that there are 3 anchors for the 3 pages:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    SwFrame* pBody1 = pPage1->GetLower();
+    CPPUNIT_ASSERT(pBody1);
+    auto pAnchor1 = dynamic_cast<SwTextFrame*>(pBody1->GetLower()->GetNext());
+    CPPUNIT_ASSERT(pAnchor1);
+    SwTextFrame* pAnchor2 = pAnchor1->GetFollow();
+    CPPUNIT_ASSERT(pAnchor2);
+    SwTextFrame* pAnchor3 = pAnchor2->GetFollow();
+    // Without the accompanying fix in place, this test would have failed, the fly frame on the 3rd
+    // page was anchored to a text frame on the 2nd page, leading to a negative frame height.
+    CPPUNIT_ASSERT(pAnchor3);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyMultiCol)
+{
+    // Given a document with a floating table that is in a multi-col section:
+    createSwDoc("floattable-multi-col.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that the fly frame is not split, matching Word:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage1Fly = dynamic_cast<SwFlyAtContentFrame*>(rPage1Objs[0]);
+    CPPUNIT_ASSERT(pPage1Fly);
+    // Without the accompanying fix in place, this test would have failed, we tried to split and
+    // then hit an assertion failure.
+    CPPUNIT_ASSERT(!pPage1Fly->GetFollow());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyTabJoin)
+{
+    // Given a document with 3 pages and 2 tables: table on first and second page, 3rd page has no
+    // table:
+    createSwDoc("floattable-tab-join.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that all pages have the expected amount of fly frames:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    CPPUNIT_ASSERT(pPage2);
+    const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 2
+    // i.e. the 2nd page had 2 fly frames, hosting a split table, instead of joining that table and
+    // having 1 fly frame.
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage2Objs.size());
+    auto pPage3 = dynamic_cast<SwPageFrame*>(pPage2->GetNext());
+    CPPUNIT_ASSERT(pPage3);
+    CPPUNIT_ASSERT(!pPage3->GetSortedObjs());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyTabJoinLegacy)
+{
+    // Given a document with 3 pages and 2 tables: table on first and second page, 3rd page has no
+    // table (Word 2010 mode):
+    createSwDoc("floattable-tab-join-legacy.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that all pages have the expected amount of fly frames:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    CPPUNIT_ASSERT(pPage2);
+    const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 2
+    // i.e. the 2nd page had 2 fly frames, hosting a split table, instead of joining that table and
+    // having 1 fly frame (even after the non-legacy case was fixed already).
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage2Objs.size());
+    auto pPage3 = dynamic_cast<SwPageFrame*>(pPage2->GetNext());
+    CPPUNIT_ASSERT(pPage3);
+    CPPUNIT_ASSERT(!pPage3->GetSortedObjs());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyObjectFormatter)
+{
+    // Given a document with 3 pages and 2 tables: table on first and second page, 3rd page has no
+    // table:
+    createSwDoc("floattable-object-formatter.docx");
+
+    // When calculating the layout:
+    calcLayout();
+
+    // Then make sure we don't crash and also that all pages have the expected amount of fly frames:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    CPPUNIT_ASSERT(pPage2);
+    const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage2Objs.size());
+    auto pPage3 = dynamic_cast<SwPageFrame*>(pPage2->GetNext());
+    CPPUNIT_ASSERT(pPage3);
+    CPPUNIT_ASSERT(!pPage3->GetSortedObjs());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyNextLeafInSection)
+{
+    // Given a document with 4 pages: page 1 had a floating table, page 2 & 3 had a second floating
+    // table and finally page 4 is empty:
+    createSwDoc("floattable-next-leaf-in-section.docx");
+
+    // When calculating the layout:
+    // Then this never returned, the loop in SwFrame::GetNextFlyLeaf() never finished.
+    calcLayout();
 }
 }
 

@@ -562,7 +562,7 @@ public:
             const SfxStringItem* pJSON = static_cast<const SfxStringItem*>(pItem);
             if (pJSON)
             {
-                XGradient aGradient = XGradient::fromJSON(pJSON->GetValue());
+                basegfx::BGradient aGradient = basegfx::BGradient::fromJSON(pJSON->GetValue());
                 XFillGradientItem aItem(aGradient);
                 pArgs->Put(aItem);
             }
@@ -575,22 +575,24 @@ public:
             if (pColorItem)
             {
                 XFillColorItem aColorItem(*pColorItem);
-                aColorItem.GetThemeColor().clearTransformations();
+                model::ComplexColor aComplexColor = aColorItem.getComplexColor();
+
                 if (pArgs->GetItemState(SID_ATTR_COLOR_THEME_INDEX, false, &pItem) == SfxItemState::SET)
                 {
                     auto pIntItem = static_cast<const SfxInt16Item*>(pItem);
-                    aColorItem.GetThemeColor().setType(model::convertToThemeColorType(pIntItem->GetValue()));
+                    aComplexColor.setSchemeColor(model::convertToThemeColorType(pIntItem->GetValue()));
                 }
                 if (pArgs->GetItemState(SID_ATTR_COLOR_LUM_MOD, false, &pItem) == SfxItemState::SET)
                 {
                     auto pIntItem = static_cast<const SfxInt16Item*>(pItem);
-                    aColorItem.GetThemeColor().addTransformation({model::TransformationType::LumMod, pIntItem->GetValue()});
+                    aComplexColor.addTransformation({model::TransformationType::LumMod, pIntItem->GetValue()});
                 }
                 if (pArgs->GetItemState(SID_ATTR_COLOR_LUM_OFF, false, &pItem) == SfxItemState::SET)
                 {
                     auto pIntItem = static_cast<const SfxInt16Item*>(pItem);
-                    aColorItem.GetThemeColor().addTransformation({model::TransformationType::LumOff, pIntItem->GetValue()});
+                    aComplexColor.addTransformation({model::TransformationType::LumOff, pIntItem->GetValue()});
                 }
+                aColorItem.setComplexColor(aComplexColor);
                 pArgs->Put(aColorItem);
             }
         }
@@ -1963,7 +1965,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                 while( bLoop && pDlg->Execute() == RET_OK )
                 {
                     pDlg->GetAttr( aNewAttr );
-                    aLayerName   = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_NAME)).GetValue ();
+                    aLayerName   = aNewAttr.Get(ATTR_LAYER_NAME).GetValue ();
 
                     if( rLayerAdmin.GetLayer( aLayerName )
                         || aLayerName.isEmpty()
@@ -1987,8 +1989,8 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                 }
                 else
                 {
-                    aLayerTitle  = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_TITLE)).GetValue ();
-                    aLayerDesc   = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_DESC)).GetValue ();
+                    aLayerTitle  = aNewAttr.Get(ATTR_LAYER_TITLE).GetValue();
+                    aLayerDesc   = aNewAttr.Get(ATTR_LAYER_DESC).GetValue ();
                     bIsVisible   = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_VISIBLE)).GetValue ();
                     bIsLocked    = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_LOCKED)).GetValue () ;
                     bIsPrintable = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_PRINTABLE)).GetValue () ;
@@ -2120,7 +2122,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                     if (nRet != RET_OK)
                         break;
                     pDlg->GetAttr( aNewAttr );
-                    aLayerName   = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_NAME)).GetValue ();
+                    aLayerName   = aNewAttr.Get(ATTR_LAYER_NAME).GetValue ();
                     if (bDelete)
                     {
                         if( (rLayerAdmin.GetLayer( aLayerName ) && aLayerName != aOldLayerName)
@@ -2143,8 +2145,8 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
                 switch (nRet)
                 {
                     case RET_OK :
-                        aLayerTitle  = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_TITLE)).GetValue ();
-                        aLayerDesc   = static_cast<const SfxStringItem &>( aNewAttr.Get (ATTR_LAYER_DESC)).GetValue ();
+                        aLayerTitle  = aNewAttr.Get(ATTR_LAYER_TITLE).GetValue ();
+                        aLayerDesc   = aNewAttr.Get(ATTR_LAYER_DESC).GetValue ();
                         bIsVisible   = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_VISIBLE)).GetValue ();
                         bIsLocked    = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_LOCKED)).GetValue ();
                         bIsPrintable = static_cast<const SfxBoolItem &>( aNewAttr.Get (ATTR_LAYER_PRINTABLE)).GetValue ();
@@ -3281,8 +3283,7 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
         {
             if ( rReq.GetArgs() )
                 GetViewFrame()->SetChildWindow(SvxColorChildWindow::GetChildWindowId(),
-                                        static_cast<const SfxBoolItem&>(rReq.GetArgs()->
-                                        Get(SID_COLOR_CONTROL)).GetValue());
+                                        rReq.GetArgs()->Get(SID_COLOR_CONTROL).GetValue());
             else
                 GetViewFrame()->ToggleChildWindow(SvxColorChildWindow::GetChildWindowId() );
 
@@ -3341,16 +3342,27 @@ void DrawViewShell::FuTemporary(SfxRequest& rReq)
 
         case SID_NAVIGATOR:
         {
-            if ( rReq.GetArgs() )
-                GetViewFrame()->SetChildWindow(SID_NAVIGATOR,
-                                        static_cast<const SfxBoolItem&>(rReq.GetArgs()->
-                                        Get(SID_NAVIGATOR)).GetValue());
-            else
-                GetViewFrame()->ToggleChildWindow( SID_NAVIGATOR );
+            if (comphelper::LibreOfficeKit::isActive())
+            {
+                GetViewFrame()->ShowChildWindow(SID_SIDEBAR);
+                OUString panelId = "SdNavigatorPanel";
+                ::sfx2::sidebar::Sidebar::TogglePanel(
+                    panelId, GetViewFrame()->GetFrame().GetFrameInterface());
 
-            GetViewFrame()->GetBindings().Invalidate(SID_NAVIGATOR);
-            Cancel();
-            rReq.Ignore ();
+                Cancel();
+                rReq.Done();
+            } else {
+                if ( rReq.GetArgs() )
+                    GetViewFrame()->SetChildWindow(SID_NAVIGATOR,
+                                            static_cast<const SfxBoolItem&>(rReq.GetArgs()->
+                                            Get(SID_NAVIGATOR)).GetValue());
+                else
+                    GetViewFrame()->ToggleChildWindow( SID_NAVIGATOR );
+
+                GetViewFrame()->GetBindings().Invalidate(SID_NAVIGATOR);
+                Cancel();
+                rReq.Ignore ();
+            }
         }
         break;
 

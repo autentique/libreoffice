@@ -32,8 +32,9 @@
 #include <iterator>
 
 #include <com/sun/star/util/Color.hpp>
-#include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <basegfx/utils/gradienttools.hxx>
 
 class Chart2ImportTest : public ChartTest
 {
@@ -341,7 +342,8 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testDOCXChartValuesSize)
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testPPTChartSeries)
 {
     //test chart series names for ppt
-    uno::Sequence < OUString > seriesList = getImpressChartColumnDescriptions(u"/chart2/qa/extras/data/ppt/", "chart.ppt");
+    loadFromURL(u"ppt/chart.ppt");
+    uno::Sequence < OUString > seriesList = getImpressChartColumnDescriptions(0, 0);
 
     CPPUNIT_ASSERT_EQUAL(OUString("Column 1"), seriesList[0]);
     CPPUNIT_ASSERT_EQUAL(OUString("Column 2"), seriesList[1]);
@@ -572,7 +574,8 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testPPTXStackedNonStackedYAxis)
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testODPChartSeries)
 {
     //test chart series names for odp
-    uno::Sequence < OUString > seriesList = getImpressChartColumnDescriptions(u"/chart2/qa/extras/data/odp/", "chart.odp");
+    loadFromURL(u"odp/chart.odp");
+    uno::Sequence < OUString > seriesList = getImpressChartColumnDescriptions(0, 0);
     CPPUNIT_ASSERT_EQUAL(OUString("Column 1"), seriesList[0]);
     CPPUNIT_ASSERT_EQUAL(OUString("Column 2"), seriesList[1]);
     CPPUNIT_ASSERT_EQUAL(OUString("Column 3"), seriesList[2]);
@@ -581,7 +584,8 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testODPChartSeries)
 
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testBnc864396)
 {
-    uno::Reference< chart2::XChartDocument > xChartDoc(getChartDocFromImpress(u"/chart2/qa/extras/data/pptx/", "bnc864396.pptx"), uno::UNO_QUERY_THROW);
+    loadFromURL(u"pptx/bnc864396.pptx");
+    uno::Reference< chart2::XChartDocument > xChartDoc(getChartDocFromDrawImpress(0,0), uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT(xChartDoc->hasInternalDataProvider());
 
     uno::Reference< chart2::XInternalDataProvider > xDataProvider( xChartDoc->getDataProvider(), uno::UNO_QUERY_THROW );
@@ -618,12 +622,21 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testBnc889755)
     //tdf#139940 - the title's gradient was lost and was filled with solid blue, instead of a "blue underline".
     uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY_THROW);
     uno::Reference<drawing::XDrawPage> xPage(xDoc->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
+
     // Shape "Title 3"
+    // MCGR: Use the whole completely imported transparency gradient to check for correctness
     uno::Reference<beans::XPropertySet> xShapeProps(xPage->getByIndex(4), uno::UNO_QUERY_THROW);
-    awt::Gradient aTransparence;
+    awt::Gradient2 aTransparence;
     xShapeProps->getPropertyValue("FillTransparenceGradient") >>= aTransparence;
-    CPPUNIT_ASSERT(aTransparence.StartColor != aTransparence.EndColor);
-    CPPUNIT_ASSERT_EQUAL(COL_WHITE, Color(ColorTransparency, aTransparence.StartColor));
+    const basegfx::BColorStops aColorStops(aTransparence.ColorStops);
+
+    CPPUNIT_ASSERT_EQUAL(size_t(3), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.25, 0.25, 0.25));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 0.070000000000000007));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.25, 0.25, 0.25));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[2].getStopOffset(), 0.080000000000000002));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[2].getStopColor(), basegfx::BColor(1.0, 1.0, 1.0));
 }
 
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testBnc882383)
@@ -652,14 +665,20 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testTransparencyGradientValue)
     xPropertySet->getPropertyValue("FillTransparenceGradientName") >>= sTranspGradientName;
     CPPUNIT_ASSERT(!sTranspGradientName.isEmpty());
 
-    awt::Gradient aTransparenceGradient;
+    awt::Gradient2 aTransparenceGradient;
     uno::Reference< lang::XMultiServiceFactory > xFact(xChartDoc, uno::UNO_QUERY);
     CPPUNIT_ASSERT(xFact.is());
     uno::Reference< container::XNameAccess > xTransparenceGradient(xFact->createInstance("com.sun.star.drawing.TransparencyGradientTable"), uno::UNO_QUERY);
     uno::Any rTransparenceValue = xTransparenceGradient->getByName(sTranspGradientName);
     CPPUNIT_ASSERT(rTransparenceValue >>= aTransparenceGradient);
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(3355443), aTransparenceGradient.EndColor);
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(5000268), aTransparenceGradient.StartColor);
+    const basegfx::BColorStops aColorStops(aTransparenceGradient.ColorStops);
+
+    // MCGR: Use the whole completely imported transparency gradient to check for correctness
+    CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.3, 0.3, 0.3));
+    CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+    CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.2, 0.2, 0.2));
 }
 
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testSimpleStrictXLSX)
@@ -1564,7 +1583,8 @@ CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testTdf140489MultiSeriesChartAxisXLSX)
 
 CPPUNIT_TEST_FIXTURE(Chart2ImportTest, testInternalDataProvider)
 {
-    uno::Reference< chart2::XChartDocument > xChartDoc(getChartDocFromImpress(u"/chart2/qa/extras/data/odp/", "chart.odp"), uno::UNO_QUERY_THROW);
+    loadFromURL(u"odp/chart.odp");
+    uno::Reference< chart2::XChartDocument > xChartDoc(getChartDocFromDrawImpress(0,0), uno::UNO_QUERY_THROW);
     const uno::Reference< chart2::data::XDataProvider >& rxDataProvider = xChartDoc->getDataProvider();
 
     // Parse 42 array

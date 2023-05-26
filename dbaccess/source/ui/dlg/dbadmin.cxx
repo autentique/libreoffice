@@ -71,7 +71,7 @@ short ODbAdminDialog::Ok()
         // TODO : AR_ERROR is not handled correctly, we always close the dialog here
 }
 
-void ODbAdminDialog::PageCreated(const OString& rId, SfxTabPage& _rPage)
+void ODbAdminDialog::PageCreated(const OUString& rId, SfxTabPage& _rPage)
 {
     // register ourself as modified listener
     static_cast<OGenericAdministrationPage&>(_rPage).SetServiceFactory( getORB() );
@@ -80,7 +80,7 @@ void ODbAdminDialog::PageCreated(const OString& rId, SfxTabPage& _rPage)
     SfxTabDialogController::PageCreated(rId, _rPage);
 }
 
-void ODbAdminDialog::addDetailPage(const OString& rPageId, TranslateId pTextId, CreateTabPage pCreateFunc)
+void ODbAdminDialog::addDetailPage(const OUString& rPageId, TranslateId pTextId, CreateTabPage pCreateFunc)
 {
     AddTabPage(rPageId, DBA_RES(pTextId), pCreateFunc);
 }
@@ -142,7 +142,7 @@ void ODbAdminDialog::impl_selectDataSource(const css::uno::Any& _aDataSourceName
         case  ::dbaccess::DST_USERDEFINE10:
             {
                 OUString aTitle(DBA_RES(STR_PAGETITLE_ADVANCED));
-                AddTabPage("user" + OString::number(eType - dbaccess::DST_USERDEFINE1 + 1), aTitle, ODriversSettings::CreateUser);
+                AddTabPage("user" + OUString::number(eType - dbaccess::DST_USERDEFINE1 + 1), aTitle, ODriversSettings::CreateUser);
             }
             break;
         default:
@@ -183,7 +183,7 @@ void ODbAdminDialog::impl_resetPages(const Reference< XPropertySet >& _rxDatasou
     ::dbaccess::ODsnTypeCollection* pCollection = pCollectionItem->getCollection();
     if ( pCollection->determineType(getDatasourceType( *m_xExampleSet )) == ::dbaccess::DST_MYSQL_NATIVE )
     {
-        OString sMySqlNative("mysqlnative");
+        OUString sMySqlNative("mysqlnative");
         AddTabPage(sMySqlNative, DBA_RES(STR_PAGETITLE_CONNECTION), ODriversSettings::CreateMySQLNATIVE);
         RemoveTabPage("advanced");
         m_sMainPageID = sMySqlNative;
@@ -335,10 +335,12 @@ void ODbAdminDialog::createItemSet(std::unique_ptr<SfxItemSet>& _rpSet, rtl::Ref
     *pCounter++ = new OptionalBoolItem( DSID_PRIMARY_KEY_SUPPORT );
     *pCounter++ = new SfxInt32Item(DSID_MAX_ROW_SCAN, 100);
     *pCounter++ = new SfxBoolItem( DSID_RESPECTRESULTSETTYPE,false );
+    *pCounter++ = new SfxInt32Item(DSID_POSTGRES_PORTNUMBER, 5432);
 
     // create the pool
     static SfxItemInfo const aItemInfos[DSID_LAST_ITEM_ID - DSID_FIRST_ITEM_ID + 1] =
     {
+        {0,false},
         {0,false},
         {0,false},
         {0,false},

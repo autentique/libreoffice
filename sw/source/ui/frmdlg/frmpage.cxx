@@ -798,15 +798,9 @@ namespace
     };
 
 /// Checks if the current fly frame contains exactly one table.
-bool ContainsSingleTable(SwWrtShell* pWrtShell)
+bool ContainsSingleTable(const SwFrameFormat& rFlyFormat)
 {
-    const SwFrameFormat* pFlyFormat = pWrtShell->GetFlyFrameFormat();
-    if (!pFlyFormat)
-    {
-        return false;
-    }
-
-    const SwNodeIndex* pStartNode = pFlyFormat->GetContent().GetContentIdx();
+    const SwNodeIndex* pStartNode = rFlyFormat.GetContent().GetContentIdx();
     if (!pStartNode)
     {
         return false;
@@ -829,6 +823,12 @@ bool ContainsSingleTable(SwWrtShell* pWrtShell)
     }
 
     return true;
+}
+
+bool ContainsChain(const SwFrameFormat& rFlyFormat)
+{
+    const SwFormatChain& rChain = rFlyFormat.GetChain();
+    return rChain.GetPrev() || rChain.GetNext();
 }
 }
 
@@ -1047,10 +1047,11 @@ void SwFramePage::Reset( const SfxItemSet *rSet )
         m_xFlySplitCB->set_sensitive(m_xAnchorAtParaRB->get_active());
     }
 
-    if (!ContainsSingleTable(pSh))
+    const SwFrameFormat* pFlyFormat = pSh->GetFlyFrameFormat();
+    if (!pFlyFormat || !ContainsSingleTable(*pFlyFormat) || ContainsChain(*pFlyFormat))
     {
-        // Only allow fly split if the frame contains a single table, otherwise it would be hard the
-        // resulting model to Word formats.
+        // Only allow fly split if the frame contains a single table, otherwise it would be hard to
+        // save the resulting model to Word formats.
         m_xFlySplitCB->hide();
     }
 
@@ -1099,7 +1100,7 @@ bool SwFramePage::FillItemSet(SfxItemSet *rSet)
             OSL_ENSURE( pSh , "shell not found");
             if (pSh)
             {
-                SwFormatAnchor aAnc( eAnchorId, pSh->GetPhyPageNum() );
+                SwFormatAnchor aAnc( eAnchorId, eAnchorId == RndStdIds::FLY_AT_PAGE ? pSh->GetPhyPageNum() : 0 );
                 bRet = nullptr != rSet->Put( aAnc );
             }
         }
@@ -1767,7 +1768,7 @@ DeactivateRC SwFramePage::DeactivatePage(SfxItemSet * _pSet)
             if (pSh)
             {
                 RndStdIds eAnchorId = GetAnchor();
-                SwFormatAnchor aAnc( eAnchorId, pSh->GetPhyPageNum() );
+                SwFormatAnchor aAnc( eAnchorId, eAnchorId == RndStdIds::FLY_AT_PAGE ? pSh->GetPhyPageNum() : 0 );
                 _pSet->Put( aAnc );
             }
         }
@@ -2492,8 +2493,7 @@ void SwGrfExtPage::ActivatePage(const SfxItemSet& rSet)
             m_xConnectED->set_text(m_aNewGrfName);
         }
         OUString referer;
-        SfxStringItem const * it = static_cast<SfxStringItem const *>(
-            rSet.GetItem(SID_REFERER));
+        SfxStringItem const * it = rSet.GetItem(SID_REFERER);
         if (it != nullptr) {
             referer = it->GetValue();
         }

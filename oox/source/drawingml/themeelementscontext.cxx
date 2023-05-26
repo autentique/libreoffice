@@ -45,17 +45,21 @@ public:
     FillStyleListContext(ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList, model::FormatScheme& rFormatScheme);
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
-private:
+protected:
     FillStyleList& mrFillStyleList;
-    //model::FormatScheme& mrFormatScheme;
+    model::FormatScheme& mrFormatScheme;
+    virtual model::FillStyle* createAndAddFillStyle()
+    {
+        return mrFormatScheme.addFillStyle();
+    }
 };
 
 }
 
-FillStyleListContext::FillStyleListContext(ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList, model::FormatScheme& /*rFormatScheme*/)
+FillStyleListContext::FillStyleListContext(ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList, model::FormatScheme& rFormatScheme)
     : ContextHandler2(rParent)
     , mrFillStyleList(rFillStyleList)
-    //, mrFormatScheme(rFormatScheme)
+    , mrFormatScheme(rFormatScheme)
 {
 }
 
@@ -71,7 +75,8 @@ ContextHandlerRef FillStyleListContext::onCreateContext( sal_Int32 nElement, con
         case A_TOKEN( grpFill ):
         {
             mrFillStyleList.push_back(std::make_shared<FillProperties>());
-            return FillPropertiesContext::createFillContext(*this, nElement, rAttribs, *mrFillStyleList.back(), nullptr);
+            model::FillStyle* pFillStyle = createAndAddFillStyle();
+            return FillPropertiesContext::createFillContext(*this, nElement, rAttribs, *mrFillStyleList.back(), pFillStyle);
         }
     }
     return nullptr;
@@ -86,6 +91,12 @@ public:
     BackgroundFillStyleListContext(ContextHandler2Helper const & rParent, FillStyleList& rFillStyleList, model::FormatScheme& rFormatScheme)
         : FillStyleListContext(rParent, rFillStyleList, rFormatScheme)
     {}
+
+protected:
+    model::FillStyle* createAndAddFillStyle() override
+    {
+        return mrFormatScheme.addBackgroundFillStyle();
+    }
 };
 
 } // end anonymous ns
@@ -95,28 +106,33 @@ namespace {
 class LineStyleListContext : public ContextHandler2
 {
 public:
-    LineStyleListContext( ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList );
+    LineStyleListContext(ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList, model::FormatScheme& rFormatScheme);
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
 private:
+    model::FormatScheme& mrFormatScheme;
     LineStyleList& mrLineStyleList;
 };
 
 }
 
-LineStyleListContext::LineStyleListContext( ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList ) :
-    ContextHandler2( rParent ),
-    mrLineStyleList( rLineStyleList )
+LineStyleListContext::LineStyleListContext( ContextHandler2Helper const & rParent, LineStyleList& rLineStyleList, model::FormatScheme& rFormatScheme)
+    : ContextHandler2(rParent)
+    , mrFormatScheme(rFormatScheme)
+    , mrLineStyleList(rLineStyleList)
 {
 }
 
 ContextHandlerRef LineStyleListContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
 {
-    switch( nElement )
+    switch (nElement)
     {
-        case A_TOKEN( ln ):
+        case A_TOKEN(ln):
+        {
             mrLineStyleList.push_back( std::make_shared<LineProperties>( ) );
-            return new LinePropertiesContext( *this, rAttribs, *mrLineStyleList.back() );
+            model::LineStyle* pLineStyle = mrFormatScheme.addLineStyle();
+            return new LinePropertiesContext(*this, rAttribs, *mrLineStyleList.back(), pLineStyle);
+        }
     }
     return nullptr;
 }
@@ -126,18 +142,22 @@ namespace {
 class EffectStyleListContext : public ContextHandler2
 {
 public:
-    EffectStyleListContext( ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList );
+    EffectStyleListContext(ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList, model::FormatScheme& rFormatScheme);
     virtual ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
 
 private:
+    model::FormatScheme& mrFormatScheme;
+    model::EffectStyle* mpEffectStyle;
     EffectStyleList& mrEffectStyleList;
 };
 
 }
 
-EffectStyleListContext::EffectStyleListContext( ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList ) :
-    ContextHandler2( rParent ),
-    mrEffectStyleList( rEffectStyleList )
+EffectStyleListContext::EffectStyleListContext( ContextHandler2Helper const & rParent, EffectStyleList& rEffectStyleList, model::FormatScheme& rFormatScheme)
+    : ContextHandler2(rParent)
+    , mrFormatScheme(rFormatScheme)
+    , mpEffectStyle(nullptr)
+    , mrEffectStyleList(rEffectStyleList)
 {
 }
 
@@ -146,13 +166,17 @@ ContextHandlerRef EffectStyleListContext::onCreateContext( sal_Int32 nElement, c
     switch( nElement )
     {
         case A_TOKEN( effectStyle ):
+        {
+            mpEffectStyle = mrFormatScheme.addEffectStyle();
             mrEffectStyleList.push_back( std::make_shared<EffectProperties>( ) );
             return this;
-
+        }
         case A_TOKEN( effectLst ):  // CT_EffectList
+        {
             if( mrEffectStyleList.back() )
-                return new EffectPropertiesContext( *this, *mrEffectStyleList.back() );
-            break;
+                return new EffectPropertiesContext(*this, *mrEffectStyleList.back(), mpEffectStyle);
+        }
+        break;
     }
     return nullptr;
 }
@@ -303,10 +327,10 @@ ContextHandlerRef ThemeElementsContext::onCreateContext(sal_Int32 nElement, cons
         case A_TOKEN( clrScheme ):  // CT_ColorScheme
         {
             OUString aColorSchemeName = rAttribs.getStringDefaulted(XML_name);
-            mrTheme.SetColorSet(std::make_unique<model::ColorSet>(aColorSchemeName));
+            mrTheme.setColorSet(std::make_shared<model::ColorSet>(aColorSchemeName));
             if (rAttribs.hasAttribute(XML_name))
                 mrOoxTheme.getClrScheme().SetName(rAttribs.getStringDefaulted(XML_name));
-            return new clrSchemeContext(*this, mrOoxTheme.getClrScheme(), *mrTheme.GetColorSet());
+            return new clrSchemeContext(*this, mrOoxTheme.getClrScheme(), *mrTheme.getColorSet());
         }
         case A_TOKEN( fontScheme ): // CT_FontScheme
         {
@@ -324,11 +348,11 @@ ContextHandlerRef ThemeElementsContext::onCreateContext(sal_Int32 nElement, cons
         }
 
         case A_TOKEN( fillStyleLst ):   // CT_FillStyleList
-            return new FillStyleListContext( *this, mrOoxTheme.getFillStyleList(), mrTheme.getFormatScheme());
+            return new FillStyleListContext(*this, mrOoxTheme.getFillStyleList(), mrTheme.getFormatScheme());
         case A_TOKEN( lnStyleLst ):    // CT_LineStyleList
-            return new LineStyleListContext( *this, mrOoxTheme.getLineStyleList() );
+            return new LineStyleListContext(*this, mrOoxTheme.getLineStyleList(), mrTheme.getFormatScheme());
         case A_TOKEN( effectStyleLst ): // CT_EffectStyleList
-            return new EffectStyleListContext( *this, mrOoxTheme.getEffectStyleList() );
+            return new EffectStyleListContext(*this, mrOoxTheme.getEffectStyleList(), mrTheme.getFormatScheme());
         case A_TOKEN( bgFillStyleLst ): // CT_BackgroundFillStyleList
             return new BackgroundFillStyleListContext( *this, mrOoxTheme.getBgFillStyleList(), mrTheme.getFormatScheme());
     }

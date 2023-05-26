@@ -334,9 +334,11 @@ static OUString lcl_xmltble_appendBoxPrefix(std::u16string_view rNamePrefix,
                                                 false );
     const SvXMLAttrContainerItem *pAttCnt = rItemSet.GetItemIfSet( RES_UNKNOWNATR_CONTAINER,
                                                 false );
+    const SvxPrintItem *pHasTextChangesOnly = rItemSet.GetItemIfSet( RES_PRINT, false);
 
     // empty styles have not to be exported
-    if( !pVertOrient && !pBrush && !pBox && !pNumFormat && !pFrameDir && !pAttCnt )
+    if( !pVertOrient && !pBrush && !pBox && !pNumFormat && !pFrameDir && !pAttCnt &&
+        !pHasTextChangesOnly )
     {
         m_rFormatMap.try_emplace(&rFrameFormat); // empty just to enable assert
         return {};
@@ -357,6 +359,7 @@ static OUString lcl_xmltble_appendBoxPrefix(std::u16string_view rNamePrefix,
         const SwTableBoxNumFormat *pTestNumFormat = nullptr;
         const SvxFrameDirectionItem *pTestFrameDir = nullptr;
         const SvXMLAttrContainerItem *pTestAttCnt = nullptr;
+        const SvxPrintItem *pTestHasTextChangesOnly = rItemSet.GetItemIfSet( RES_PRINT, false);
         const SwFrameFormat* pTestFormat = *i;
         const SfxItemSet& rTestSet = pTestFormat->GetAttrSet();
         if( const SwFormatVertOrient* pItem = rTestSet.GetItemIfSet( RES_VERT_ORIENT, false ) )
@@ -443,6 +446,19 @@ static OUString lcl_xmltble_appendBoxPrefix(std::u16string_view rNamePrefix,
 
         }
 
+        if( const SvxPrintItem* pItem = rTestSet.GetItemIfSet( RES_PRINT, false ) )
+        {
+            if( !pHasTextChangesOnly )
+                break;
+
+            pTestHasTextChangesOnly = pItem;
+        }
+        else
+        {
+            if( pHasTextChangesOnly )
+                continue;
+        }
+
         if( pVertOrient &&
             pVertOrient->GetVertOrient() != pTestVertOrient->GetVertOrient() )
             continue;
@@ -460,6 +476,9 @@ static OUString lcl_xmltble_appendBoxPrefix(std::u16string_view rNamePrefix,
             continue;
 
         if( pAttCnt && ( *pAttCnt != *pTestAttCnt ) )
+            continue;
+
+        if( pHasTextChangesOnly && (!pHasTextChangesOnly->GetValue() != !pTestHasTextChangesOnly->GetValue()) )
             continue;
 
         // found!
@@ -537,9 +556,9 @@ void SwXMLExport::ExportTableColumnStyle( const SwXMLTableColumn_Impl& rCol )
     {
         SvXMLElementExport aElem( *this, XML_NAMESPACE_STYLE, XML_STYLE, true,
                                   true );
-        OUStringBuffer sValue;
         if( rCol.GetWidthOpt() )
         {
+            OUStringBuffer sValue;
             GetTwipUnitConverter().convertMeasureToXML( sValue,
                     rCol.GetWidthOpt() );
             AddAttribute( XML_NAMESPACE_STYLE, XML_COLUMN_WIDTH,
@@ -547,10 +566,9 @@ void SwXMLExport::ExportTableColumnStyle( const SwXMLTableColumn_Impl& rCol )
         }
         if( rCol.GetRelWidth() )
         {
-            sValue.append( static_cast<sal_Int32>(rCol.GetRelWidth()) );
-            sValue.append( '*' );
+            OUString sValue = OUString::number(static_cast<sal_Int32>(rCol.GetRelWidth()) ) + "*";
             AddAttribute( XML_NAMESPACE_STYLE, XML_REL_COLUMN_WIDTH,
-                          sValue.makeStringAndClear() );
+                          sValue );
         }
 
         {

@@ -143,7 +143,6 @@ class SwTableFormulaUpdate;
 class SwAutoFormatGetDocNode;
 class SwVirtPageNumInfo;
 class SwFindNearestNode;
-class SwStringMsgPoolItem;
 class SwFltAnchor;
 class SwFltTOX;
 class SwFltRedline;
@@ -432,17 +431,12 @@ constexpr TypedWhichId<SwPtrMsgPoolItem> RES_OBJECTDYING(RES_FORMAT_MSG_BEGIN); 
 constexpr TypedWhichId<SwFormatChg> RES_FMT_CHG(168);
 constexpr TypedWhichId<SwAttrSetChg> RES_ATTRSET_CHG(169);
 constexpr TypedWhichId<SwUpdateAttr> RES_UPDATE_ATTR(170);
-constexpr TypedWhichId<SwPtrMsgPoolItem> RES_REFMARKFLD_UPDATE(171);
-constexpr TypedWhichId<SwTableFormulaUpdate> RES_TABLEFML_UPDATE(173);
-constexpr TypedWhichId<SwMsgPoolItem> RES_UPDATEDDETBL(174);
-constexpr TypedWhichId<SwMsgPoolItem> RES_TBLHEADLINECHG(175);
 constexpr TypedWhichId<SwAutoFormatGetDocNode> RES_AUTOFMT_DOCNODE(176);
 constexpr TypedWhichId<SwMsgPoolItem> RES_HIDDENPARA_PRINT(178);
 constexpr TypedWhichId<SwVirtPageNumInfo> RES_VIRTPAGENUM_INFO(180);
 constexpr TypedWhichId<SwPtrMsgPoolItem> RES_REMOVE_UNO_OBJECT(181);
 // empty
 constexpr TypedWhichId<SwFindNearestNode> RES_FINDNEARESTNODE(184);
-constexpr TypedWhichId<SwPtrMsgPoolItem> RES_CONTENT_VISIBLE(185);
 constexpr sal_uInt16 RES_FORMAT_MSG_END(190);
 
 // An ID for the RTF-reader. The stylesheets are treated like attributes,

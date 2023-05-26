@@ -225,6 +225,12 @@ SpellDialog::SpellDialog(SpellDialogChildWindow* pChildWindow,
 
 SpellDialog::~SpellDialog()
 {
+    if (m_xOptionsDlg)
+    {
+        m_xOptionsDlg->response(RET_CANCEL);
+        m_xOptionsDlg.reset();
+    }
+
     if (m_pInitHdlEvent)
         Application::RemoveUserEvent(m_pInitHdlEvent);
     if (pImpl)
@@ -462,19 +468,22 @@ IMPL_LINK_NOARG(SpellDialog, CheckGrammarHdl, weld::Toggleable&, void)
 
 void SpellDialog::StartSpellOptDlg_Impl()
 {
-    SfxItemSetFixed<SID_AUTOSPELL_CHECK,SID_AUTOSPELL_CHECK> aSet( SfxGetpApp()->GetPool() );
-    SfxSingleTabDialogController aDlg(m_xDialog.get(), &aSet, "cui/ui/spelloptionsdialog.ui", "SpellOptionsDialog");
+    auto xSet = std::make_shared<SfxItemSetFixed<SID_AUTOSPELL_CHECK,SID_AUTOSPELL_CHECK>>( SfxGetpApp()->GetPool() );
+    m_xOptionsDlg = std::make_shared<SfxSingleTabDialogController>(
+        m_xDialog.get(), xSet.get(), "content", "cui/ui/spelloptionsdialog.ui", "SpellOptionsDialog");
 
-    std::unique_ptr<SfxTabPage> xPage = SvxLinguTabPage::Create(aDlg.get_content_area(), &aDlg, &aSet);
+    std::unique_ptr<SfxTabPage> xPage = SvxLinguTabPage::Create(m_xOptionsDlg->get_content_area(), m_xOptionsDlg.get(), xSet.get());
     static_cast<SvxLinguTabPage*>(xPage.get())->HideGroups( GROUP_MODULES );
-    aDlg.SetTabPage(std::move(xPage));
-    if (RET_OK == aDlg.run())
-    {
-        InitUserDicts();
-        const SfxItemSet* pOutSet = aDlg.GetOutputItemSet();
-        if(pOutSet)
-            OfaTreeOptionsDialog::ApplyLanguageOptions(*pOutSet);
-    }
+    m_xOptionsDlg->SetTabPage(std::move(xPage));
+    weld::GenericDialogController::runAsync(m_xOptionsDlg, [this, xSet] (sal_uInt32 nResult) {
+        if (RET_OK == nResult)
+        {
+            InitUserDicts();
+            const SfxItemSet* pOutSet = m_xOptionsDlg->GetOutputItemSet();
+            if(pOutSet)
+                OfaTreeOptionsDialog::ApplyLanguageOptions(*pOutSet);
+        }
+    });
 }
 
 namespace
@@ -833,15 +842,15 @@ int SpellDialog::InitUserDicts()
 
 IMPL_LINK_NOARG(SpellDialog, AddToDictClickHdl, weld::Button&, void)
 {
-    AddToDictionaryExecute(OString::number(1));
+    AddToDictionaryExecute(OUString::number(1));
 }
 
-IMPL_LINK(SpellDialog, AddToDictSelectHdl, const OString&, rIdent, void)
+IMPL_LINK(SpellDialog, AddToDictSelectHdl, const OUString&, rIdent, void)
 {
     AddToDictionaryExecute(rIdent);
 }
 
-void SpellDialog::AddToDictionaryExecute(const OString& rItemId)
+void SpellDialog::AddToDictionaryExecute(const OUString& rItemId)
 {
     auto xGuard(std::make_unique<UndoChangeGroupGuard>(*m_xSentenceED));
 
@@ -1526,7 +1535,7 @@ void SentenceEditWindow_Impl::Init(weld::Toolbar* pToolbar)
     m_pToolbar->connect_clicked(LINK(this,SentenceEditWindow_Impl,ToolbarHdl));
 }
 
-IMPL_LINK(SentenceEditWindow_Impl, ToolbarHdl, const OString&, rCurItemId, void)
+IMPL_LINK(SentenceEditWindow_Impl, ToolbarHdl, const OUString&, rCurItemId, void)
 {
     if (rCurItemId == "paste")
     {

@@ -523,7 +523,7 @@ void ScXMLTableRowCellContext::PushFormat(sal_Int32 nBegin, sal_Int32 nEnd, cons
             case EE_CHAR_FONTWIDTH:
             {
                 if (!pPoolItem)
-                    pPoolItem.reset(new SvxCharScaleWidthItem(100, pEntry->mnItemID));
+                    pPoolItem.reset(new SvxCharScaleWidthItem(100, TypedWhichId<SvxCharScaleWidthItem>(pEntry->mnItemID)));
 
                 pPoolItem->PutValue(rProp.maValue, pEntry->mnFlag);
             }
@@ -539,7 +539,7 @@ void ScXMLTableRowCellContext::PushFormat(sal_Int32 nBegin, sal_Int32 nEnd, cons
             case EE_CHAR_EMPHASISMARK:
             {
                 if (!pPoolItem)
-                    pPoolItem.reset(new SvxEmphasisMarkItem(FontEmphasisMark::NONE, pEntry->mnItemID));
+                    pPoolItem.reset(new SvxEmphasisMarkItem(FontEmphasisMark::NONE, TypedWhichId<SvxEmphasisMarkItem>(pEntry->mnItemID)));
 
                 pPoolItem->PutValue(rProp.maValue, pEntry->mnFlag);
             }
@@ -838,6 +838,16 @@ void ScXMLTableRowCellContext::SetAnnotation(const ScAddress& rPos)
     if( mxAnnotationData->mxShape.is() && mxAnnotationData->mxShapes.is() )
     {
         OSL_ENSURE( mxAnnotationData->mxShapes.get() == xShapes.get(), "ScXMLTableRowCellContext::SetAnnotation - different drawing pages" );
+
+        /*  Don't attempt to get the style from the SdrObject,
+            as it might be a default assigned one. */
+        auto pStyle = rXMLImport.GetShapeImport()->GetAutoStylesContext()->FindStyleChildContext(
+            XmlStyleFamily::SD_GRAPHICS_ID, mxAnnotationData->maStyleName);
+        OUString aStyleName = pStyle ? pStyle->GetParentName() : mxAnnotationData->maStyleName;
+        assert(!rXMLImport.GetShapeImport()->GetAutoStylesContext()->FindStyleChildContext(
+            XmlStyleFamily::SD_GRAPHICS_ID, aStyleName));
+        aStyleName = rXMLImport.GetStyleDisplayName(XmlStyleFamily::SD_GRAPHICS_ID, aStyleName);
+
         SdrObject* pObject = SdrObject::getSdrObjectFromXShape(mxAnnotationData->mxShape);
         OSL_ENSURE( pObject, "ScXMLTableRowCellContext::SetAnnotation - cannot get SdrObject from shape" );
 
@@ -849,7 +859,7 @@ void ScXMLTableRowCellContext::SetAnnotation(const ScAddress& rPos)
             {
                 OSL_ENSURE( !pCaption->GetLogicRect().IsEmpty(), "ScXMLTableRowCellContext::SetAnnotation - invalid caption rectangle" );
                 // create the cell note with the caption object
-                pNote = ScNoteUtil::CreateNoteFromCaption( *pDoc, rPos, pCaption );
+                pNote = ScNoteUtil::CreateNoteFromCaption( *pDoc, rPos, pCaption, !aStyleName.isEmpty() );
                 // forget pointer to object (do not create note again below)
                 pObject = nullptr;
             }
@@ -880,13 +890,13 @@ void ScXMLTableRowCellContext::SetAnnotation(const ScAddress& rPos)
                 if(!comphelper::LibreOfficeKit::isActive())
                 {
                     pNote = ScNoteUtil::CreateNoteFromObjectData( *pDoc, rPos,
-                        std::move(aItemSet), *pOutlinerObj,
+                        std::move(aItemSet), aStyleName, *pOutlinerObj,
                         aCaptionRect, mxAnnotationData->mbShown );
                 }
                 else
                 {
                     pNote = ScNoteUtil::CreateNoteFromObjectData( *pDoc, rPos,
-                        std::move(aItemSet), *pOutlinerObj,
+                        std::move(aItemSet), aStyleName, *pOutlinerObj,
                         aCaptionRect, false );
                 }
 
@@ -1483,7 +1493,7 @@ bool ScXMLTableRowCellContext::IsPossibleErrorString() const
         return false;
     else if(mbNewValueType && mbErrorValue)
         return true;
-    return mbPossibleErrorCell || (mbCheckWithCompilerForError &&
+    return mbPossibleErrorCell || (mbCheckWithCompilerForError && maStringValue &&
             GetScImport().GetFormulaErrorConstant(*maStringValue) != FormulaError::NONE);
 }
 

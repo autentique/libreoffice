@@ -137,11 +137,11 @@ namespace svx
 
     void ToolboxButtonColorUpdaterBase::Update(const NamedColor &rNamedColor)
     {
-        Update(rNamedColor.first);
+        Update(rNamedColor.m_aColor);
         if (!mbWideButton)
         {
             // Also show the current color as QuickHelpText
-            OUString colorSuffix = OUString(" (%1)").replaceFirst("%1", rNamedColor.second);
+            OUString colorSuffix = OUString(" (%1)").replaceFirst("%1", rNamedColor.m_aName);
             OUString colorHelpText = maCommandLabel + colorSuffix;
 
             SetQuickHelpText(colorHelpText);
@@ -248,9 +248,9 @@ namespace svx
         return sColorName;
     }
 
-    ToolboxButtonColorUpdater::ToolboxButtonColorUpdater(sal_uInt16 nSlotId, const OString& rTbxBtnId, weld::Toolbar* ptrTbx, bool bWideButton,
+    ToolboxButtonColorUpdater::ToolboxButtonColorUpdater(sal_uInt16 nSlotId, const OUString& rTbxBtnId, weld::Toolbar* ptrTbx, bool bWideButton,
                                                          const OUString& rCommandLabel, const css::uno::Reference<css::frame::XFrame>& rFrame)
-        : ToolboxButtonColorUpdaterBase(bWideButton, rCommandLabel, OUString::fromUtf8(rTbxBtnId), rFrame)
+        : ToolboxButtonColorUpdaterBase(bWideButton, rCommandLabel, rTbxBtnId, rFrame)
         , msBtnId(rTbxBtnId)
         , mpTbx(ptrTbx)
     {

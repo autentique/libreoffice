@@ -612,7 +612,7 @@ void SectionPropertyMap::ApplyBorderToPageStyles( DomainMapper_Impl& rDM_Impl,
     {
         if ( m_oBorderLines[nBorder] )
         {
-            const OUString sBorderName = getPropertyName( aBorderIds[nBorder] );
+            const OUString & sBorderName = getPropertyName( aBorderIds[nBorder] );
             if ( xFirst.is() )
                 xFirst->setPropertyValue( sBorderName, uno::Any( *m_oBorderLines[nBorder] ) );
             if ( xSecond.is() )
@@ -665,8 +665,8 @@ void SectionPropertyMap::SetBorderDistance( const uno::Reference< beans::XProper
 {
     if (!xStyle.is())
         return;
-    const OUString sMarginName = getPropertyName( eMarginId );
-    const OUString sBorderDistanceName = getPropertyName( eDistId );
+    const OUString & sMarginName = getPropertyName( eMarginId );
+    const OUString & sBorderDistanceName = getPropertyName( eDistId );
     uno::Any aMargin = xStyle->getPropertyValue( sMarginName );
     sal_Int32 nMargin = 0;
     aMargin >>= nMargin;
@@ -760,7 +760,7 @@ uno::Reference< text::XTextColumns > SectionPropertyMap::ApplyColumnProperties( 
     assert( m_nColumnCount > 1 && "ApplyColumnProperties called without any columns" );
     try
     {
-        const OUString sTextColumns = getPropertyName( PROP_TEXT_COLUMNS );
+        const OUString & sTextColumns = getPropertyName( PROP_TEXT_COLUMNS );
         if ( xColumnContainer.is() )
             xColumnContainer->getPropertyValue( sTextColumns ) >>= xColumns;
         uno::Reference< beans::XPropertySet > xColumnPropSet( xColumns, uno::UNO_QUERY_THROW );
@@ -863,7 +863,7 @@ void SectionPropertyMap::CopyHeaderFooterTextProperty( const uno::Reference< bea
                                                        PropertyIds ePropId )
 {
     try {
-        OUString sName = getPropertyName( ePropId );
+        const OUString & sName = getPropertyName( ePropId );
 
         SAL_INFO( "writerfilter", "Copying " << sName );
         uno::Reference< text::XTextCopy > xTxt;
@@ -897,8 +897,8 @@ void SectionPropertyMap::CopyHeaderFooter( const DomainMapper_Impl& rDM_Impl,
     }
     bool bHasPrevHeader = false;
     bool bHeaderIsShared = true;
-    OUString sHeaderIsOn = getPropertyName( PROP_HEADER_IS_ON );
-    OUString sHeaderIsShared = getPropertyName( PROP_HEADER_IS_SHARED );
+    const OUString & sHeaderIsOn = getPropertyName( PROP_HEADER_IS_ON );
+    const OUString & sHeaderIsShared = getPropertyName( PROP_HEADER_IS_SHARED );
     if ( xPrevStyle.is() )
     {
         xPrevStyle->getPropertyValue( sHeaderIsOn ) >>= bHasPrevHeader;
@@ -925,8 +925,8 @@ void SectionPropertyMap::CopyHeaderFooter( const DomainMapper_Impl& rDM_Impl,
 
     bool bHasPrevFooter = false;
     bool bFooterIsShared = true;
-    OUString sFooterIsOn = getPropertyName( PROP_FOOTER_IS_ON );
-    OUString sFooterIsShared = getPropertyName( PROP_FOOTER_IS_SHARED );
+    const OUString & sFooterIsOn = getPropertyName( PROP_FOOTER_IS_ON );
+    const OUString & sFooterIsShared = getPropertyName( PROP_FOOTER_IS_SHARED );
     if ( xPrevStyle.is() )
     {
         xPrevStyle->getPropertyValue( sFooterIsOn ) >>= bHasPrevFooter;
@@ -1129,99 +1129,6 @@ void SectionPropertyMap::HandleMarginsHeaderFooter( bool bFirstPage, DomainMappe
     // by moving the header/footer text into a flyframe anchored to the header/footer,
     // leaving an empty dummy header/footer.
     rDM_Impl.ConvertHeaderFooterToTextFrame(m_bDynamicHeightTop, m_bDynamicHeightBottom);
-}
-
-bool SectionPropertyMap::FloatingTableConversion( const DomainMapper_Impl& rDM_Impl, FloatingTableInfo& rInfo )
-{
-    // always convert non-floating tables to floating ones in footnotes and endnotes
-    if ( rInfo.m_bConvertToFloatingInFootnote )
-        return true;
-    // This is OOXML version of the code deciding if the table needs to be
-    // in a floating frame.
-    // For ww8 code, see SwWW8ImplReader::FloatingTableConversion in
-    // sw/source/filter/ww8/ww8par.cxx
-    // The two should do the same, so if you make changes here, please check
-    // that the other is in sync.
-
-    // Note that this is just a list of heuristics till sw core can have a
-    // table that is floating and can span over multiple pages at the same
-    // time.
-
-    // If there is an explicit section break right after a table, then there
-    // will be no wrapping anyway.
-    if (rDM_Impl.m_bConvertedTable && !rDM_Impl.GetIsLastSectionGroup() && rInfo.m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_nextPage)
-        return false;
-
-    sal_Int32 nVertOrientPosition = rInfo.getPropertyValue(u"VertOrientPosition").get<sal_Int32>();
-    sal_Int16 nHoriOrientRelation = rInfo.getPropertyValue( u"HoriOrientRelation" ).get<sal_Int16>();
-    if (nVertOrientPosition < 0 && nHoriOrientRelation != text::RelOrientation::PAGE_FRAME)
-    {
-        // Negative vertical position: then need a floating table, as normal tables can't have
-        // negative top margins.
-        return true;
-    }
-
-    sal_Int32 nPageWidth = GetPageWidth();
-    sal_Int32 nTextAreaWidth = nPageWidth - GetLeftMargin() - GetRightMargin();
-    // Count the layout width of the table.
-    sal_Int32 nTableWidth = rInfo.m_nTableWidth;
-    if (rInfo.m_nTableWidthType == text::SizeType::VARIABLE)
-    {
-        nTableWidth *= nTextAreaWidth / 100.0;
-    }
-    sal_Int32 nLeftMargin = 0;
-    if ( rInfo.getPropertyValue( u"LeftMargin" ) >>= nLeftMargin )
-        nTableWidth += nLeftMargin;
-    sal_Int32 nRightMargin = 0;
-    if ( rInfo.getPropertyValue( u"RightMargin" ) >>= nRightMargin )
-        nTableWidth += nRightMargin;
-
-    sal_Int16 nVertOrientRelation = rInfo.getPropertyValue( u"VertOrientRelation" ).get<sal_Int16>();
-    if ( nHoriOrientRelation == text::RelOrientation::PAGE_FRAME && nVertOrientRelation == text::RelOrientation::PAGE_FRAME )
-    {
-        sal_Int16 nHoriOrient = rInfo.getPropertyValue( u"HoriOrient" ).get<sal_Int16>();
-        sal_Int16 nVertOrient = rInfo.getPropertyValue( u"VertOrient" ).get<sal_Int16>();
-        if ( nHoriOrient == text::HoriOrientation::NONE && nVertOrient == text::VertOrientation::NONE )
-        {
-            // Anchor position is relative to the page horizontally and vertically as well and is an absolute position.
-            // The more close we are to the left edge, the less likely there will be any wrapping.
-            // The more close we are to the bottom, the more likely the table will span over to the next page
-            // So if we're in the bottom left quarter, don't do any conversion.
-            sal_Int32 nHoriOrientPosition = rInfo.getPropertyValue( u"HoriOrientPosition" ).get<sal_Int32>();
-            sal_Int32 nPageHeight = getProperty( PROP_HEIGHT )->second.get<sal_Int32>();
-            if ( nHoriOrientPosition < (nPageWidth / 2) && nVertOrientPosition >( nPageHeight / 2 ) )
-                return false;
-        }
-    }
-
-    // It seems Word has a limit here, so that in case the table width is quite
-    // close to the text area width, then it won't perform a wrapping, even in
-    // case the content (e.g. an empty paragraph) would fit. The magic constant
-    // here represents this limit.
-    const sal_Int32 nMagicNumber = 469;
-
-    // If the table's width is smaller than the text area width, text might
-    // be next to the table and so it should behave as a floating table.
-    if ( (nTableWidth + nMagicNumber) < nTextAreaWidth )
-        return true;
-
-    // If the position is relative to the edge of the page, then we need to check the whole
-    // page width to see whether text can fit next to the table.
-    if ( nHoriOrientRelation == text::RelOrientation::PAGE_FRAME )
-    {
-        // If the table is wide enough so that no text fits next to it, then don't create a fly
-        // for the table: no wrapping will be performed anyway, but multi-page
-        // tables will be broken.
-        if ((nTableWidth + nMagicNumber) < (nPageWidth - std::min(GetLeftMargin(), GetRightMargin())))
-            return true;
-    }
-
-    // If there are columns, always create the fly, otherwise the columns would
-    // restrict geometry of the table.
-    if ( ColumnCount() > 1 )
-        return true;
-
-    return false;
 }
 
 void SectionPropertyMap::InheritOrFinalizePageStyles( DomainMapper_Impl& rDM_Impl )
@@ -1484,56 +1391,6 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
                 m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
         }
     }
-
-    // Text area width is known at the end of a section: decide if tables should be converted or not.
-    std::vector<FloatingTableInfo>& rPendingFloatingTables = rDM_Impl.m_aPendingFloatingTables;
-    for ( FloatingTableInfo & rInfo : rPendingFloatingTables )
-    {
-        rInfo.m_nBreakType = m_nBreakType;
-        if ( FloatingTableConversion( rDM_Impl, rInfo ) )
-        {
-            uno::Reference<text::XTextAppendAndConvert> xBodyText(
-                            rInfo.m_bConvertToFloatingInFootnote
-                                ? rInfo.m_xStart->getText()
-                                : rDM_Impl.GetBodyText(), uno::UNO_QUERY );
-            std::deque<css::uno::Any> aFramedRedlines = rDM_Impl.m_aStoredRedlines[StoredRedlines::FRAME];
-            try
-            {
-                std::vector<sal_Int32> redPos, redLen;
-                std::vector<OUString> redCell;
-                std::vector<OUString> redTable;
-                BeforeConvertToTextFrame(aFramedRedlines, redPos, redLen, redCell, redTable);
-                const uno::Reference< text::XTextContent >& xTextContent =
-                        xBodyText->convertToTextFrame(rInfo.m_xStart, rInfo.m_xEnd,
-                                              rInfo.m_aFrameProperties);
-
-                // paragraph of the anchoring point of the floating table needs zero top and bottom
-                // margins, if the table was a not floating table in the footnote, otherwise
-                // docDefault margins could result bigger vertical spaces around the table
-                if ( rInfo.m_bConvertToFloatingInFootnote && xTextContent.is() )
-                {
-                    uno::Reference<beans::XPropertySet> xParagraph(
-                                    xTextContent->getAnchor(), uno::UNO_QUERY);
-                    if ( xParagraph.is() )
-                    {
-                        xParagraph->setPropertyValue("ParaTopMargin",
-                                    uno::Any(static_cast<sal_Int32>(0)));
-                        xParagraph->setPropertyValue("ParaBottomMargin",
-                                    uno::Any(static_cast<sal_Int32>(0)));
-                    }
-                }
-
-                AfterConvertToTextFrame(rDM_Impl, aFramedRedlines, redPos, redLen, redCell, redTable);
-            }
-            catch (const uno::Exception&)
-            {
-                DBG_UNHANDLED_EXCEPTION("writerfilter", "convertToTextFrame() failed");
-            }
-
-            aFramedRedlines.clear();
-        }
-    }
-    rPendingFloatingTables.clear();
 
     try
     {
@@ -1944,7 +1801,7 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
     }
     if ( nParagraphWidth > 0 )
     {
-        const OUString sPropRelativeWidth = getPropertyName(PROP_RELATIVE_WIDTH);
+        const OUString & sPropRelativeWidth = getPropertyName(PROP_RELATIVE_WIDTH);
         for ( const auto& xShape : m_xRelativeWidthShapes )
         {
             const uno::Reference<beans::XPropertySet> xShapePropertySet( xShape, uno::UNO_QUERY );
@@ -2126,27 +1983,6 @@ ParagraphProperties::ParagraphProperties()
     , m_yAlign( -1 )
     , m_nDropCapLength( 0 )
 {
-}
-
-bool ParagraphProperties::operator==( const ParagraphProperties& rCompare ) const
-{
-    return ( m_bFrameMode  == rCompare.m_bFrameMode &&
-             m_nDropCap    == rCompare.m_nDropCap &&
-             m_nLines      == rCompare.m_nLines &&
-             m_w           == rCompare.m_w &&
-             m_h           == rCompare.m_h &&
-             m_nWrap       == rCompare.m_nWrap &&
-             m_hAnchor     == rCompare.m_hAnchor &&
-             m_vAnchor     == rCompare.m_vAnchor &&
-             m_x           == rCompare.m_x &&
-             m_bxValid     == rCompare.m_bxValid &&
-             m_y           == rCompare.m_y &&
-             m_byValid     == rCompare.m_byValid &&
-             m_hSpace      == rCompare.m_hSpace &&
-             m_vSpace      == rCompare.m_vSpace &&
-             m_hRule       == rCompare.m_hRule &&
-             m_xAlign      == rCompare.m_xAlign &&
-             m_yAlign      == rCompare.m_yAlign );
 }
 
 void ParagraphProperties::ResetFrameProperties()

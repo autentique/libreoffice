@@ -17,12 +17,16 @@
 #include <attrib.hxx>
 #include <stlpool.hxx>
 #include <formulacell.hxx>
+#include <postit.hxx>
 #include <validat.hxx>
+#include <scresid.hxx>
+#include <globstr.hrc>
 
 #include <editeng/wghtitem.hxx>
 #include <editeng/postitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/editobj.hxx>
+#include <editeng/fhgtitem.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/justifyitem.hxx>
 #include <comphelper/scopeguard.hxx>
@@ -30,10 +34,12 @@
 #include <tools/fldunit.hxx>
 #include <svl/numformat.hxx>
 #include <svl/zformat.hxx>
+#include <svx/svdocapt.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
 #include <com/sun/star/drawing/XDrawPages.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
@@ -124,6 +130,38 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testRotatedImageODS)
     const OUString sY(sTranslate.getToken(1, ' '));
     CPPUNIT_ASSERT(sX.endsWith("mm"));
     CPPUNIT_ASSERT(sY.endsWith("mm"));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf120177)
+{
+    createScDoc("xls/tdf120177.xls");
+
+    // Error: unexpected attribute "form:input-required"
+    skipValidation();
+
+    save("calc8");
+    xmlDocUniquePtr pXmlDoc = parseExport("content.xml");
+    CPPUNIT_ASSERT(pXmlDoc);
+
+    // Without the fix in place, this test would have failed with
+    // no attribute 'value' exist
+    assertXPath(pXmlDoc,
+                "/office:document-content/office:body/office:spreadsheet/table:table/office:forms/"
+                "form:form/form:radio[1]",
+                "value", "1");
+    assertXPath(pXmlDoc,
+                "/office:document-content/office:body/office:spreadsheet/table:table/office:forms/"
+                "form:form/form:radio[2]",
+                "value", "2");
+    const OUString sGroupName1 = getXPath(pXmlDoc,
+                                          "/office:document-content/office:body/office:spreadsheet/"
+                                          "table:table/office:forms/form:form/form:radio[1]",
+                                          "group-name");
+    const OUString sGroupName2 = getXPath(pXmlDoc,
+                                          "/office:document-content/office:body/office:spreadsheet/"
+                                          "table:table/office:forms/form:form/form:radio[2]",
+                                          "group-name");
+    CPPUNIT_ASSERT_EQUAL(sGroupName1, sGroupName2);
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf85553)
@@ -416,6 +454,27 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testHeaderFontStyleXLSX)
                && static_cast<const SvxPostureItem&>(*rAttrib.pAttr).GetPosture() == ITALIC_NORMAL;
     });
     CPPUNIT_ASSERT_MESSAGE("Second line should be italic.", bHasItalic);
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf154445_unused_pagestyles)
+{
+    createScDoc("ods/tdf108188_pagestyle.ods");
+
+    // Check if the user defined page style is present
+    const OUString aTestPageStyle = "TestPageStyle";
+    ScDocument* pDoc = getScDoc();
+    CPPUNIT_ASSERT_EQUAL(aTestPageStyle, pDoc->GetPageStyle(0));
+
+    // Change page style to default so the user defined one is not used anymore
+    pDoc->SetPageStyle(0, ScResId(STR_STYLENAME_STANDARD));
+
+    // Save and reload the document to check if the unused page styles are still present
+    saveAndReload("calc8");
+    pDoc = getScDoc();
+
+    // Without the accompanying fix in place, the unused page styles don't exist anymore
+    ScStyleSheetPool* pStylePool = pDoc->GetStyleSheetPool();
+    CPPUNIT_ASSERT(pStylePool->Find(aTestPageStyle, SfxStyleFamily::Page));
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf135828_Shape_Rect)
@@ -1401,24 +1460,34 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf148820)
 
 namespace
 {
-void lcl_TestEmbeddedTextInDecimal(ScDocument& rDoc)
+void lcl_TestNumberFormat(ScDocument& rDoc, const OUString& rFormatStrOK)
 {
     sal_uInt32 nNumberFormat = rDoc.GetNumberFormat(0, 0, 0);
     const SvNumberformat* pNumberFormat = rDoc.GetFormatTable()->GetEntry(nNumberFormat);
     const OUString& rFormatStr = pNumberFormat->GetFormatstring();
 
-    CPPUNIT_ASSERT_EQUAL(OUString("#,##0.000\" \"###\" \"###"), rFormatStr);
+    CPPUNIT_ASSERT_EQUAL(rFormatStrOK, rFormatStr);
 }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testSecondsWithoutTruncateAndDecimals)
+{
+    createScDoc("xlsx/seconds-without-truncate-and-decimals.xlsx");
+    lcl_TestNumberFormat(*getScDoc(), "[SS].00");
+
+    // save to ODS and reload
+    saveAndReload("calc8");
+    lcl_TestNumberFormat(*getScDoc(), "[SS].00");
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testEmbeddedTextInDecimal)
 {
     createScDoc("xlsx/embedded-text-in-decimal.xlsx");
-    lcl_TestEmbeddedTextInDecimal(*getScDoc());
+    lcl_TestNumberFormat(*getScDoc(), "#,##0.000\" \"###\" \"###");
 
     // save to ODS and reload
     saveAndReload("calc8");
-    lcl_TestEmbeddedTextInDecimal(*getScDoc());
+    lcl_TestNumberFormat(*getScDoc(), "#,##0.000\" \"###\" \"###");
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest4, testTotalsRowFunction)
@@ -1452,8 +1521,9 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testAutofilterHiddenButton)
     CPPUNIT_ASSERT(pDocXml);
     for (int i = 1; i <= 5; i++)
     {
-        auto sPath = "/x:table/x:autoFilter/x:filterColumn[" + std::to_string(i) + "]";
-        assertXPath(pDocXml, sPath.c_str(), "hiddenButton", "1");
+        OString sPath
+            = OString::Concat("/x:table/x:autoFilter/x:filterColumn[") + OString::number(i) + "]";
+        assertXPath(pDocXml, sPath, "hiddenButton", "1");
     }
 }
 
@@ -1473,8 +1543,9 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testShapeStyles)
         uno::Reference<style::XStyle> xStyle(
             xMSF->createInstance("com.sun.star.style.GraphicStyle"), uno::UNO_QUERY_THROW);
         xGraphicStyles->insertByName("MyStyle1", Any(xStyle));
-        uno::Reference<beans::XPropertySet>(xStyle, uno::UNO_QUERY_THROW)
-            ->setPropertyValue("FillColor", Any(COL_RED));
+        uno::Reference<beans::XPropertySet> xPropertySet(xStyle, uno::UNO_QUERY_THROW);
+        xPropertySet->setPropertyValue("FillColor", Any(COL_RED));
+        xPropertySet->setPropertyValue("FillTransparence", Any(sal_Int16(40)));
 
         xStyle.set(xMSF->createInstance("com.sun.star.style.GraphicStyle"), uno::UNO_QUERY_THROW);
         xGraphicStyles->insertByName("MyStyle2", Any(xStyle));
@@ -1514,7 +1585,142 @@ CPPUNIT_TEST_FIXTURE(ScExportTest4, testShapeStyles)
         Color nColor;
         xShape->getPropertyValue("FillColor") >>= nColor;
         CPPUNIT_ASSERT_EQUAL(COL_RED, nColor);
+        CPPUNIT_ASSERT_EQUAL(sal_Int16(40),
+                             xShape->getPropertyValue("FillTransparence").get<sal_Int16>());
     }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testCommentStyles)
+{
+    createScDoc("ods/comment.ods");
+
+    {
+        ScDocument* pDoc = getScDoc();
+
+        ScAddress aPos(0, 0, 0);
+        ScPostIt* pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+
+        auto pCaption = pNote->GetCaption();
+        CPPUNIT_ASSERT(pCaption);
+
+        // Check that we don't keep the shadow attribute as DF
+        // (see ScNoteUtil::CreateNoteFromCaption)
+        CPPUNIT_ASSERT_LESSEQUAL(SfxItemState::DEFAULT,
+                                 pCaption->GetMergedItemSet().GetItemState(SDRATTR_SHADOW, false));
+
+        auto pStyleSheet = &pDoc->GetStyleSheetPool()->Make("MyStyle1", SfxStyleFamily::Frame);
+        auto& rSet = pStyleSheet->GetItemSet();
+        rSet.Put(SvxFontHeightItem(1129, 100, EE_CHAR_FONTHEIGHT));
+
+        pCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), false);
+
+        // Hidden comments use different code path on import
+        pNote->ShowCaption(aPos, false);
+    }
+
+    saveAndReload("calc8");
+
+    {
+        ScDocument aDoc;
+        aDoc.InitDrawLayer();
+        aDoc.TransferTab(*getScDoc(), 0, 0);
+
+        ScAddress aPos(0, 0, 0);
+        ScPostIt* pNote = aDoc.GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+
+        auto pCaption = pNote->GetOrCreateCaption(aPos);
+        CPPUNIT_ASSERT(pCaption);
+
+        // Check that the style was imported, and survived copying
+        CPPUNIT_ASSERT_EQUAL(OUString("MyStyle1"), pCaption->GetStyleSheet()->GetName());
+    }
+
+    saveAndReload("Calc Office Open XML");
+
+    {
+        ScDocument* pDoc = getScDoc();
+
+        ScAddress aPos(0, 0, 0);
+        ScPostIt* pNote = pDoc->GetNote(aPos);
+        CPPUNIT_ASSERT(pNote);
+
+        auto pCaption = pNote->GetOrCreateCaption(aPos);
+        CPPUNIT_ASSERT(pCaption);
+
+        // Check that the style formatting is preserved
+        CPPUNIT_ASSERT_EQUAL(sal_uInt32(1129),
+                             pCaption->GetMergedItemSet().Get(EE_CHAR_FONTHEIGHT).GetHeight());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf119565)
+{
+    createScDoc("xlsx/tdf119565.xlsx");
+    saveAndReload("Calc Office Open XML");
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPage> xPage(xDoc->getDrawPages()->getByIndex(0),
+                                             uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xShapeProps(xPage->getByIndex(0), uno::UNO_QUERY_THROW);
+
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 35
+    // - Actual  : 0
+    // i.e. line width inherited from theme lost after export.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(35),
+                         xShapeProps->getPropertyValue("LineWidth").get<sal_Int32>());
+
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 3
+    // - Actual  : 4
+    // i.e. line joint inherited from theme lost after export.
+    CPPUNIT_ASSERT_EQUAL(drawing::LineJoint_MITER,
+                         xShapeProps->getPropertyValue("LineJoint").get<drawing::LineJoint>());
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf152980)
+{
+    createScDoc("csv/tdf152980.csv");
+    ScDocShell* pDocSh = getScDocShell();
+    pDocSh->DoHardRecalc();
+    saveAndReload("Calc Office Open XML");
+    pDocSh = getScDocShell();
+    pDocSh->DoHardRecalc();
+
+    ScDocument* pDoc = getScDoc();
+
+    // - Expected: The part between a and b does not change
+    // - Actual  : Only the characters a and b remain
+    CPPUNIT_ASSERT_EQUAL(OUString("a_x1_b"), pDoc->GetString(0, 0, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString("a_x01_b"), pDoc->GetString(0, 1, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString("a_x001_b"), pDoc->GetString(0, 2, 0));
+
+    // The character code does not change in both cases
+    CPPUNIT_ASSERT_EQUAL(OUString("a_x0001_b"), pDoc->GetString(0, 3, 0));
+
+    // The escape characters are handled correctly in both cases
+    CPPUNIT_ASSERT_EQUAL(OUString("a_xfoo\nb"), pDoc->GetString(0, 4, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString("a\tb"), pDoc->GetString(0, 5, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString("a\nb"), pDoc->GetString(0, 6, 0));
+    CPPUNIT_ASSERT_EQUAL(OUString("a\n\nb"), pDoc->GetString(0, 7, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest4, testTdf100034)
+{
+    createScDoc("xlsx/tdf100034.xlsx");
+    ScDocument* pDoc = getScDoc();
+
+    // Clear print ranges
+    pDoc->ClearPrintRanges(0);
+
+    // Save and load back
+    saveAndReload("Calc Office Open XML");
+
+    // Check if the same print ranges are present
+    pDoc = getScDoc();
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(0), pDoc->GetPrintRangeCount(0));
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

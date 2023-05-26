@@ -227,7 +227,7 @@ void SidebarController::disposeDecks()
             const std::string hide = UnoNameFromDeckId(msCurrentDeckId, GetCurrentContext());
             if (!hide.empty())
                 pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                                       (hide + "=false").c_str());
+                                                       OString(hide + "=false"));
         }
 
         if (mpParentWindow)
@@ -802,13 +802,13 @@ void SidebarController::SwitchToDeck (
                 const std::string hide = UnoNameFromDeckId(msCurrentDeckId, GetCurrentContext());
                 if (!hide.empty())
                     pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                                           (hide + "=false").c_str());
+                                                           OString(hide + "=false"));
             }
 
             const std::string show = UnoNameFromDeckId(rDeckDescriptor.msId, GetCurrentContext());
             if (!show.empty())
                 pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                                       (show + "=true").c_str());
+                                                       OString(show + "=true"));
         }
     }
 
@@ -1092,8 +1092,8 @@ void SidebarController::PopulatePopupMenus(weld::Menu& rMenu, weld::Menu& rCusto
     sal_Int32 nIndex (0);
     for (const auto& rItem : rMenuData)
     {
-        OString sIdent("select" + OString::number(nIndex));
-        rMenu.insert(nIndex, OUString::fromUtf8(sIdent), rItem.msDisplayName,
+        OUString sIdent("select" + OUString::number(nIndex));
+        rMenu.insert(nIndex, sIdent, rItem.msDisplayName,
                      nullptr, nullptr, nullptr, TRISTATE_FALSE);
         rMenu.set_active(sIdent, rItem.mbIsCurrentDeck);
         rMenu.set_sensitive(sIdent, rItem.mbIsEnabled && rItem.mbIsActive);
@@ -1103,15 +1103,15 @@ void SidebarController::PopulatePopupMenus(weld::Menu& rMenu, weld::Menu& rCusto
             if (rItem.mbIsCurrentDeck)
             {
                 // Don't allow the currently visible deck to be disabled.
-                OString sSubIdent("nocustomize" + OString::number(nIndex));
-                rCustomizationMenu.insert(nIndex, OUString::fromUtf8(sSubIdent), rItem.msDisplayName,
+                OUString sSubIdent("nocustomize" + OUString::number(nIndex));
+                rCustomizationMenu.insert(nIndex, sSubIdent, rItem.msDisplayName,
                                           nullptr, nullptr, nullptr, TRISTATE_FALSE);
                 rCustomizationMenu.set_active(sSubIdent, true);
             }
             else
             {
-                OString sSubIdent("customize" + OString::number(nIndex));
-                rCustomizationMenu.insert(nIndex, OUString::fromUtf8(sSubIdent), rItem.msDisplayName,
+                OUString sSubIdent("customize" + OUString::number(nIndex));
+                rCustomizationMenu.insert(nIndex, sSubIdent, rItem.msDisplayName,
                                           nullptr, nullptr, nullptr, TRISTATE_TRUE);
                 rCustomizationMenu.set_active(sSubIdent, rItem.mbIsEnabled && rItem.mbIsActive);
             }
@@ -1138,7 +1138,7 @@ void SidebarController::PopulatePopupMenus(weld::Menu& rMenu, weld::Menu& rCusto
     rMenu.set_visible("customization", !comphelper::LibreOfficeKit::isActive());
 }
 
-IMPL_LINK(SidebarController, OnMenuItemSelected, const OString&, rCurItemId, void)
+IMPL_LINK(SidebarController, OnMenuItemSelected, const OUString&, rCurItemId, void)
 {
     if (rCurItemId == "unlocktaskpanel")
     {
@@ -1171,7 +1171,7 @@ IMPL_LINK(SidebarController, OnMenuItemSelected, const OString&, rCurItemId, voi
     {
         try
         {
-            OString sNumber;
+            OUString sNumber;
             if (rCurItemId.startsWith("select", &sNumber))
             {
                 RequestOpenDeck();
@@ -1185,7 +1185,7 @@ IMPL_LINK(SidebarController, OnMenuItemSelected, const OString&, rCurItemId, voi
     }
 }
 
-IMPL_LINK(SidebarController, OnSubMenuItemSelected, const OString&, rCurItemId, void)
+IMPL_LINK(SidebarController, OnSubMenuItemSelected, const OUString&, rCurItemId, void)
 {
     if (rCurItemId == "restoredefault")
         mpTabBar->RestoreHideFlags();
@@ -1193,7 +1193,7 @@ IMPL_LINK(SidebarController, OnSubMenuItemSelected, const OString&, rCurItemId, 
     {
         try
         {
-            OString sNumber;
+            OUString sNumber;
             if (rCurItemId.startsWith("customize", &sNumber))
             {
                 mpTabBar->ToggleHideFlag(sNumber.toInt32());
@@ -1233,8 +1233,7 @@ void SidebarController::RequestCloseDeck()
             aJsonWriter.put("type", "dockingwindow");
             aJsonWriter.put("text", mpParentWindow->GetText());
             aJsonWriter.put("enabled", false);
-            const std::string message = aJsonWriter.extractAsStdString();
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_JSDIALOG, message.c_str());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_JSDIALOG, aJsonWriter.finishAndGetAsOString());
         }
         else if (pViewShell)
         {
@@ -1242,8 +1241,7 @@ void SidebarController::RequestCloseDeck()
             aJsonWriter.put("id", mpParentWindow->get_id());
             aJsonWriter.put("action", "close");
             aJsonWriter.put("jsontype", "sidebar");
-            const std::string message = aJsonWriter.extractAsStdString();
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_JSDIALOG, message.c_str());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_JSDIALOG, aJsonWriter.finishAndGetAsOString());
         }
     }
 
@@ -1322,7 +1320,7 @@ void SidebarController::UpdateDeckOpenState()
                     const std::string uno = UnoNameFromDeckId(msCurrentDeckId, GetCurrentContext());
                     if (!uno.empty())
                         pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                                                (uno + "=true").c_str());
+                                                                OString(uno + "=true"));
                 }
             }
         }
@@ -1360,7 +1358,7 @@ void SidebarController::UpdateDeckOpenState()
                     const std::string uno = UnoNameFromDeckId(msCurrentDeckId, GetCurrentContext());
                     if (!uno.empty())
                         pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                                                (uno + "=false").c_str());
+                                                                OString(uno + "=false"));
                 }
             }
         }

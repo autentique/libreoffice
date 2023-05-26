@@ -37,7 +37,7 @@
 #include <toolkit/awt/vclxwindows.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <toolkit/helper/convert.hxx>
-#include <toolkit/helper/property.hxx>
+#include <helper/property.hxx>
 #include <rtl/math.hxx>
 #include <sal/log.hxx>
 #include <utility>
@@ -1532,9 +1532,9 @@ void VCLXWindow::setProperty( const OUString& PropertyName, const css::uno::Any&
             {
                 INetURLObject aHelpURL( aURL );
                 if ( aHelpURL.GetProtocol() == INetProtocol::Hid )
-                    pWindow->SetHelpId( OUStringToOString( aHelpURL.GetURLPath(), RTL_TEXTENCODING_UTF8 ) );
+                    pWindow->SetHelpId( aHelpURL.GetURLPath() );
                 else
-                    pWindow->SetHelpId( OUStringToOString( aURL, RTL_TEXTENCODING_UTF8 ) );
+                    pWindow->SetHelpId( aURL );
             }
         }
         break;
@@ -2042,10 +2042,7 @@ css::uno::Any VCLXWindow::getProperty( const OUString& PropertyName )
             }
             break;
             case BASEPROPERTY_HELPURL:
-            {
-                OUString aHelpId( OStringToOUString( GetWindow()->GetHelpId(), RTL_TEXTENCODING_UTF8 ) );
-                aProp <<= aHelpId;
-            }
+                aProp <<= GetWindow()->GetHelpId();
             break;
             case BASEPROPERTY_FONTDESCRIPTOR:
             {

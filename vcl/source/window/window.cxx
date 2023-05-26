@@ -62,7 +62,7 @@
 #include <com/sun/star/accessibility/AccessibleRelation.hpp>
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/XAccessibleEditableText.hpp>
-#include <com/sun/star/awt/XWindowPeer.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
 #include <com/sun/star/datatransfer/dnd/XDragGestureRecognizer.hpp>
 #include <com/sun/star/datatransfer/dnd/XDropTarget.hpp>
@@ -571,7 +571,7 @@ Window::~Window()
 
 ::OutputDevice* Window::GetOutDev()
 {
-    return mpWindowImpl->mxOutDev.get();
+    return mpWindowImpl ? mpWindowImpl->mxOutDev.get() : nullptr;
 }
 
 Color WindowOutputDevice::GetBackgroundColor() const
@@ -736,7 +736,6 @@ WindowImpl::WindowImpl( vcl::Window& rWindow, WindowType nType )
     mbDoubleBufferingRequested = bDoubleBuffer; // when we are not sure, assume it cannot do double-buffering via RenderContext
     mpLOKNotifier                       = nullptr;
     mnLOKWindowId                       = 0;
-    mbLOKParentNotifier                 = false;
     mbUseFrameData                      = false;
 }
 
@@ -1907,7 +1906,7 @@ void Window::RequestHelp( const HelpEvent& rHEvt )
     }
     else if (!mpWindowImpl->maHelpRequestHdl.IsSet() || mpWindowImpl->maHelpRequestHdl.Call(*this))
     {
-        OUString aStrHelpId( OStringToOUString( GetHelpId(), RTL_TEXTENCODING_UTF8 ) );
+        OUString aStrHelpId( GetHelpId() );
         if ( aStrHelpId.isEmpty() && ImplGetParent() )
             ImplGetParent()->RequestHelp( rHEvt );
         else
@@ -3096,7 +3095,7 @@ const Wallpaper& Window::GetDisplayBackground() const
 
 const OUString& Window::GetHelpText() const
 {
-    OUString aStrHelpId( OStringToOUString( GetHelpId(), RTL_TEXTENCODING_UTF8 ) );
+    OUString aStrHelpId( GetHelpId() );
     bool bStrHelpId = !aStrHelpId.isEmpty();
 
     if ( !mpWindowImpl->maHelpText.getLength() && bStrHelpId )
@@ -3128,7 +3127,7 @@ const OUString& Window::GetHelpText() const
     return mpWindowImpl->maHelpText;
 }
 
-void Window::SetWindowPeer( Reference< css::awt::XWindowPeer > const & xPeer, VCLXWindow* pVCLXWindow  )
+void Window::SetWindowPeer( Reference< css::awt::XVclWindowPeer > const & xPeer, VCLXWindow* pVCLXWindow  )
 {
     if (!mpWindowImpl || mpWindowImpl->mbInDispose)
         return;
@@ -3149,7 +3148,7 @@ void Window::SetWindowPeer( Reference< css::awt::XWindowPeer > const & xPeer, VC
     mpWindowImpl->mpVCLXWindow = pVCLXWindow;
 }
 
-Reference< css::awt::XWindowPeer > Window::GetComponentInterface( bool bCreate )
+Reference< css::awt::XVclWindowPeer > Window::GetComponentInterface( bool bCreate )
 {
     if ( !mpWindowImpl->mxWindowPeer.is() && bCreate )
     {
@@ -3160,7 +3159,7 @@ Reference< css::awt::XWindowPeer > Window::GetComponentInterface( bool bCreate )
     return mpWindowImpl->mxWindowPeer;
 }
 
-void Window::SetComponentInterface( Reference< css::awt::XWindowPeer > const & xIFace )
+void Window::SetComponentInterface( Reference< css::awt::XVclWindowPeer > const & xIFace )
 {
     UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper();
     SAL_WARN_IF( !pWrapper, "vcl.window", "SetComponentInterface: No Wrapper!" );
@@ -3200,8 +3199,6 @@ void Window::SetLOKNotifier(const vcl::ILibreOfficeKitNotifier* pNotifier, bool 
         mpWindowImpl->mnLOKWindowId = sLastLOKWindowId++;
         GetLOKWindowsMap().emplace(mpWindowImpl->mnLOKWindowId, this);
     }
-    else
-        mpWindowImpl->mbLOKParentNotifier = true;
 
     mpWindowImpl->mpLOKNotifier = pNotifier;
 }
@@ -3397,6 +3394,14 @@ void Window::DumpAsPropertyTree(tools::JsonWriter& rJsonWriter)
             pChild = pChild->mpWindowImpl->mpNext;
         }
     }
+
+    vcl::Window* pAccLabelFor = getAccessibleRelationLabelFor();
+    if (pAccLabelFor)
+        rJsonWriter.put("labelFor", pAccLabelFor->get_id());
+
+    vcl::Window* pAccLabelledBy = GetAccessibleRelationLabeledBy();
+    if (pAccLabelledBy)
+        rJsonWriter.put("labelledBy", pAccLabelledBy->get_id());
 
     mpWindowImpl->maDumpAsPropertyTreeHdl.Call(rJsonWriter);
 }

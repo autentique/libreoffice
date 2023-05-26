@@ -24,7 +24,7 @@
 
 #include <unx/saltype.h>
 #include <unx/saldisp.hxx>
-#include <unx/screensaverinhibitor.hxx>
+#include <unx/sessioninhibitor.hxx>
 #include <salframe.hxx>
 #include <salwtype.hxx>
 #include <salinst.hxx>
@@ -105,7 +105,7 @@ class X11SalFrame final : public SalFrame
     int             m_nWorkArea;
     bool            m_bSetFocusOnMap;
 
-    ScreenSaverInhibitor maScreenSaverInhibitor;
+    SessionManagerInhibitor maSessionManagerInhibitor;
     tools::Rectangle       maPaintRegion;
 
     Timer           maAlwaysOnTopRaiseTimer;

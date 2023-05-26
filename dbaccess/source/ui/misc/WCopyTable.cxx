@@ -213,8 +213,7 @@ OUString ObjectCopySource::getSelectStatement() const
     }
     else
     {   // table
-        OUStringBuffer aSQL;
-        aSQL.append( "SELECT " );
+        OUStringBuffer aSQL( "SELECT " );
 
         // we need to create the sql stmt with column names
         // otherwise it is possible that names don't match
@@ -579,7 +578,7 @@ OCopyTableWizard::OCopyTableWizard(weld::Window* pParent, const OUString& _rDefa
 
 weld::Container* OCopyTableWizard::CreatePageContainer()
 {
-    OString sIdent(OString::number(m_nPageCount));
+    OUString sIdent(OUString::number(m_nPageCount));
     weld::Container* pPageContainer = m_xAssistant->append_page(sIdent);
     return pPageContainer;
 }

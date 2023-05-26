@@ -1170,7 +1170,7 @@ void ScTabView::ScrollHdl(ScrollAdaptor* pScroll)
             if ( pScroll == aVScrollBottom.get() ) nDelta = aViewData.VisibleCellsY( SC_SPLIT_BOTTOM );
             if (nDelta==0) nDelta=1;
             break;
-        case ScrollType::Drag:
+        default:
             {
                 // only scroll in the correct direction, do not jitter around hidden ranges
                 tools::Long nScrollMin = 0;        // simulate RangeMin
@@ -1181,29 +1181,30 @@ void ScTabView::ScrollHdl(ScrollAdaptor* pScroll)
 
                 tools::Long nScrollPos = GetScrollBarPos( *pScroll ) + nScrollMin;
                 nDelta = nScrollPos - nViewPos;
-                if ( nScrollPos > nPrevDragPos )
+
+                // tdf#152406 Disable anti-jitter code for scroll wheel events
+                // After moving thousands of columns to the right via
+                // horizontal scroll wheel or trackpad swipe events, most
+                // vertical scroll wheel or trackpad swipe events will trigger
+                // the anti-jitter code because nScrollPos and nPrevDragPos
+                // will be equal and nDelta will be overridden and set to zero.
+                // So, only use the anti-jitter code for mouse drag events.
+                if ( eType == ScrollType::Drag )
                 {
-                    if (nDelta<0) nDelta=0;
+                    if ( nScrollPos > nPrevDragPos )
+                    {
+                        if (nDelta<0) nDelta=0;
+                    }
+                    else if ( nScrollPos < nPrevDragPos )
+                    {
+                        if (nDelta>0) nDelta=0;
+                    }
+                    else
+                        nDelta = 0;
                 }
-                else if ( nScrollPos < nPrevDragPos )
-                {
-                    if (nDelta>0) nDelta=0;
-                }
-                else
-                    nDelta = 0;
+
                 nPrevDragPos = nScrollPos;
             }
-            break;
-        default:
-            // Note tdf#152406 no anti-jitter code, unlike ScrollType::Drag,
-            // for scroll wheel events.
-            // After moving thousands of columns to the right via horizontal
-            // scroll wheel or trackpad swipe events, most vertical scroll
-            // wheel or trackpad swipe events would trigger the anti-jitter
-            // code because nScrollPos and nPrevDragPos would be equal and
-            // nDelta will be overridden and set to zero. So, only use the
-            // anti-jitter code for mouse drag events.
-            nDelta = GetScrollBarPos(*pScroll) - nViewPos;
             break;
     }
 
@@ -2687,7 +2688,7 @@ void lcl_ExtendTiledDimension(bool bColumn, const SCCOLROW nEnd, const SCCOLROW 
     // Provide size in the payload, so clients don't have to query for that.
     std::stringstream ss;
     ss << aNewSize.Width() << ", " << aNewSize.Height();
-    OString sSize = ss.str().c_str();
+    OString sSize( ss.str() );
     ScModelObj* pModel = comphelper::getFromUnoTunnel<ScModelObj>(
         rViewData.GetViewShell()->GetCurrentDocument());
     SfxLokHelper::notifyDocumentSizeChanged(rViewData.GetViewShell(), sSize, pModel, false);
@@ -2944,7 +2945,7 @@ OString ScTabView::getSheetGeometryData(bool bColumns, bool bRows, bool bSizes, 
     if ((!bSizes && !bHidden && !bFiltered && !bGroups) ||
         (!bColumns && !bRows))
     {
-        return getJSONString(aTree).c_str();
+        return OString(getJSONString(aTree));
     }
 
     struct GeomEntry
@@ -2996,7 +2997,7 @@ OString ScTabView::getSheetGeometryData(bool bColumns, bool bRows, bool bSizes, 
         aTree.add_child(rDimEntry.pKey, aDimTree);
     }
 
-    return getJSONString(aTree).c_str();
+    return OString(getJSONString(aTree));
 }
 
 void ScTabView::extendTiledAreaIfNeeded()

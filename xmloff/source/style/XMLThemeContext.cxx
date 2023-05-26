@@ -26,6 +26,7 @@
 #include <comphelper/sequence.hxx>
 
 #include <docmodel/uno/UnoTheme.hxx>
+#include <docmodel/theme/Theme.hxx>
 
 using namespace css;
 using namespace xmloff::token;
@@ -35,6 +36,7 @@ XMLThemeContext::XMLThemeContext(SvXMLImport& rImport,
                                  css::uno::Reference<css::drawing::XDrawPage> const& xPage)
     : SvXMLImportContext(rImport)
     , m_xPage(xPage)
+    , mpTheme(new model::Theme)
 {
     for (const auto& rAttribute : sax_fastparser::castToFastAttributeList(xAttrList))
     {
@@ -43,7 +45,7 @@ XMLThemeContext::XMLThemeContext(SvXMLImport& rImport,
             case XML_ELEMENT(LO_EXT, XML_NAME):
             {
                 OUString aName = rAttribute.toString();
-                maTheme.SetName(aName);
+                mpTheme->SetName(aName);
                 break;
             }
         }
@@ -52,23 +54,26 @@ XMLThemeContext::XMLThemeContext(SvXMLImport& rImport,
 
 XMLThemeContext::~XMLThemeContext()
 {
-    uno::Reference<beans::XPropertySet> xPropertySet(m_xPage, uno::UNO_QUERY);
-    uno::Reference<util::XTheme> xTheme(new UnoTheme(maTheme));
-    xPropertySet->setPropertyValue("Theme", uno::Any(xTheme));
+    if (mpTheme && mpTheme->getColorSet())
+    {
+        uno::Reference<beans::XPropertySet> xPropertySet(m_xPage, uno::UNO_QUERY);
+        auto xTheme = model::theme::createXTheme(mpTheme);
+        xPropertySet->setPropertyValue("Theme", uno::Any(xTheme));
+    }
 }
 
 uno::Reference<xml::sax::XFastContextHandler> SAL_CALL XMLThemeContext::createFastChildContext(
     sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttribs)
 {
-    if (nElement == XML_ELEMENT(LO_EXT, XML_COLOR_TABLE))
+    if (nElement == XML_ELEMENT(LO_EXT, XML_THEME_COLORS))
     {
-        return new XMLColorTableContext(GetImport(), xAttribs, maTheme);
+        return new XMLThemeColorsContext(GetImport(), xAttribs, *mpTheme);
     }
 
     return nullptr;
 }
 
-XMLColorTableContext::XMLColorTableContext(
+XMLThemeColorsContext::XMLThemeColorsContext(
     SvXMLImport& rImport, const uno::Reference<xml::sax::XFastAttributeList>& xAttrList,
     model::Theme& rTheme)
     : SvXMLImportContext(rImport)
@@ -81,26 +86,27 @@ XMLColorTableContext::XMLColorTableContext(
             case XML_ELEMENT(LO_EXT, XML_NAME):
             {
                 OUString aName = rAttribute.toString();
-                mpColorSet.reset(new model::ColorSet(aName));
+                m_pColorSet.reset(new model::ColorSet(aName));
                 break;
             }
         }
     }
 }
 
-XMLColorTableContext::~XMLColorTableContext()
+XMLThemeColorsContext::~XMLThemeColorsContext()
 {
-    if (mpColorSet)
-        mrTheme.SetColorSet(std::move(mpColorSet));
+    if (m_pColorSet)
+        mrTheme.setColorSet(m_pColorSet);
 }
 
-uno::Reference<xml::sax::XFastContextHandler> SAL_CALL XMLColorTableContext::createFastChildContext(
-    sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttribs)
+uno::Reference<xml::sax::XFastContextHandler>
+    SAL_CALL XMLThemeColorsContext::createFastChildContext(
+        sal_Int32 nElement, const uno::Reference<xml::sax::XFastAttributeList>& xAttribs)
 {
     if (nElement == XML_ELEMENT(LO_EXT, XML_COLOR))
     {
-        if (mpColorSet)
-            return new XMLColorContext(GetImport(), xAttribs, mpColorSet);
+        if (m_pColorSet)
+            return new XMLColorContext(GetImport(), xAttribs, m_pColorSet);
     }
 
     return nullptr;
@@ -108,7 +114,7 @@ uno::Reference<xml::sax::XFastContextHandler> SAL_CALL XMLColorTableContext::cre
 
 XMLColorContext::XMLColorContext(SvXMLImport& rImport,
                                  const uno::Reference<xml::sax::XFastAttributeList>& xAttrList,
-                                 std::unique_ptr<model::ColorSet>& rpColorSet)
+                                 std::shared_ptr<model::ColorSet>& rpColorSet)
     : SvXMLImportContext(rImport)
 {
     OUString aName;
@@ -134,13 +140,13 @@ XMLColorContext::XMLColorContext(SvXMLImport& rImport,
     if (!aName.isEmpty())
     {
         auto eType = model::ThemeColorType::Unknown;
-        if (aName == u"dk1")
+        if (aName == u"dark1")
             eType = model::ThemeColorType::Dark1;
-        else if (aName == u"lt1")
+        else if (aName == u"light1")
             eType = model::ThemeColorType::Light1;
-        else if (aName == u"dk2")
+        else if (aName == u"dark2")
             eType = model::ThemeColorType::Dark2;
-        else if (aName == u"lt2")
+        else if (aName == u"light2")
             eType = model::ThemeColorType::Light2;
         else if (aName == u"accent1")
             eType = model::ThemeColorType::Accent1;
@@ -154,9 +160,9 @@ XMLColorContext::XMLColorContext(SvXMLImport& rImport,
             eType = model::ThemeColorType::Accent5;
         else if (aName == u"accent6")
             eType = model::ThemeColorType::Accent6;
-        else if (aName == u"hlink")
+        else if (aName == u"hyperlink")
             eType = model::ThemeColorType::Hyperlink;
-        else if (aName == u"folHlink")
+        else if (aName == u"followed-hyperlink")
             eType = model::ThemeColorType::FollowedHyperlink;
 
         if (eType != model::ThemeColorType::Unknown)

@@ -47,15 +47,16 @@ inline void TestLokCallbackWrapper::callCallback(int nType, const char* pPayload
     startTimer();
 }
 
-void TestLokCallbackWrapper::libreOfficeKitViewCallback(int nType, const char* pPayload)
+void TestLokCallbackWrapper::libreOfficeKitViewCallback(int nType, const rtl::OString& pPayload)
 {
-    callCallback(nType, pPayload, NO_VIEWID);
+    callCallback(nType, pPayload.getStr(), NO_VIEWID);
 }
 
-void TestLokCallbackWrapper::libreOfficeKitViewCallbackWithViewId(int nType, const char* pPayload,
+void TestLokCallbackWrapper::libreOfficeKitViewCallbackWithViewId(int nType,
+                                                                  const rtl::OString& pPayload,
                                                                   int nViewId)
 {
-    callCallback(nType, pPayload, nViewId);
+    callCallback(nType, pPayload.getStr(), nViewId);
 }
 
 void TestLokCallbackWrapper::libreOfficeKitViewInvalidateTilesCallback(
@@ -68,10 +69,8 @@ void TestLokCallbackWrapper::libreOfficeKitViewInvalidateTilesCallback(
         buf.append("EMPTY");
     if (comphelper::LibreOfficeKit::isPartInInvalidation())
     {
-        buf.append(", ");
-        buf.append(static_cast<sal_Int32>(nPart));
-        buf.append(", ");
-        buf.append(static_cast<sal_Int32>(nMode));
+        buf.append(", " + OString::number(static_cast<sal_Int32>(nPart)) + ", "
+                   + OString::number(static_cast<sal_Int32>(nMode)));
     }
     callCallback(LOK_CALLBACK_INVALIDATE_TILES, buf.makeStringAndClear().getStr(), NO_VIEWID);
 }
@@ -161,7 +160,7 @@ void TestLokCallbackWrapper::flushLOKData()
     {
         std::optional<OString> payload = viewShell->getLOKPayload(type, m_viewId);
         if (payload)
-            libreOfficeKitViewCallback(type, payload->getStr());
+            libreOfficeKitViewCallback(type, *payload);
     }
     for (const PerViewIdData& data : updatedTypesPerViewId)
     {
@@ -171,7 +170,7 @@ void TestLokCallbackWrapper::flushLOKData()
         assert(viewShell != nullptr);
         std::optional<OString> payload = viewShell->getLOKPayload(data.type, data.viewId);
         if (payload)
-            libreOfficeKitViewCallbackWithViewId(data.type, payload->getStr(), data.viewId);
+            libreOfficeKitViewCallbackWithViewId(data.type, *payload, data.viewId);
     }
 }
 

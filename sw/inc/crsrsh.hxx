@@ -87,15 +87,16 @@ enum class IsAttrAtPos
     ContentCheck     = 0x0400,
     SmartTag         = 0x0800,
     FormControl      = 0x1000,
-    TableRedline     = 0x2000
+    TableRedline     = 0x2000,
+    TableColRedline  = 0x4000
 #ifdef DBG_UTIL
-    ,CurrAttrs       = 0x4000        ///< only for debugging
-    ,TableBoxValue   = 0x8000        ///< only for debugging
+    ,CurrAttrs       = 0x8000        ///< only for debugging
+    ,TableBoxValue   = 0x10000       ///< only for debugging
 #endif
-    , ContentControl = 0x10000
+    , ContentControl = 0x20000
 };
 namespace o3tl {
-    template<> struct typed_flags<IsAttrAtPos> : is_typed_flags<IsAttrAtPos, 0x1ffff> {};
+    template<> struct typed_flags<IsAttrAtPos> : is_typed_flags<IsAttrAtPos, 0x3ffff> {};
 }
 
 struct SwContentAtPos
@@ -331,7 +332,7 @@ public:
     // only for usage in special cases allowed!
     void ExtendedSelectAll(bool bFootnotes = true);
     /// If ExtendedSelectAll() was called and selection didn't change since then.
-    bool ExtendedSelectedAll();
+    SwNode const* ExtendedSelectedAll() const;
     enum class StartsWith { None, Table, HiddenPara };
     /// If document body starts with a table or starts/ends with hidden paragraph.
     StartsWith StartsWith_();
@@ -486,6 +487,7 @@ public:
     // Cursor is placed in something that is protected or selection contains
     // something that is protected.
     bool HasReadonlySel(bool isReplace = false) const;
+    bool HasHiddenSections() const;
 
     // Can the cursor be set to read only ranges?
     bool IsReadOnlyAvailable() const { return m_bSetCursorInReadOnly; }
@@ -592,8 +594,11 @@ public:
     // fields etc.
     OUString GetSelText() const;
 
-    // Check of SPoint or Mark of current cursor are placed within a table.
-    inline const SwTableNode* IsCursorInTable() const;
+    /// Check if Point of current cursor is placed within a table.
+    const SwTableNode* IsCursorInTable() const;
+    bool MoveOutOfTable();
+    bool TrySelectOuterTable();
+    bool MoveStartText();
 
     bool IsCursorInFootnote() const;
 
@@ -674,7 +679,7 @@ public:
     bool GotoHeaderText();       ///< jump from the content to the header
     bool GotoFooterText();       ///< jump from the content to the footer
     // jump to the header/footer of the given or current PageDesc
-    bool SetCursorInHdFt( size_t nDescNo, bool bInHeader );
+    bool SetCursorInHdFt(size_t nDescNo, bool bInHeader, bool bEven = false, bool bFirst = false);
     // is point of cursor in header/footer. pbInHeader return true if it is
     // in a headerframe otherwise in a footerframe
     bool IsInHeaderFooter( bool* pbInHeader = nullptr ) const;
@@ -909,11 +914,6 @@ inline bool SwCursorShell::IsSelection() const
 inline bool SwCursorShell::IsMultiSelection() const
 {
     return m_pCurrentCursor->GetNext() != m_pCurrentCursor;
-}
-
-inline const SwTableNode* SwCursorShell::IsCursorInTable() const
-{
-    return m_pCurrentCursor->GetPointNode().FindTableNode();
 }
 
 inline bool SwCursorShell::IsCursorPtAtEnd() const

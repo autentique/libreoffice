@@ -110,6 +110,7 @@
 #include <sal/log.hxx>
 #include <svx/sdtaitm.hxx>
 #include <oox/drawingml/diagram/diagram.hxx>
+#include <docmodel/theme/Theme.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
 
@@ -405,6 +406,18 @@ void Shape::addShape(
                         uno::Any(getTextBody()->getTextProperties().moInsets[3].has_value()
                                      ? *getTextBody()->getTextProperties().moInsets[3]
                                      : 0));
+                }
+
+                // tdf#145147 Set the Hyperlink property to the child wps shape.
+                if (getShapeProperties().hasProperty(PROP_URL)) try
+                {
+                    uno::Any aAny = getShapeProperties().getProperty(PROP_URL);
+                    OUString sUrl = aAny.get<OUString>();
+                    if (!sUrl.isEmpty())
+                        xChildWPSProperties->setPropertyValue(UNO_NAME_HYPERLINK, aAny);
+                }
+                catch (const Exception&)
+                {
                 }
             }
 
@@ -715,10 +728,16 @@ static void lcl_copyCharPropsToShape(const uno::Reference<drawing::XShape>& xSha
 
             // Fill
             // ToDo: Replace flip and rotate constants in parameters with actual values.
+            // tdf#155327 If color is not explicitly set, MS Office uses scheme color 'tx1'.
             oox::drawingml::ShapePropertyMap aFillShapeProps(rFilter.getModelObjectHelper());
+            if (!rCharProps.maFillProperties.moFillType.has_value())
+                rCharProps.maFillProperties.moFillType = XML_solidFill;
+            if (!rCharProps.maFillProperties.maFillColor.isUsed())
+                rCharProps.maFillProperties.maFillColor.setSchemeClr(XML_tx1);
             rCharProps.maFillProperties.pushToPropMap(aFillShapeProps, rFilter.getGraphicHelper(),
                                                       /*nShapeRotation*/ 0,
                                                       /*nPhClr*/ API_RGB_TRANSPARENT,
+                                                      /*aShapeSize*/ css::awt::Size(0, 0),
                                                       /*nPhClrTheme*/ -1,
                                                       /*bFlipH*/ false, /*bFlipV*/ false,
                                                       /*bIsCustomShape*/ true);
@@ -1099,9 +1118,9 @@ Reference< XShape > const & Shape::createAndInsert(
         aMatrix.Line2.Column2 = aTransformation.get(1,1);
         aMatrix.Line2.Column3 = aTransformation.get(1,2);
 
-        aMatrix.Line3.Column1 = aTransformation.get(2,0);
-        aMatrix.Line3.Column2 = aTransformation.get(2,1);
-        aMatrix.Line3.Column3 = aTransformation.get(2,2);
+        aMatrix.Line3.Column1 = 0;
+        aMatrix.Line3.Column2 = 0;
+        aMatrix.Line3.Column3 = 1;
 
         maShapeProperties.setProperty(PROP_Transformation, aMatrix);
     }
@@ -1286,7 +1305,10 @@ Reference< XShape > const & Shape::createAndInsert(
         if (getFillProperties().moFillType.has_value() && getFillProperties().moFillType.value() == XML_grpFill)
             getFillProperties().assignUsed(aFillProperties);
         if(!bIsCroppedGraphic)
-            aFillProperties.pushToPropMap( aShapeProps, rGraphicHelper, mnRotation, nFillPhClr, nFillPhClrTheme, mbFlipH, mbFlipV, bIsCustomShape );
+            aFillProperties.pushToPropMap(aShapeProps, rGraphicHelper, mnRotation, nFillPhClr,
+                                          css::awt::Size(aShapeRectHmm.Width, aShapeRectHmm.Height),
+                                          nFillPhClrTheme, mbFlipH, mbFlipV, bIsCustomShape);
+
         LineProperties aLineProperties = getActualLineProperties(pTheme);
         aLineProperties.pushToPropMap( aShapeProps, rGraphicHelper, nLinePhClr, nLinePhClrTheme);
         EffectProperties aEffectProperties = getActualEffectProperties(pTheme);
@@ -1775,9 +1797,8 @@ Reference< XShape > const & Shape::createAndInsert(
                 auto sHorzOverflow = getTextBody()->getTextProperties().msHorzOverflow;
                 if (!sHorzOverflow.isEmpty())
                     putPropertyToGrabBag("horzOverflow", uno::Any(getTextBody()->getTextProperties().msHorzOverflow));
-                auto nVertOverflow = getTextBody()->getTextProperties().msVertOverflow;
-                if (!nVertOverflow.isEmpty())
-                    putPropertyToGrabBag("vertOverflow", uno::Any(getTextBody()->getTextProperties().msVertOverflow));
+                if (XML_ellipsis == getTextBody()->getTextProperties().moVertOverflow)
+                    putPropertyToGrabBag("vertOverflow", uno::Any(OUString{"ellipsis"}));
             }
 
             // Note that the script oox/source/drawingml/customshapes/generatePresetsData.pl looks
@@ -2181,9 +2202,8 @@ void Shape::finalizeXShape( XmlFilterBase& rFilter, const Reference< XShapes >& 
                             rFilter.importFragment(aThemeOverrideFragmentPath), uno::UNO_QUERY_THROW);
                     pTheme = pPowerPointImport->getActualSlidePersist()->getTheme();
                     auto pThemeOverride = std::make_shared<Theme>(*pTheme);
-                    model::Theme aTheme;
                     rFilter.importFragment(
-                        new ThemeOverrideFragmentHandler(rFilter, aThemeOverrideFragmentPath, *pThemeOverride, aTheme),
+                        new ThemeOverrideFragmentHandler(rFilter, aThemeOverrideFragmentPath, *pThemeOverride, *pThemeOverride->getTheme()),
                         xDoc);
                     pPowerPointImport->getActualSlidePersist()->setTheme(pThemeOverride);
                 }

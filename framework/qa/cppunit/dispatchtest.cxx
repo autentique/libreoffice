@@ -10,12 +10,12 @@
 #include <cppuhelper/implbase.hxx>
 #include <test/unoapi_test.hxx>
 
-#include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XDispatchProviderInterceptor.hpp>
 #include <com/sun/star/frame/XInterceptorInfo.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 
 #include <rtl/ref.hxx>
+#include <mutex>
 
 using namespace ::com::sun::star;
 
@@ -25,6 +25,7 @@ namespace
 class MyInterceptor
     : public cppu::WeakImplHelper<frame::XDispatchProviderInterceptor, frame::XInterceptorInfo>
 {
+    std::mutex maMutex;
     uno::Reference<frame::XDispatchProvider> m_xMaster;
     uno::Reference<frame::XDispatchProvider> m_xSlave;
     uno::Sequence<OUString> m_aDisabledCommands;
@@ -67,6 +68,7 @@ MyInterceptor::MyInterceptor()
 
 int MyInterceptor::getExpected()
 {
+    std::unique_lock aGuard(maMutex);
     int nRet = m_nExpected;
     m_nExpected = 0;
     return nRet;
@@ -74,6 +76,7 @@ int MyInterceptor::getExpected()
 
 int MyInterceptor::getUnexpected()
 {
+    std::unique_lock aGuard(maMutex);
     int nRet = m_nUnexpected;
     m_nUnexpected = 0;
     return nRet;
@@ -84,22 +87,26 @@ uno::Sequence<OUString> MyInterceptor::getInterceptedURLs() { return m_aDisabled
 void MyInterceptor::setMasterDispatchProvider(
     const uno::Reference<frame::XDispatchProvider>& xNewSupplier)
 {
+    std::unique_lock aGuard(maMutex);
     m_xMaster = xNewSupplier;
 }
 
 uno::Reference<frame::XDispatchProvider> MyInterceptor::getMasterDispatchProvider()
 {
+    std::unique_lock aGuard(maMutex);
     return m_xMaster;
 }
 
 void MyInterceptor::setSlaveDispatchProvider(
     const uno::Reference<frame::XDispatchProvider>& xNewSupplier)
 {
+    std::unique_lock aGuard(maMutex);
     m_xSlave = xNewSupplier;
 }
 
 uno::Reference<frame::XDispatchProvider> MyInterceptor::getSlaveDispatchProvider()
 {
+    std::unique_lock aGuard(maMutex);
     return m_xSlave;
 }
 
@@ -122,6 +129,7 @@ uno::Reference<frame::XDispatch> MyInterceptor::queryDispatch(const util::URL& r
                                                               const OUString& /*rTargetFrameName*/,
                                                               sal_Int32 /*SearchFlags*/)
 {
+    std::unique_lock aGuard(maMutex);
     if (std::find(std::cbegin(m_aDisabledCommands), std::cend(m_aDisabledCommands), rURL.Complete)
         != std::cend(m_aDisabledCommands))
         ++m_nExpected;

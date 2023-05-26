@@ -36,7 +36,7 @@
 #include <comphelper/diagnose_ex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
-#include <toolkit/helper/property.hxx>
+#include <helper/property.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
 #include <controls/accessiblecontrolcontext.hxx>
 
@@ -157,13 +157,13 @@ OUString UnoControl::GetComponentServiceName() const
     return OUString();
 }
 
-Reference< XWindowPeer >    UnoControl::ImplGetCompatiblePeer()
+Reference< XVclWindowPeer >    UnoControl::ImplGetCompatiblePeer()
 {
     DBG_ASSERT( !mbCreatingCompatiblePeer, "ImplGetCompatiblePeer - recursive?" );
 
     mbCreatingCompatiblePeer = true;
 
-    Reference< XWindowPeer > xCompatiblePeer = getPeer();
+    Reference< XVclWindowPeer > xCompatiblePeer = getVclWindowPeer();
 
     if ( !xCompatiblePeer.is() )
     {
@@ -172,7 +172,7 @@ Reference< XWindowPeer >    UnoControl::ImplGetCompatiblePeer()
         if( bVis )
             maComponentInfos.bVisible = false;
 
-        Reference< XWindowPeer >    xCurrentPeer = getPeer();
+        Reference< XVclWindowPeer >    xCurrentPeer = getVclWindowPeer();
         setPeer( nullptr );
 
         // queryInterface ourself, to allow aggregation
@@ -196,7 +196,7 @@ Reference< XWindowPeer >    UnoControl::ImplGetCompatiblePeer()
             mbCreatingCompatiblePeer = false;
             throw;
         }
-        xCompatiblePeer = getPeer();
+        xCompatiblePeer = getVclWindowPeer();
         setPeer( xCurrentPeer );
 
         if ( xCompatiblePeer.is() && mxGraphics.is() )
@@ -345,13 +345,13 @@ UnoControl::DisposeAccessibleContext(Reference<XComponent> const& xContextComp)
 
 void UnoControl::dispose(  )
 {
-    Reference< XWindowPeer > xPeer;
+    Reference< XVclWindowPeer > xPeer;
     Reference<XComponent> xAccessibleComp;
     {
         ::osl::MutexGuard aGuard( GetMutex() );
         if( mbDisposePeer )
         {
-            xPeer = mxPeer;
+            xPeer = mxVclWindowPeer;
         }
         setPeer( nullptr );
         xAccessibleComp.set(maAccessibleContext, UNO_QUERY);
@@ -619,8 +619,7 @@ void UnoControl::ImplModelPropertiesChanged( const Sequence< PropertyChangeEvent
 
         // Doesn't work for Container!
         getPeer()->dispose();
-        mxPeer.clear();
-        mxVclWindowPeer = nullptr;
+        mxVclWindowPeer.clear();
         mbRefreshingPeer = true;
         Reference< XWindowPeer >    xP( xParent, UNO_QUERY );
         xThis->createPeer( Reference< XToolkit > (), xP );
@@ -1278,7 +1277,9 @@ void UnoControl::createPeer( const Reference< XToolkit >& rxToolkit, const Refer
     PrepareWindowDescriptor(aDescr);
 
     // create the peer
-    setPeer( xToolkit->createWindow( aDescr ) );
+    Reference<XWindowPeer> xTemp = xToolkit->createWindow( aDescr );
+    mxVclWindowPeer.set(xTemp, UNO_QUERY);
+    assert(mxVclWindowPeer);
 
     // release the mutex guard (and work with copies of our members)
     // this is necessary as our peer may lock the SolarMutex (actually, all currently known peers do), so calling
@@ -1297,6 +1298,25 @@ void UnoControl::createPeer( const Reference< XToolkit >& rxToolkit, const Refer
     Reference< XWindow >    xWindow  ( getPeer(), UNO_QUERY_THROW );
 
     aGuard.clear();
+
+    // tdf#150886 if false use the same settings for widgets regardless of theme
+    // for consistency of document across platforms and in pdf/print output
+    // note: tdf#155029 do this before updateFromModel
+    if (xInfo->hasPropertyByName("StandardTheme"))
+    {
+        aVal = xPSet->getPropertyValue("StandardTheme");
+        bool bUseStandardTheme = false;
+        aVal >>= bUseStandardTheme;
+        if (bUseStandardTheme)
+        {
+            VclPtr<vcl::Window> pVclPeer = VCLUnoHelper::GetWindow(getPeer());
+            AllSettings aAllSettings = pVclPeer->GetSettings();
+            StyleSettings aStyleSettings = aAllSettings.GetStyleSettings();
+            aStyleSettings.SetStandardStyles();
+            aAllSettings.SetStyleSettings(aStyleSettings);
+            pVclPeer->SetSettings(aAllSettings);
+        }
+    }
 
     // the updateFromModel is done without a locked mutex, too.
     // The reason is that the only thing this method does  is firing property changes, and this in general has
@@ -1317,24 +1337,6 @@ void UnoControl::createPeer( const Reference< XToolkit >& rxToolkit, const Refer
 
     xView->setGraphics( xGraphics );
 
-    // tdf#150886 if false use the same settings for widgets regardless of theme
-    // for consistency of document across platforms and in pdf/print output
-    if (xInfo->hasPropertyByName("StandardTheme"))
-    {
-        aVal = xPSet->getPropertyValue("StandardTheme");
-        bool bUseStandardTheme = false;
-        aVal >>= bUseStandardTheme;
-        if (bUseStandardTheme)
-        {
-            VclPtr<vcl::Window> pVclPeer = VCLUnoHelper::GetWindow(getPeer());
-            AllSettings aAllSettings = pVclPeer->GetSettings();
-            StyleSettings aStyleSettings = aAllSettings.GetStyleSettings();
-            aStyleSettings.SetStandardStyles();
-            aAllSettings.SetStyleSettings(aStyleSettings);
-            pVclPeer->SetSettings(aAllSettings);
-        }
-    }
-
     peerCreated();
 
     mbCreatingPeer = false;
@@ -1344,7 +1346,13 @@ void UnoControl::createPeer( const Reference< XToolkit >& rxToolkit, const Refer
 Reference< XWindowPeer > UnoControl::getPeer()
 {
     ::osl::MutexGuard aGuard( GetMutex() );
-    return mxPeer;
+    return mxVclWindowPeer;
+}
+
+Reference< XVclWindowPeer > UnoControl::getVclWindowPeer()
+{
+    ::osl::MutexGuard aGuard( GetMutex() );
+    return mxVclWindowPeer;
 }
 
 sal_Bool UnoControl::setModel( const Reference< XControlModel >& rxModel )

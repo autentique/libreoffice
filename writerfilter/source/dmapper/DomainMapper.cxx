@@ -69,7 +69,7 @@
 #include <com/sun/star/text/FontEmphasis.hpp>
 #include <com/sun/star/awt/CharSet.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/util/XThemeColor.hpp>
+#include <com/sun/star/util/XComplexColor.hpp>
 #include <comphelper/types.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/sequence.hxx>
@@ -116,26 +116,31 @@ DomainMapper::DomainMapper( const uno::Reference< uno::XComponentContext >& xCon
     mbHasControls(false),
     mbWasShapeInPara(false)
 {
-    // #i24363# tab stops relative to indent
-    m_pImpl->SetDocumentSettingsProperty(
-        getPropertyName( PROP_TABS_RELATIVE_TO_INDENT ),
-        uno::Any( false ) );
-    m_pImpl->SetDocumentSettingsProperty(
-        getPropertyName( PROP_SURROUND_TEXT_WRAP_SMALL ),
-        uno::Any( true ) );
-    m_pImpl->SetDocumentSettingsProperty(
-        getPropertyName( PROP_APPLY_PARAGRAPH_MARK_FORMAT_TO_NUMBERING ),
-        uno::Any( true ) );
+    if (m_pImpl->IsNewDoc())
+    {
+        // #i24363# tab stops relative to indent
+        m_pImpl->SetDocumentSettingsProperty(
+            getPropertyName(PROP_TABS_RELATIVE_TO_INDENT),
+            uno::Any(false));
+        m_pImpl->SetDocumentSettingsProperty(
+            getPropertyName(PROP_SURROUND_TEXT_WRAP_SMALL),
+            uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty(
+            getPropertyName(PROP_APPLY_PARAGRAPH_MARK_FORMAT_TO_NUMBERING),
+            uno::Any(true));
 
-    // Don't load the default style definitions to avoid weird mix
-    m_pImpl->SetDocumentSettingsProperty("StylesNoDefault", uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("MsWordCompTrailingBlanks", uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("HeaderSpacingBelowLastPara",
-                                         uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("FrameAutowidthWithMorePara", uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("FootnoteInColumnToPageEnd", uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("TabAtLeftIndentForParagraphsInList", uno::Any(true));
-    m_pImpl->SetDocumentSettingsProperty("NoNumberingShowFollowBy", uno::Any(true));
+        // Don't load the default style definitions to avoid weird mix
+        m_pImpl->SetDocumentSettingsProperty("StylesNoDefault", uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty("MsWordCompTrailingBlanks", uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty("HeaderSpacingBelowLastPara",
+            uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty("FrameAutowidthWithMorePara", uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty("FootnoteInColumnToPageEnd", uno::Any(true));
+        m_pImpl->SetDocumentSettingsProperty("TabAtLeftIndentForParagraphsInList", uno::Any(true));
+
+        // Enable only for new documents, since pasting from clipboard can influence existing doc
+        m_pImpl->SetDocumentSettingsProperty("NoNumberingShowFollowBy", uno::Any(true));
+    }
 
     // Initialize RDF metadata, to be able to add statements during the import.
     try
@@ -2212,22 +2217,22 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 auto eType = TDefTableHandler::getThemeColorTypeIndex(pThemeColorHandler->mnIndex);
                 if (eType != model::ThemeColorType::Unknown)
                 {
-                    model::ThemeColor aThemeColor;
-                    aThemeColor.setType(eType);
+                    model::ComplexColor aComplexColor;
+                    aComplexColor.setSchemeColor(eType);
 
                     if (pThemeColorHandler->mnTint > 0 )
                     {
                         sal_Int16 nTint = sal_Int16((256 - pThemeColorHandler->mnTint) * 10000 / 256);
-                        aThemeColor.addTransformation({model::TransformationType::Tint, nTint});
+                        aComplexColor.addTransformation({model::TransformationType::Tint, nTint});
                     }
                     if (pThemeColorHandler->mnShade > 0)
                     {
                         sal_Int16 nShade = sal_Int16((256 - pThemeColorHandler->mnShade) * 10000 / 256);
-                        aThemeColor.addTransformation({model::TransformationType::Shade, nShade});
+                        aComplexColor.addTransformation({model::TransformationType::Shade, nShade});
                     }
 
-                    auto xThemeColor = model::theme::createXThemeColor(aThemeColor);
-                    m_pImpl->GetTopContext()->Insert(PROP_CHAR_COLOR_THEME_REFERENCE, uno::Any(xThemeColor));
+                    auto xComplexColor = model::color::createXComplexColor(aComplexColor);
+                    m_pImpl->GetTopContext()->Insert(PROP_CHAR_COMPLEX_COLOR, uno::Any(xComplexColor));
                 }
 
                 uno::Any aColorAny(msfilter::util::ConvertColorOU(Color(ColorTransparency, pThemeColorHandler->mnColor)));
@@ -3162,6 +3167,17 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     {
         if (m_pImpl->hasTableManager())
         {
+            if (m_pImpl->getTableManager().IsFloating())
+            {
+                // We're starting a new table, but the previous table was floating. Insert a dummy
+                // paragraph to ensure that the floating table is not anchored inside the next
+                // table.
+                finishParagraph();
+            }
+        }
+
+        if (m_pImpl->hasTableManager())
+        {
             bool bTableStartsAtCellStart = m_pImpl->m_nTableDepth > 0 && m_pImpl->m_nTableCellDepth > m_pImpl->m_nLastTableCellParagraphDepth + 1;
             m_pImpl->getTableManager().setTableStartsAtCellStart(bTableStartsAtCellStart);
         }
@@ -3428,6 +3444,17 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
             pProperties->resolve(*this);
     }
     break;
+    case NS_ooxml::LN_EG_RunInnerContent_instrText:
+    {
+        m_pImpl->SetIsTextDeleted(false);
+    }
+    break;
+    case NS_ooxml::LN_EG_RunInnerContent_delText:
+    case NS_ooxml::LN_EG_RunInnerContent_delInstrText:
+    {
+        m_pImpl->SetIsTextDeleted(true);
+    }
+    break;
     default:
         {
 #ifdef DBG_UTIL
@@ -3531,8 +3558,9 @@ void DomainMapper::lcl_endSectionGroup()
         pSectionContext->CloseSectionGroup( *m_pImpl );
         // Remove the dummy paragraph if added for
         // handling the section properties if section starts with a table
-        if (m_pImpl->GetIsDummyParaAddedForTableInSection())
-            m_pImpl->RemoveDummyParaForTableInSection();
+        // tdf#135786: Added annotation condition
+        if (m_pImpl->GetIsDummyParaAddedForTableInSection() && (m_pImpl->GetAnnotationId() < 0))
+             m_pImpl->RemoveDummyParaForTableInSection();
     }
     m_pImpl->SetIsTextFrameInserted( false );
     m_pImpl->PopProperties(CONTEXT_SECTION);
@@ -4745,6 +4773,15 @@ void DomainMapper::finishParagraph(const bool bRemove, const bool bNoNumbering)
     if (m_pImpl->m_pSdtHelper->getControlType() == SdtControlType::datePicker)
         m_pImpl->m_pSdtHelper->createDateContentControl();
     m_pImpl->finishParagraph(m_pImpl->GetTopContextOfType(CONTEXT_PARAGRAPH), bRemove, bNoNumbering);
+    if (m_pImpl->m_nTableDepth == 0)
+    {
+        if (m_pImpl->hasTableManager())
+        {
+            // Non-table content, possibly after a table. Forget that such a previous table was
+            // floating.
+            m_pImpl->getTableManager().SetFloating(false);
+        }
+    }
 }
 
 void DomainMapper::commentProps(const OUString& sId, const CommentProperties& rProps)

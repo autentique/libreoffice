@@ -39,6 +39,7 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
+#include <cppu/unotype.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <osl/time.h>
 #include <rtl/ref.hxx>
@@ -205,12 +206,18 @@ void Test::setUp()
 
 void Test::testKeyFetch()
 {
-    OUString s;
-    CPPUNIT_ASSERT(
-        getKey(
-            "/org.openoffice.System",
-            "L10N/Locale") >>=
-        s);
+    {
+        OUString s;
+        CPPUNIT_ASSERT(
+            getKey(
+                "/org.openoffice.System",
+                "L10N/Locale") >>=
+            s);
+    }
+    {
+        auto const v = getKey("/org.openoffice.System", "L10N/['Locale']");
+        CPPUNIT_ASSERT_EQUAL(cppu::UnoType<OUString>::get(), v.getValueType());
+    }
 }
 
 void Test::testKeySet()

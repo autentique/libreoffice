@@ -90,6 +90,7 @@
 #include <sfx2/lokhelper.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
 #include <calbck.hxx>
+#include <flyfrms.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <svx/svxids.hrc>
 #include <osl/diagnose.h>
@@ -150,7 +151,7 @@ SwFlyFrame *GetFlyFromMarked( const SdrMarkList *pLst, SwViewShell *pSh )
     return nullptr;
 }
 
-static void lcl_GrabCursor( SwFEShell* pSh, SwFlyFrame* pOldSelFly)
+static void lcl_GrabCursor( SwFEShell* pSh, SwFlyFrame* pOldSelFly, SwFrameFormat* pNewDrawFormat = nullptr)
 {
     const SwFrameFormat *pFlyFormat = pSh->SelFlyGrabCursor();
     if( pFlyFormat && !pSh->ActionPend() &&
@@ -170,7 +171,21 @@ static void lcl_GrabCursor( SwFEShell* pSh, SwFlyFrame* pOldSelFly)
         // --> assure consistent cursor
         pSh->KillPams();
         pSh->ClearMark();
-        pSh->SetCursor( pSh->Imp()->GetDrawView()->GetAllMarkedRect().TopLeft(), true);
+        if (pNewDrawFormat)
+        {
+            // If we selected a draw shape format, move the cursor to its anchor position.
+            // SetCursor() may pick something inside, which is not wanted: code later assumes that
+            // the cursor is at the anchor point if a shape is selected.
+            const SwPosition* pContentAnchor = pNewDrawFormat->GetAnchor().GetContentAnchor();
+            if (pContentAnchor)
+            {
+                pSh->SetSelection(SwPaM(*pContentAnchor));
+            }
+        }
+        else
+        {
+            pSh->SetCursor( pSh->Imp()->GetDrawView()->GetAllMarkedRect().TopLeft(), true);
+        }
     }
 }
 
@@ -277,6 +292,27 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
         }
     }
 
+    if (rMrkList.GetMarkCount() == 1)
+    {
+        SwFlyFrame* pSelFly = ::GetFlyFromMarked(&rMrkList, this);
+        if (pSelFly && pSelFly->IsFlySplitAllowed())
+        {
+            auto pMaster = static_cast<SwFlyAtContentFrame*>(pSelFly);
+            while (pMaster->IsFollow())
+            {
+                pMaster = pMaster->GetPrecede();
+            }
+            if (pMaster != pSelFly)
+            {
+                // A follow fly frame is selected, select the master instead. Selection of a follow
+                // would not be ideal, since one can't customize its vertical position (always
+                // starts at the top of the page).
+                pDView->UnmarkAll();
+                pDView->MarkObj(pMaster->DrawObj(), Imp()->GetPageView(), bAddSelect, bEnterGroup);
+            }
+        }
+    }
+
     if ( rMrkList.GetMarkCount() == 1 )
     {
         SwFlyFrame *pSelFly = ::GetFlyFromMarked( &rMrkList, this );
@@ -284,6 +320,7 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
             pSelFly->SelectionHasChanged(this);
     }
 
+    SwFrameFormat* pNewDrawFormat = nullptr;
     if (!(nFlag & SW_ALLOW_TEXTBOX))
     {
         // If the fly frame is a textbox of a shape, then select the shape instead.
@@ -302,6 +339,8 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
                 SdrObject* pShape = pShapeFormat->FindSdrObject();
                 pDView->UnmarkAll();
                 pDView->MarkObj(pShape, Imp()->GetPageView(), bAddSelect, bEnterGroup);
+                // Remember that this frame format was marked for selection.
+                pNewDrawFormat = pShapeFormat;
                 break;
             }
         }
@@ -309,7 +348,7 @@ bool SwFEShell::SelectObj( const Point& rPt, sal_uInt8 nFlag, SdrObject *pObj )
 
     if ( bRet )
     {
-        ::lcl_GrabCursor(this, pOldSelFly);
+        ::lcl_GrabCursor(this, pOldSelFly, pNewDrawFormat);
         if ( GetCntType() & CNT_GRF )
         {
             const SwFlyFrame *pTmp = GetFlyFromMarked( &rMrkList, this );
@@ -1889,7 +1928,7 @@ bool SwFEShell::ImpEndCreate()
         return true;
     }
 
-    LockPaint();
+    LockPaint(LockPaintReason::EndSdrCreate);
     StartAllAction();
 
     Imp()->GetDrawView()->UnmarkAll();
@@ -2070,7 +2109,7 @@ bool SwFEShell::ImpEndCreate()
         }
     }
 
-    if( SdrInventor::Default == rSdrObj.GetObjInventor() && rSdrObj.GetObjIdentifier() == SdrObjKind::NONE )
+    if (SdrInventor::Default == rSdrObj.GetObjInventor() && rSdrObj.GetObjIdentifier() == SdrObjKind::NewFrame)
     {
         // For OBJ_NONE a fly is inserted.
         const tools::Long nWidth = rBound.Right()  - rBound.Left();

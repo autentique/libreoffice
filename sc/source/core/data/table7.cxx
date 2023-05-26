@@ -169,12 +169,10 @@ void ScTable::CopyOneCellFromClip(
         const ScAddress aSrcStartPos
             = rCxt.getClipDoc()->GetClipParam().getWholeRange().aStart;
         const ScAddress aSrcEndPos = rCxt.getClipDoc()->GetClipParam().getWholeRange().aEnd;
-        tools::Rectangle aSourceRect = rCxt.getClipDoc()->GetMMRect(
-            aSrcStartPos.Col(), aSrcStartPos.Row(), aSrcEndPos.Col(), aSrcEndPos.Row(),
-            aSrcStartPos.Tab());
-        tools::Rectangle aDestRect = GetDoc().GetMMRect(nCol1, nRow1, nCol2, nRow2, nTab);
+        ScRange aSourceRange(aSrcStartPos, aSrcEndPos);
+        ScRange aDestRange(nCol1, nRow1, nTab, nCol2, nRow2, nTab);
         pDrawLayer->CopyFromClip(rCxt.getClipDoc()->mpDrawLayer.get(), aSrcStartPos.Tab(),
-                                 aSourceRect, ScAddress(nCol1, nRow1, nTab), aDestRect);
+                                 aSourceRange, ScAddress(nCol1, nRow1, nTab), aDestRange);
     }
 }
 
@@ -653,6 +651,14 @@ void ScTable::CollectBroadcasterState(sc::BroadcasterState& rState) const
 {
     for (const auto& pCol : aCol)
         pCol->CollectBroadcasterState(rState);
+}
+
+std::shared_ptr<sc::SolverSettings> ScTable::GetSolverSettings()
+{
+    if (!m_pSolverSettings)
+        m_pSolverSettings = std::make_shared<sc::SolverSettings>(*this);
+
+    return m_pSolverSettings;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

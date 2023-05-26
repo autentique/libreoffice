@@ -262,8 +262,7 @@ void SwEditShell::UpdateTable()
         if( DoesUndo() )
             StartUndo();
         EndAllTableBoxEdit();
-        SwTableFormulaUpdate aTableUpdate( &pTableNd->GetTable() );
-        GetDoc()->getIDocumentFieldsAccess().UpdateTableFields( &aTableUpdate );
+        GetDoc()->getIDocumentFieldsAccess().UpdateTableFields(&pTableNd->GetTable());
         if( DoesUndo() )
             EndUndo();
         EndAllAction();
@@ -305,17 +304,15 @@ bool SwEditShell::GetTableBoxFormulaAttrs( SfxItemSet& rSet ) const
         ::GetTableSelCrs( *this, aBoxes );
     else
     {
-        do {
-            SwFrame *pFrame = GetCurrFrame();
-            do {
-                pFrame = pFrame->GetUpper();
-            } while ( pFrame && !pFrame->IsCellFrame() );
-            if ( pFrame )
-            {
-                SwTableBox *pBox = const_cast<SwTableBox*>(static_cast<SwCellFrame*>(pFrame)->GetTabBox());
-                aBoxes.insert( pBox );
-            }
-        } while( false );
+        SwFrame* pFrame = GetCurrFrame()->GetUpper();
+        while (pFrame && !pFrame->IsCellFrame())
+            pFrame = pFrame->GetUpper();
+
+        if (pFrame)
+        {
+            auto pBox = const_cast<SwTableBox*>(static_cast<SwCellFrame*>(pFrame)->GetTabBox());
+            aBoxes.insert(pBox);
+        }
     }
 
     for (size_t n = 0; n < aBoxes.size(); ++n)

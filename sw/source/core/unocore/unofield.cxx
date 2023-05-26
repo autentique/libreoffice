@@ -506,8 +506,8 @@ SwXFieldMaster::getSupportedServiceNames()
     return { "com.sun.star.text.TextFieldMaster", getServiceName(m_pImpl->m_nResTypeId) };
 }
 
-SwXFieldMaster::SwXFieldMaster(SwDoc *const pDoc, SwFieldIds const nResId)
-    : m_pImpl(new Impl(pDoc->getIDocumentStylePoolAccess().GetPageDescFromPool(RES_POOLPAGE_STANDARD), pDoc, nResId))
+SwXFieldMaster::SwXFieldMaster(SwDoc& rDoc, SwFieldIds const nResId)
+    : m_pImpl(new Impl(rDoc.getIDocumentStylePoolAccess().GetPageDescFromPool(RES_POOLPAGE_STANDARD), &rDoc, nResId))
 {
 }
 
@@ -528,13 +528,13 @@ SwXFieldMaster::CreateXFieldMaster(SwDoc * pDoc, SwFieldType *const pType,
     rtl::Reference<SwXFieldMaster> xFM;
     if (pType)
     {
-        xFM = dynamic_cast<SwXFieldMaster*>(pType->GetXObject().get().get());
+        xFM = pType->GetXObject().get();
     }
     if (!xFM.is())
     {
         SwXFieldMaster *const pFM( pType
                 ? new SwXFieldMaster(*pType, pDoc)
-                : new SwXFieldMaster(pDoc, nResId));
+                : new SwXFieldMaster(*pDoc, nResId));
         xFM.set(pFM);
         if (pType)
         {
@@ -1297,6 +1297,8 @@ SwXTextField::getTextFieldMaster()
     SolarMutexGuard aGuard;
 
     SwFieldType* pType = m_pImpl->GetFieldType();
+    if (!pType && !m_pImpl->m_pDoc) // tdf#152619
+        return nullptr;
     uno::Reference<beans::XPropertySet> const xRet(
             SwXFieldMaster::CreateXFieldMaster(m_pImpl->m_pDoc, pType));
     return xRet;

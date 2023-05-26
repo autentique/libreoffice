@@ -238,6 +238,7 @@
                     <property name="halign">start</property>
                     <property name="label" translatable="yes" context="sortoptionspage|label6">Language</property>
                     <property name="use-underline">True</property>
+                    <property name="mnemonic-widget">language</property>
                   </object>
                   <packing>
                     <property name="left-attach">0</property>
@@ -251,6 +252,7 @@
                     <property name="halign">start</property>
                     <property name="label" translatable="yes" context="sortoptionspage|algorithmft">Options</property>
                     <property name="use-underline">True</property>
+                    <property name="mnemonic-widget">algorithmlb</property>
                   </object>
                   <packing>
                     <property name="left-attach">1</property>
@@ -264,6 +266,7 @@
                     <property name="has-entry">True</property>
                     <child internal-child="entry">
                       <object class="GtkEntry">
+                        <property name="truncate-multiline">True</property>
                         <property name="can-focus">False</property>
                       </object>
                     </child>

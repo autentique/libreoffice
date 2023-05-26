@@ -33,6 +33,7 @@
 #include <tools/urlobj.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <comphelper/dispatchcommand.hxx>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/linguistic2/LinguServiceManager.hpp>
 #include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
@@ -559,8 +560,11 @@ SvxLinguData_Impl::SvxLinguData_Impl() :
     xLinguSrvcMgr = LinguServiceManager::create(xContext);
 
     const Locale& rCurrentLocale = Application::GetSettings().GetLanguageTag().getLocale();
-    Sequence<Any> aArgs(2);//second arguments has to be empty!
-    aArgs.getArray()[0] <<= LinguMgr::GetLinguPropertySet();
+    Sequence<Any> aArgs
+    {
+        Any(LinguMgr::GetLinguPropertySet()),
+        Any() // second argument has to be empty!
+    };
 
     //read spell checker
     const Sequence< OUString > aSpellNames = xLinguSrvcMgr->getAvailableServices(
@@ -853,6 +857,7 @@ SvxLinguTabPage::SvxLinguTabPage(weld::Container* pPage, weld::DialogController*
     , m_xLinguDicsDelPB(m_xBuilder->weld_button("lingudictsdelete"))
     , m_xLinguOptionsCLB(m_xBuilder->weld_tree_view("linguoptions"))
     , m_xLinguOptionsEditPB(m_xBuilder->weld_button("linguoptionsedit"))
+    , m_xMoreDictsBox(m_xBuilder->weld_box("moredictsbox"))
     , m_xMoreDictsLink(m_xBuilder->weld_link_button("moredictslink"))
 {
     m_xLinguModulesCLB->enable_toggle_buttons(weld::ColumnToggleType::Check);
@@ -878,7 +883,15 @@ SvxLinguTabPage::SvxLinguTabPage(weld::Container* pPage, weld::DialogController*
 
     m_xMoreDictsLink->connect_activate_link(LINK(this, SvxLinguTabPage, OnLinkClick));
     if (officecfg::Office::Security::Hyperlinks::Open::get() == SvtExtendedSecurityOptions::OPEN_NEVER)
-        m_xMoreDictsLink->hide();
+        m_xMoreDictsBox->hide();
+
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        // hide User-defined Dictionaries part
+        m_xBuilder->weld_frame("dictsframe")->hide();
+        // hide Get more dictionaries URL + icon
+        m_xMoreDictsBox->hide();
+    }
 
     xProp = LinguMgr::GetLinguPropertySet();
     xDicList.set( LinguMgr::GetDictionaryList() );
@@ -1550,9 +1563,10 @@ void SvxLinguTabPage::HideGroups( sal_uInt16 nGrp )
         m_xLinguModulesCLB->hide();
         m_xLinguModulesEditPB->hide();
 
-        if (officecfg::Office::Security::Hyperlinks::Open::get() != SvtExtendedSecurityOptions::OPEN_NEVER)
+        if (officecfg::Office::Security::Hyperlinks::Open::get() != SvtExtendedSecurityOptions::OPEN_NEVER &&
+            !comphelper::LibreOfficeKit::isActive())
         {
-            m_xMoreDictsLink->show();
+            m_xMoreDictsBox->show();
         }
     }
 }

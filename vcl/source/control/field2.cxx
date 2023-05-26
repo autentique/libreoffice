@@ -2318,7 +2318,7 @@ static bool ImplIsValidTimePortion( bool _bSkipInvalidCharacters, const OUString
 
 static bool ImplCutTimePortion( OUStringBuffer& _rStr, sal_Int32 _nSepPos, bool _bSkipInvalidCharacters, short* _pPortion )
 {
-    OUString sPortion(_rStr.getStr(), _nSepPos );
+    OUString sPortion(_rStr.subView(0, _nSepPos));
 
     if (_nSepPos < _rStr.getLength())
         _rStr.remove(0, _nSepPos + 1);
@@ -2553,7 +2553,7 @@ void TimeFormatter::ImplTimeReformat( std::u16string_view rStr, OUString& rOutSt
         ostr.fill('0');
         ostr.width(9);
         ostr << aTempTime.GetNanoSec();
-        rOutStr += OUString::createFromAscii(ostr.str().c_str());
+        rOutStr += OUString::createFromAscii(ostr.str());
     }
     else if ( mbDuration )
         rOutStr = ImplGetLocaleDataWrapper().getDuration( aTempTime, bSecond, b100Sec );
@@ -2784,7 +2784,7 @@ OUString TimeFormatter::FormatTime(const tools::Time& rNewTime, TimeFieldFormat 
         ostr.fill('0');
         ostr.width(9);
         ostr << rNewTime.GetNanoSec();
-        aStr += OUString::createFromAscii(ostr.str().c_str());
+        aStr += OUString::createFromAscii(ostr.str());
     }
     else if ( bDuration )
     {

@@ -20,6 +20,7 @@
 #include "DiagramWrapper.hxx"
 #include <servicenames_charttypes.hxx>
 #include "DataSeriesPointWrapper.hxx"
+#include <DataSeriesProperties.hxx>
 #include "AxisWrapper.hxx"
 #include "Chart2ModelContact.hxx"
 #include "WallFloorWrapper.hxx"
@@ -71,13 +72,13 @@
 
 using namespace ::com::sun::star;
 using namespace ::chart::wrapper;
+using namespace ::chart::DataSeriesProperties;
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::chart::XAxis;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -1605,7 +1606,7 @@ void WrappedAttributedDataPointsProperty::setPropertyValue( const Any& rOuterVal
             uno::Sequence< sal_Int32 > aSeq;
             aVal <<= aSeq;
         }
-        series->setPropertyValue( "AttributedDataPoints", aVal );
+        series->setFastPropertyValue( PROP_DATASERIES_ATTRIBUTED_DATA_POINTS, aVal ); // "AttributedDataPoints"
         ++i;
     }
 }
@@ -1625,7 +1626,7 @@ Any WrappedAttributedDataPointsProperty::getPropertyValue( const Reference< bean
         for (auto const& series : aSeriesVector)
         {
             uno::Any aVal(
-                series->getPropertyValue("AttributedDataPoints"));
+                series->getFastPropertyValue(PROP_DATASERIES_ATTRIBUTED_DATA_POINTS)); // "AttributedDataPoints"
             uno::Sequence< sal_Int32 > aSeq;
             if( aVal >>= aSeq )
                 aResultRange[ i ] = aSeq;

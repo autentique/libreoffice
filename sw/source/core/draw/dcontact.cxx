@@ -751,10 +751,10 @@ SwDrawContact::~SwDrawContact()
 
 void SwDrawContact::GetTextObjectsFromFormat(std::list<SdrTextObj*>& o_rTextObjects, SwDoc& rDoc)
 {
-    for(auto& rpFly : *rDoc.GetSpzFrameFormats())
+    for(sw::SpzFrameFormat* pFly: *rDoc.GetSpzFrameFormats())
     {
-        if(dynamic_cast<const SwDrawFrameFormat*>(rpFly))
-            rpFly->CallSwClientNotify(sw::CollectTextObjectsHint(o_rTextObjects));
+        if(dynamic_cast<const SwDrawFrameFormat*>(pFly))
+            pFly->CallSwClientNotify(sw::CollectTextObjectsHint(o_rTextObjects));
     }
 }
 
@@ -1567,11 +1567,12 @@ void SwDrawContact::SwClientNotify(const SwModify& rMod, const SfxHint& rHint)
     {
         auto pDrawFormatLayoutCopyHint = static_cast<const sw::DrawFormatLayoutCopyHint*>(&rHint);
         const SwDrawFrameFormat& rFormat = static_cast<const SwDrawFrameFormat&>(rMod);
-        new SwDrawContact(
-                &pDrawFormatLayoutCopyHint->m_rDestFormat,
+        rtl::Reference<SdrObject> xNewObj =
                 pDrawFormatLayoutCopyHint->m_rDestDoc.CloneSdrObj(
                         *GetMaster(),
-                        pDrawFormatLayoutCopyHint->m_rDestDoc.IsCopyIsMove() && &pDrawFormatLayoutCopyHint->m_rDestDoc == rFormat.GetDoc()));
+                        pDrawFormatLayoutCopyHint->m_rDestDoc.IsCopyIsMove() && &pDrawFormatLayoutCopyHint->m_rDestDoc == rFormat.GetDoc());
+        new SwDrawContact(
+                &pDrawFormatLayoutCopyHint->m_rDestFormat, xNewObj.get() );
         // #i49730# - notify draw frame format that position attributes are
         // already set, if the position attributes are already set at the
         // source draw frame format.
@@ -1877,8 +1878,7 @@ void SwDrawContact::ConnectToLayout( const SwFormatAnchor* pAnch )
                         else
                         {
                             const SwNode& rIdx = *pAnch->GetAnchorNode();
-                            SwFrameFormats& rFormats = *(pDrawFrameFormat->GetDoc()->GetSpzFrameFormats());
-                            for( auto pFlyFormat : rFormats )
+                            for(sw::SpzFrameFormat* pFlyFormat :*(pDrawFrameFormat->GetDoc()->GetSpzFrameFormats()))
                             {
                                 if( pFlyFormat->GetContent().GetContentIdx() &&
                                     rIdx == pFlyFormat->GetContent().GetContentIdx()->GetNode() )

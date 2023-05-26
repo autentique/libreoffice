@@ -82,7 +82,7 @@ namespace
         }
         if (const SfxStringItem* pJSON = rArgs.GetItemIfSet(SID_FILL_GRADIENT_JSON, false))
         {
-            XGradient aGradient = XGradient::fromJSON(pJSON->GetValue());
+            basegfx::BGradient aGradient = basegfx::BGradient::fromJSON(pJSON->GetValue());
             XFillGradientItem aItem(aGradient);
             rArgs.Put(aItem);
         }
@@ -161,9 +161,15 @@ void ScDrawShell::ExecDrawAttr( SfxRequest& rReq )
             }
             break;
 
-        case SID_TEXT_STANDARD: // delete hard text attributes
+        case SID_CELL_FORMAT_RESET:
+        case SID_TEXT_STANDARD:
             {
-                SfxItemSetFixed<EE_ITEMS_START, EE_ITEMS_END> aEmptyAttr(GetPool());
+                SfxItemSetFixed<SDRATTR_TEXT_MINFRAMEHEIGHT, SDRATTR_TEXT_MINFRAMEHEIGHT,
+                                SDRATTR_TEXT_MAXFRAMEHEIGHT, SDRATTR_TEXT_MAXFRAMEWIDTH> aEmptyAttr(GetPool());
+
+                if (ScDrawLayer::IsNoteCaption(pSingleSelectedObj))
+                    aEmptyAttr.Put(pView->GetAttrFromMarked(true));
+
                 pView->SetAttributes(aEmptyAttr, true);
             }
             break;

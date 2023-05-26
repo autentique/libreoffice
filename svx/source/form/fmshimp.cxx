@@ -92,6 +92,7 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <unotools/configmgr.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
@@ -179,28 +180,28 @@ const sal_Int16 SelObjectSlotMap[] =  // slots depending on the SelObject
 
 // the following arrays must be consistent, i.e., corresponding entries should
 // be at the same relative position within their respective arrays
-static const char* aConvertSlots[] =
+static std::u16string_view aConvertSlots[] =
 {
-    "ConvertToEdit",
-    "ConvertToButton",
-    "ConvertToFixed",
-    "ConvertToList",
-    "ConvertToCheckBox",
-    "ConvertToRadio",
-    "ConvertToGroup",
-    "ConvertToCombo",
-    "ConvertToImageBtn",
-    "ConvertToFileControl",
-    "ConvertToDate",
-    "ConvertToTime",
-    "ConvertToNumeric",
-    "ConvertToCurrency",
-    "ConvertToPattern",
-    "ConvertToImageControl",
-    "ConvertToFormatted",
-    "ConvertToScrollBar",
-    "ConvertToSpinButton",
-    "ConvertToNavigationBar"
+    u"ConvertToEdit",
+    u"ConvertToButton",
+    u"ConvertToFixed",
+    u"ConvertToList",
+    u"ConvertToCheckBox",
+    u"ConvertToRadio",
+    u"ConvertToGroup",
+    u"ConvertToCombo",
+    u"ConvertToImageBtn",
+    u"ConvertToFileControl",
+    u"ConvertToDate",
+    u"ConvertToTime",
+    u"ConvertToNumeric",
+    u"ConvertToCurrency",
+    u"ConvertToPattern",
+    u"ConvertToImageControl",
+    u"ConvertToFormatted",
+    u"ConvertToScrollBar",
+    u"ConvertToSpinButton",
+    u"ConvertToNavigationBar"
 };
 
 constexpr rtl::OUStringConstExpr aImgIds[] =
@@ -285,11 +286,11 @@ namespace
         {
             SdrObject* pCurrent = _rMarkList.GetMark( i )->GetMarkedSdrObj();
 
-            std::unique_ptr<SdrObjListIter> pGroupIterator;
+            std::optional<SdrObjListIter> oGroupIterator;
             if ( pCurrent->IsGroupObject() )
             {
-                pGroupIterator.reset(new SdrObjListIter( pCurrent->GetSubList() ));
-                pCurrent = pGroupIterator->IsMore() ? pGroupIterator->Next() : nullptr;
+                oGroupIterator.emplace( pCurrent->GetSubList() );
+                pCurrent = oGroupIterator->IsMore() ? oGroupIterator->Next() : nullptr;
             }
 
             while ( pCurrent )
@@ -305,7 +306,7 @@ namespace
                 }
 
                 // next element
-                pCurrent = pGroupIterator && pGroupIterator->IsMore() ? pGroupIterator->Next() : nullptr;
+                pCurrent = oGroupIterator && oGroupIterator->IsMore() ? oGroupIterator->Next() : nullptr;
             }
         }
     }
@@ -1012,24 +1013,24 @@ void FmXFormShell::GetConversionMenu_Lock(weld::Menu& rNewMenu)
     for (size_t i = 0; i < SAL_N_ELEMENTS(aConvertSlots); ++i)
     {
         // the corresponding image at it
-        rNewMenu.append(OUString::createFromAscii(aConvertSlots[i]), SvxResId(RID_SVXSW_CONVERTMENU[i]), aImgIds[i]);
+        rNewMenu.append(OUString(aConvertSlots[i]), SvxResId(RID_SVXSW_CONVERTMENU[i]), aImgIds[i]);
     }
 }
 
-OString FmXFormShell::SlotToIdent(sal_uInt16 nSlot)
+OUString FmXFormShell::SlotToIdent(sal_uInt16 nSlot)
 {
     static_assert(SAL_N_ELEMENTS(SelObjectSlotMap) >= SAL_N_ELEMENTS(aConvertSlots));
 
     for (size_t i = 0; i < SAL_N_ELEMENTS(aConvertSlots); ++i)
     {
         if (nSlot == SelObjectSlotMap[i])
-            return aConvertSlots[i];
+            return OUString(aConvertSlots[i]);
     }
 
-    return OString();
+    return {};
 }
 
-bool FmXFormShell::isControlConversionSlot(std::string_view rIdent)
+bool FmXFormShell::isControlConversionSlot(std::u16string_view rIdent)
 {
     for (const auto& rConvertSlot : aConvertSlots)
         if (rIdent == rConvertSlot)
@@ -1037,7 +1038,7 @@ bool FmXFormShell::isControlConversionSlot(std::string_view rIdent)
     return false;
 }
 
-void FmXFormShell::executeControlConversionSlot_Lock(std::string_view rIdent)
+void FmXFormShell::executeControlConversionSlot_Lock(std::u16string_view rIdent)
 {
     OSL_PRECOND( canConvertCurrentSelectionToControl_Lock(rIdent), "FmXFormShell::executeControlConversionSlot: illegal call!" );
     InterfaceBag::const_iterator aSelectedElement = m_aCurrentSelection.begin();
@@ -1047,7 +1048,7 @@ void FmXFormShell::executeControlConversionSlot_Lock(std::string_view rIdent)
     executeControlConversionSlot_Lock(Reference<XFormComponent>(*aSelectedElement, UNO_QUERY), rIdent);
 }
 
-bool FmXFormShell::executeControlConversionSlot_Lock(const Reference<XFormComponent>& _rxObject, std::string_view rIdent)
+bool FmXFormShell::executeControlConversionSlot_Lock(const Reference<XFormComponent>& _rxObject, std::u16string_view rIdent)
 {
     if (impl_checkDisposed_Lock())
         return false;
@@ -1246,7 +1247,7 @@ bool FmXFormShell::executeControlConversionSlot_Lock(const Reference<XFormCompon
     return false;
 }
 
-bool FmXFormShell::canConvertCurrentSelectionToControl_Lock(std::string_view rIdent)
+bool FmXFormShell::canConvertCurrentSelectionToControl_Lock(std::u16string_view rIdent)
 {
     if ( m_aCurrentSelection.empty() )
         return false;
@@ -1288,7 +1289,7 @@ void FmXFormShell::checkControlConversionSlotsForCurrentSelection_Lock(weld::Men
     for (int i = 0, nCount = rMenu.n_children(); i < nCount; ++i)
     {
         // the context is already of a type that corresponds to the entry -> disable
-        OString sIdent(aConvertSlots[i]);
+        OUString sIdent(aConvertSlots[i]);
         rMenu.set_sensitive(sIdent, canConvertCurrentSelectionToControl_Lock(sIdent));
     }
 }
@@ -3461,6 +3462,10 @@ void FmXFormShell::CreateExternalView_Lock()
 
 void FmXFormShell::implAdjustConfigCache_Lock()
 {
+    const bool bFuzzing(utl::ConfigManager::IsFuzzing());
+    if (bFuzzing)
+        return;
+
     // get (cache) the wizard usage flag
     Sequence< OUString > aNames { "FormControlPilotsEnabled" };
     Sequence< Any > aFlags = GetProperties(aNames);

@@ -40,6 +40,7 @@
 #include <type_traits>
 #endif
 
+#include "rtl/math.h"
 #include "rtl/textenc.h"
 #include "rtl/string.h"
 #include "rtl/stringutils.hxx"
@@ -439,8 +440,8 @@ public:
      @overload
      @internal
     */
-    template< typename T, std::size_t N >
-    OString( StringNumberBase< char, T, N >&& n )
+    template< std::size_t N >
+    OString( OStringNumber< N >&& n )
         : OString( n.buf, n.length )
     {}
 #endif
@@ -622,12 +623,12 @@ public:
      @overload
      @internal
     */
-    template< typename T, std::size_t N >
-    OString& operator+=( StringNumberBase< char, T, N >&& n ) & {
+    template< std::size_t N >
+    OString& operator+=( OStringNumber< N >&& n ) & {
         return operator +=(std::string_view(n.buf, n.length));
     }
-    template<typename T, std::size_t N> void operator +=(
-        StringNumberBase<char, T, N> &&) && = delete;
+    template<std::size_t N> void operator +=(
+        OStringNumber<N> &&) && = delete;
 #endif
 
     /**
@@ -1997,37 +1998,29 @@ public:
 
 #ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
 
-    static OStringNumber< int > number( int i, sal_Int16 radix = 10 )
+    static auto number( int i, sal_Int16 radix = 10 )
     {
-        return OStringNumber< int >( i, radix );
+        return OStringNumber<RTL_STR_MAX_VALUEOFINT32>(rtl_str_valueOfInt32, i, radix);
     }
-    static OStringNumber< long long > number( long long ll, sal_Int16 radix = 10 )
+    static auto number( long long ll, sal_Int16 radix = 10 )
     {
-        return OStringNumber< long long >( ll, radix );
+        return OStringNumber<RTL_STR_MAX_VALUEOFINT64>(rtl_str_valueOfInt64, ll, radix);
     }
-    static OStringNumber< unsigned long long > number( unsigned long long ll, sal_Int16 radix = 10 )
+    static auto number( unsigned long long ll, sal_Int16 radix = 10 )
     {
-        return OStringNumber< unsigned long long >( ll, radix );
+        return OStringNumber<RTL_STR_MAX_VALUEOFUINT64>(rtl_str_valueOfUInt64, ll, radix);
     }
-    static OStringNumber< unsigned long long > number( unsigned int i, sal_Int16 radix = 10 )
+    static auto number( unsigned int i, sal_Int16 radix = 10 )
     {
         return number( static_cast< unsigned long long >( i ), radix );
     }
-    static OStringNumber< long long > number( long i, sal_Int16 radix = 10)
+    static auto number( long i, sal_Int16 radix = 10)
     {
         return number( static_cast< long long >( i ), radix );
     }
-    static OStringNumber< unsigned long long > number( unsigned long i, sal_Int16 radix = 10 )
+    static auto number( unsigned long i, sal_Int16 radix = 10 )
     {
         return number( static_cast< unsigned long long >( i ), radix );
-    }
-    static OStringNumber< float > number( float f )
-    {
-        return OStringNumber< float >( f );
-    }
-    static OStringNumber< double > number( double d )
-    {
-        return OStringNumber< double >( d );
     }
 #else
     /**
@@ -2077,6 +2070,7 @@ public:
         char aBuf[RTL_STR_MAX_VALUEOFUINT64];
         return OString(aBuf, rtl_str_valueOfUInt64(aBuf, ll, radix));
     }
+#endif
 
     /**
       Returns the string representation of the float argument.
@@ -2089,8 +2083,15 @@ public:
     */
     static OString number( float f )
     {
-        char aBuf[RTL_STR_MAX_VALUEOFFLOAT];
-        return OString(aBuf, rtl_str_valueOfFloat(aBuf, f));
+        rtl_String* pNew = NULL;
+        // Same as rtl::str::valueOfFP, used for rtl_str_valueOfFloat
+        rtl_math_doubleToString(&pNew, NULL, 0, f, rtl_math_StringFormat_G,
+                                RTL_STR_MAX_VALUEOFFLOAT - SAL_N_ELEMENTS("-x.E-xxx") + 1, '.',
+                                NULL, 0, true);
+        if (pNew == NULL)
+            throw std::bad_alloc();
+
+        return OString(pNew, SAL_NO_ACQUIRE);
     }
 
     /**
@@ -2104,11 +2105,23 @@ public:
     */
     static OString number( double d )
     {
-        char aBuf[RTL_STR_MAX_VALUEOFDOUBLE];
-        return OString(aBuf, rtl_str_valueOfDouble(aBuf, d));
-    }
-#endif
+        rtl_String* pNew = NULL;
+        // Same as rtl::str::valueOfFP, used for rtl_str_valueOfDouble
+        rtl_math_doubleToString(&pNew, NULL, 0, d, rtl_math_StringFormat_G,
+                                RTL_STR_MAX_VALUEOFDOUBLE - SAL_N_ELEMENTS("-x.E-xxx") + 1, '.',
+                                NULL, 0, true);
+        if (pNew == NULL)
+            throw std::bad_alloc();
 
+        return OString(pNew, SAL_NO_ACQUIRE);
+    }
+
+#ifdef LIBO_INTERNAL_ONLY // "RTL_FAST_STRING"
+    static auto boolean(bool b)
+    {
+        return OStringNumber<RTL_STR_MAX_VALUEOFBOOLEAN>(rtl_str_valueOfBoolean, b);
+    }
+#else
     /**
       Returns the string representation of the sal_Bool argument.
 
@@ -2141,6 +2154,7 @@ public:
         char aBuf[RTL_STR_MAX_VALUEOFBOOLEAN];
         return OString(aBuf, rtl_str_valueOfBoolean(aBuf, b));
     }
+#endif
 
     /**
       Returns the string representation of the char argument.
@@ -2229,14 +2243,14 @@ public:
     // would not compile):
     template<typename T> [[nodiscard]] static
     OStringConcat<OStringConcatMarker, T>
-    Concat(T const & value) { return OStringConcat<OStringConcatMarker, T>({}, value); }
+    Concat(T const & value) { return OStringConcat<OStringConcatMarker, T>(value); }
 
     // This overload is needed so that an argument of type 'char const[N]' ends up as
     // 'OStringConcat<rtl::OStringConcatMarker, char const[N]>' rather than as
     // 'OStringConcat<rtl::OStringConcatMarker, char[N]>':
     template<typename T, std::size_t N> [[nodiscard]] static
     OStringConcat<OStringConcatMarker, T[N]>
-    Concat(T (& value)[N]) { return OStringConcat<OStringConcatMarker, T[N]>({}, value); }
+    Concat(T (& value)[N]) { return OStringConcat<OStringConcatMarker, T[N]>(value); }
 #endif
 };
 

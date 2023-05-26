@@ -27,6 +27,7 @@
 #include <SeriesOptionsItemConverter.hxx>
 #include <DataSeries.hxx>
 #include <DataSeriesHelper.hxx>
+#include <DataSeriesProperties.hxx>
 #include <DiagramHelper.hxx>
 #include <Diagram.hxx>
 #include <ChartModel.hxx>
@@ -62,6 +63,7 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::chart::DataSeriesProperties;
 using ::com::sun::star::uno::Reference;
 
 namespace chart::wrapper {
@@ -133,7 +135,7 @@ bool lcl_NumberFormatFromItemToPropertySet( sal_uInt16 nWhichId, const SfxItemSe
     uno::Any aOldValue( xPropertySet->getPropertyValue(aPropertyName) );
     if( bOverwriteAttributedDataPointsAlso )
     {
-        Reference< chart2::XDataSeries > xSeries( xPropertySet, uno::UNO_QUERY);
+        rtl::Reference< DataSeries > xSeries( dynamic_cast<DataSeries*>(xPropertySet.get()) );
         if( aValue != aOldValue ||
             ::chart::DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, aPropertyName, aOldValue ) )
         {
@@ -181,7 +183,7 @@ bool lcl_UseSourceFormatFromItemToPropertySet( sal_uInt16 nWhichId, const SfxIte
     uno::Any aOldValue( xPropertySet->getPropertyValue(aPropertyName) );
     if( bOverwriteAttributedDataPointsAlso )
     {
-        Reference< chart2::XDataSeries > xSeries( xPropertySet, uno::UNO_QUERY);
+        rtl::Reference< DataSeries > xSeries( dynamic_cast<DataSeries*>(xPropertySet.get()) );
         if( aNewValue != aOldValue ||
             ::chart::DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, aPropertyName, aOldValue ) )
         {
@@ -240,7 +242,7 @@ DataPointItemConverter::DataPointItemConverter(
             dynamic_cast<DataSeries*>(rPropertySet.get()), rItemPool ));
     }
 
-    rtl::Reference< Diagram > xDiagram( ChartModelHelper::findDiagram(xChartModel) );
+    rtl::Reference< Diagram > xDiagram( xChartModel->getFirstChartDiagram() );
     rtl::Reference< ChartType > xChartType( xDiagram->getChartTypeOfSeries( xSeries ) );
     bool bFound = false;
     bool bAmbiguous = false;
@@ -253,7 +255,8 @@ DataPointItemConverter::DataPointItemConverter(
         return;
 
     uno::Sequence<sal_Int32> deletedLegendEntriesSeq;
-    xSeries->getPropertyValue("DeletedLegendEntries") >>= deletedLegendEntriesSeq;
+    // "DeletedLegendEntries"
+    xSeries->getFastPropertyValue(PROP_DATASERIES_DELETED_LEGEND_ENTRIES) >>= deletedLegendEntriesSeq;
     for (const auto& deletedLegendEntry : std::as_const(deletedLegendEntriesSeq))
     {
         if (nPointIndex == deletedLegendEntry)
@@ -341,7 +344,7 @@ bool DataPointItemConverter::ApplySpecialItem(
                 rValue = rItem.GetValue();
                 if( m_bOverwriteLabelsForAttributedDataPointsAlso )
                 {
-                    Reference< chart2::XDataSeries > xSeries( GetPropertySet(), uno::UNO_QUERY);
+                    rtl::Reference<DataSeries> xSeries(dynamic_cast<DataSeries*>(GetPropertySet().get()));
                     if( bOldValue != bool(rValue) ||
                         DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, CHART_UNONAME_LABEL , aOldValue ) )
                     {
@@ -382,7 +385,7 @@ bool DataPointItemConverter::ApplySpecialItem(
                 GetPropertySet()->getPropertyValue( "LabelSeparator" ) >>= aOldValue;
                 if( m_bOverwriteLabelsForAttributedDataPointsAlso )
                 {
-                    Reference< chart2::XDataSeries > xSeries( GetPropertySet(), uno::UNO_QUERY);
+                    rtl::Reference<DataSeries> xSeries(dynamic_cast<DataSeries*>(GetPropertySet().get()));
                     if( aOldValue != aNewValue ||
                         DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, "LabelSeparator" , uno::Any( aOldValue ) ) )
                     {
@@ -413,7 +416,7 @@ bool DataPointItemConverter::ApplySpecialItem(
                 GetPropertySet()->getPropertyValue( "TextWordWrap" ) >>= bOld;
                 if( m_bOverwriteLabelsForAttributedDataPointsAlso )
                 {
-                    Reference< chart2::XDataSeries > xSeries( GetPropertySet(), uno::UNO_QUERY);
+                    rtl::Reference<DataSeries> xSeries(dynamic_cast<DataSeries*>(GetPropertySet().get()));
                     if( bOld!=bNew ||
                         DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, "TextWordWrap", uno::Any( bOld ) ) )
                     {
@@ -445,7 +448,7 @@ bool DataPointItemConverter::ApplySpecialItem(
                 GetPropertySet()->getPropertyValue("LabelPlacement") >>= nOld;
                 if( m_bOverwriteLabelsForAttributedDataPointsAlso )
                 {
-                    Reference< chart2::XDataSeries > xSeries( GetPropertySet(), uno::UNO_QUERY);
+                    rtl::Reference<DataSeries> xSeries(dynamic_cast<DataSeries*>(GetPropertySet().get()));
                     if( nOld!=nNew ||
                         DataSeriesHelper::hasAttributedDataPointDifferentValue( xSeries, "LabelPlacement" , uno::Any( nOld ) ) )
                     {
@@ -574,7 +577,8 @@ bool DataPointItemConverter::ApplySpecialItem(
             if (bHideLegendEntry != m_bHideLegendEntry)
             {
                 uno::Sequence<sal_Int32> deletedLegendEntriesSeq;
-                m_xSeries->getPropertyValue("DeletedLegendEntries") >>= deletedLegendEntriesSeq;
+                // "DeletedLegendEntries"
+                m_xSeries->getFastPropertyValue(PROP_DATASERIES_DELETED_LEGEND_ENTRIES) >>= deletedLegendEntriesSeq;
                 std::vector<sal_Int32> deletedLegendEntries;
                 for (const auto& deletedLegendEntry : std::as_const(deletedLegendEntriesSeq))
                 {
@@ -583,7 +587,8 @@ bool DataPointItemConverter::ApplySpecialItem(
                 }
                 if (bHideLegendEntry)
                     deletedLegendEntries.push_back(m_nPointIndex);
-                m_xSeries->setPropertyValue("DeletedLegendEntries", uno::Any(comphelper::containerToSequence(deletedLegendEntries)));
+                // "DeletedLegendEntries"
+                m_xSeries->setFastPropertyValue(PROP_DATASERIES_DELETED_LEGEND_ENTRIES, uno::Any(comphelper::containerToSequence(deletedLegendEntries)));
             }
         }
         break;
@@ -635,7 +640,7 @@ void DataPointItemConverter::FillSpecialItem(
                 if( m_bOverwriteLabelsForAttributedDataPointsAlso )
                 {
                     if( DataSeriesHelper::hasAttributedDataPointDifferentValue(
-                        Reference< chart2::XDataSeries >( GetPropertySet(), uno::UNO_QUERY), CHART_UNONAME_LABEL , uno::Any(aLabel) ) )
+                        dynamic_cast<DataSeries*>(GetPropertySet().get()), CHART_UNONAME_LABEL , uno::Any(aLabel) ) )
                     {
                         rOutItemSet.InvalidateItem(nWhichId);
                     }

@@ -48,7 +48,6 @@
 #include <svx/svxids.hrc>
 #include <svx/xfillit0.hxx>
 #include <svx/xflclit.hxx>
-#include <svx/xgrad.hxx>
 #include <svx/xbtmpit.hxx>
 #include <svx/xflhtit.hxx>
 #include <svx/svdpage.hxx>
@@ -398,11 +397,17 @@ void SlideBackground::Update()
             mxFillGrad1->show();
             mxFillGrad2->show();
 
-            const XGradient xGradient = GetGradientSetOrDefault();
-            const Color aStartColor(xGradient.GetColorStops().front().getStopColor());
+            const basegfx::BGradient aBGradient = GetGradientSetOrDefault();
+            const Color aStartColor(aBGradient.GetColorStops().front().getStopColor());
             mxFillGrad1->SelectEntry(aStartColor);
-            const Color aEndColor(xGradient.GetColorStops().back().getStopColor());
+            const Color aEndColor(aBGradient.GetColorStops().back().getStopColor());
             mxFillGrad2->SelectEntry(aEndColor);
+
+            // MCGR: preserve in-between ColorStops if given
+            if (aBGradient.GetColorStops().size() > 2)
+                maColorStops = basegfx::BColorStops(aBGradient.GetColorStops().begin() + 1, aBGradient.GetColorStops().end() - 1);
+            else
+                maColorStops.clear();
         }
         break;
 
@@ -750,11 +755,11 @@ Color const & SlideBackground::GetColorSetOrDefault()
    return mpColorItem->GetColorValue();
 }
 
-XGradient const & SlideBackground::GetGradientSetOrDefault()
+basegfx::BGradient const & SlideBackground::GetGradientSetOrDefault()
 {
     if( !mpGradientItem )
     {
-        XGradient aGradient;
+        basegfx::BGradient aGradient;
         OUString aGradientName;
         if (SfxObjectShell* pSh = SfxObjectShell::Current())
         {
@@ -1127,10 +1132,7 @@ IMPL_LINK_NOARG(SlideBackground, FillColorHdl, ColorListBox&, void)
         break;
         case drawing::FillStyle_GRADIENT:
         {
-            XGradient aGradient(
-                basegfx::utils::createColorStopsFromStartEndColor(
-                    mxFillGrad1->GetSelectEntryColor().getBColor(),
-                    mxFillGrad2->GetSelectEntryColor().getBColor()));
+            basegfx::BGradient aGradient(createColorStops());
 
             // the name doesn't really matter, it'll be converted to unique one eventually,
             // but it has to be non-empty
@@ -1283,6 +1285,23 @@ IMPL_LINK_NOARG( SlideBackground, ModifyMarginHdl, weld::ComboBox&, void )
     }
 }
 
+basegfx::BColorStops SlideBackground::createColorStops()
+{
+    basegfx::BColorStops aColorStops;
+
+    aColorStops.emplace_back(0.0, mxFillGrad1->GetSelectEntryColor().getBColor());
+
+    if(!maColorStops.empty())
+    {
+        aColorStops.insert(aColorStops.begin(), maColorStops.begin(), maColorStops.end());
+    }
+
+    aColorStops.emplace_back(1.0, mxFillGrad2->GetSelectEntryColor().getBColor());
+
+    return aColorStops;
 }
+
+}
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

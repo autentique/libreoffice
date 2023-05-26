@@ -2983,6 +2983,7 @@ $(eval $(call gb_UnoApi_add_idlfiles,offapi,com/sun/star/presentation,\
 	XSlideShow \
 	XSlideShowController \
 	XSlideShowListener \
+    XSlideShowNavigationListener \
 	XSlideShowView \
 	XTransition \
 	XTransitionFactory \
@@ -4173,8 +4174,8 @@ $(eval $(call gb_UnoApi_add_idlfiles,offapi,com/sun/star/util,\
 	XCloseBroadcaster \
 	XCloseListener \
 	XCloseable \
+	XComplexColor \
 	XTheme \
-	XThemeColor \
 	XDataEditor \
 	XDataEditorListener \
 	XFlushListener \

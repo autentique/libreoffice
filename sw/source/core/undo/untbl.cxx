@@ -434,10 +434,8 @@ SwUndoTableToText::SwUndoTableToText( const SwTable& rTable, sal_Unicode cCh )
     const SwTableNode* pTableNd = rTable.GetTableNode();
     SwNodeOffset nTableStt = pTableNd->GetIndex(), nTableEnd = pTableNd->EndOfSectionIndex();
 
-    const SwFrameFormats& rFrameFormatTable = *pTableNd->GetDoc().GetSpzFrameFormats();
-    for( size_t n = 0; n < rFrameFormatTable.size(); ++n )
+    for(sw::SpzFrameFormat* pFormat: *pTableNd->GetDoc().GetSpzFrameFormats())
     {
-        SwFrameFormat* pFormat = rFrameFormatTable[ n ];
         SwFormatAnchor const*const pAnchor = &pFormat->GetAnchor();
         SwNode const*const pAnchorNode = pAnchor->GetAnchorNode();
         if (pAnchorNode &&
@@ -2292,8 +2290,7 @@ void SwUndoTableNumFormat::RedoImpl(::sw::UndoRedoContext & rContext)
     if( m_bNewFormula )
     {
         // No matter what was set, an update of the table is always a good idea
-        SwTableFormulaUpdate aTableUpdate( &pSttNd->FindTableNode()->GetTable() );
-        rDoc.getIDocumentFieldsAccess().UpdateTableFields( &aTableUpdate );
+        rDoc.getIDocumentFieldsAccess().UpdateTableFields(&pSttNd->FindTableNode()->GetTable());
     }
 
     if( !pNd->IsContentNode() )

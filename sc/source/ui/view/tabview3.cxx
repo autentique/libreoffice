@@ -444,7 +444,7 @@ void ScTabView::SetCursor( SCCOL nPosX, SCROW nPosY, bool bNew )
     // call lok::Document::getDocumentSize().
     std::stringstream ss;
     ss << aNewSize.Width() << ", " << aNewSize.Height();
-    OString sSize = ss.str().c_str();
+    OString sSize( ss.str() );
     ScModelObj* pModel = comphelper::getFromUnoTunnel<ScModelObj>(aViewData.GetViewShell()->GetCurrentDocument());
     SfxLokHelper::notifyDocumentSizeChanged(aViewData.GetViewShell(), sSize, pModel, false);
 }
@@ -2430,7 +2430,7 @@ void ScTabView::PaintArea( SCCOL nStartCol, SCROW nStartRow, SCCOL nEndCol, SCRO
         aStart.AdjustX( -nLayoutSign );      // include change marks
         aStart.AdjustY( -1 );
 
-        bool bMarkClipped = aViewData.GetOptions().GetOption( VOPT_CLIPMARKS );
+        bool bMarkClipped = SC_MOD()->GetColorConfig().GetColorValue(svtools::CALCTEXTOVERFLOW).bIsVisible;
         if (bMarkClipped)
         {
             // ScColumn::IsEmptyData has to be optimized for this

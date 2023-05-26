@@ -647,16 +647,18 @@ SdrLayerID SdrObject::GetLayer() const
     return mnLayerID;
 }
 
-void SdrObject::getMergedHierarchySdrLayerIDSet(SdrLayerIDSet& rSet) const
+bool SdrObject::isVisibleOnAnyOfTheseLayers(const SdrLayerIDSet& rSet) const
 {
-    rSet.Set(GetLayer());
+    if (rSet.IsSet(GetLayer()))
+        return true;
     SdrObjList* pOL=GetSubList();
-    if (pOL!=nullptr) {
-        const size_t nObjCount = pOL->GetObjCount();
-        for (size_t nObjNum = 0; nObjNum<nObjCount; ++nObjNum) {
-            pOL->GetObj(nObjNum)->getMergedHierarchySdrLayerIDSet(rSet);
-        }
-    }
+    if (!pOL)
+        return false;
+    const size_t nObjCount = pOL->GetObjCount();
+    for (size_t nObjNum = 0; nObjNum<nObjCount; ++nObjNum)
+        if (pOL->GetObj(nObjNum)->isVisibleOnAnyOfTheseLayers(rSet))
+            return true;
+    return false;
 }
 
 void SdrObject::NbcSetLayer(SdrLayerID nLayer)
@@ -3194,6 +3196,52 @@ rtl::Reference<SdrObject> SdrObjFactory::CreateObjectFromFactory(SdrModel& rSdrM
     return nullptr;
 }
 
+namespace
+{
+
+// SdrObject subclass, which represents an empty object of a
+// certain type (kind).
+template <SdrObjKind OBJECT_KIND, SdrInventor OBJECT_INVENTOR>
+class EmptyObject final : public SdrObject
+{
+private:
+    virtual ~EmptyObject() override
+    {}
+
+public:
+    EmptyObject(SdrModel& rSdrModel)
+        : SdrObject(rSdrModel)
+    {
+    }
+
+    EmptyObject(SdrModel& rSdrModel, EmptyObject const& rSource)
+        : SdrObject(rSdrModel, rSource)
+    {
+    }
+
+    rtl::Reference<SdrObject> CloneSdrObject(SdrModel& rTargetModel) const override
+    {
+        return new EmptyObject(rTargetModel, *this);
+    }
+
+    SdrInventor GetObjInventor() const override
+    {
+        return OBJECT_INVENTOR;
+    }
+
+    SdrObjKind GetObjIdentifier() const override
+    {
+        return OBJECT_KIND;
+    }
+
+    void NbcRotate(const Point& /*rRef*/, Degree100 /*nAngle*/, double /*sinAngle*/, double /*cosAngle*/) override
+    {
+        assert(false); // should not be called for this kind of objects
+    }
+};
+
+} // end anonymous namespace
+
 rtl::Reference<SdrObject> SdrObjFactory::MakeNewObject(
     SdrModel& rSdrModel,
     SdrInventor nInventor,
@@ -3286,7 +3334,7 @@ rtl::Reference<SdrObject> SdrObjFactory::MakeNewObject(
                 }
             }
             break;
-            case SdrObjKind::NONE       : pObj = nullptr; break;
+            case SdrObjKind::NONE: pObj = nullptr; break;
             case SdrObjKind::Group       : pObj=new SdrObjGroup(rSdrModel);                 break;
             case SdrObjKind::Polygon       : pObj=new SdrPathObj(rSdrModel, SdrObjKind::Polygon       ); break;
             case SdrObjKind::PolyLine       : pObj=new SdrPathObj(rSdrModel, SdrObjKind::PolyLine       ); break;
@@ -3309,7 +3357,11 @@ rtl::Reference<SdrObject> SdrObjFactory::MakeNewObject(
             case SdrObjKind::Media      : pObj=new SdrMediaObj(rSdrModel);               break;
 #endif
             case SdrObjKind::Table      : pObj=new sdr::table::SdrTableObj(rSdrModel);   break;
-            default: break;
+            case SdrObjKind::NewFrame: // used for frame creation in writer
+                pObj = new EmptyObject<SdrObjKind::NewFrame, SdrInventor::Default>(rSdrModel);
+                break;
+            default:
+                break;
         }
     }
 

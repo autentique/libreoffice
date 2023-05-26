@@ -4270,7 +4270,7 @@ void SwRootFrame::InvalidateAllObjPos()
 static void AddRemoveFlysForNode(
         SwTextFrame & rFrame, SwTextNode & rTextNode,
         std::set<SwNodeOffset> *const pSkipped,
-        const SwFrameFormats & rTable,
+        const sw::FrameFormats<sw::SpzFrameFormat*>& rTable,
         SwPageFrame *const pPage,
         SwTextNode const*const pNode,
         std::vector<sw::Extent>::const_iterator const& rIterFirst,
@@ -4321,7 +4321,7 @@ void AddRemoveFlysAnchoredToFrameStartingAtNode(
         && rTextNode.GetIndex() <= pMerged->pLastNode->GetIndex());
     // add visible flys in non-first node to merged frame
     // (hidden flys remain and are deleted via DelFrames())
-    SwFrameFormats& rTable(*rTextNode.GetDoc().GetSpzFrameFormats());
+    sw::SpzFrameFormats& rTable(*rTextNode.GetDoc().GetSpzFrameFormats());
     SwPageFrame *const pPage(rFrame.FindPageFrame());
     std::vector<sw::Extent>::const_iterator iterFirst(pMerged->extents.begin());
     std::vector<sw::Extent>::const_iterator iter(iterFirst);
@@ -4505,7 +4505,7 @@ static void UnHideRedlines(SwRootFrame & rLayout,
                 }
                 pTableNd->DelFrames(&rLayout);
             }
-            else if ( pTableNd->GetTable().HasDeletedRow() )
+            else if ( pTableNd->GetTable().HasDeletedRowOrCell() )
             {
                 pTableNd->DelFrames(&rLayout);
                 if ( !pTableNd->GetTable().IsDeleted() )
@@ -4515,7 +4515,7 @@ static void UnHideRedlines(SwRootFrame & rLayout,
             }
         }
         else if (rNode.IsTableNode() && !rLayout.IsHideRedlines() &&
-            rNode.GetTableNode()->GetTable().HasDeletedRow() )
+            rNode.GetTableNode()->GetTable().HasDeletedRowOrCell() )
         {
             SwTableNode * pTableNd = rNode.GetTableNode();
             pTableNd->DelFrames(&rLayout);

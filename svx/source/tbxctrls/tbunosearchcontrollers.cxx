@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <config_feature_desktop.h>
+#include <officecfg/Office/Common.hxx>
 
 #include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
@@ -72,8 +73,6 @@ constexpr OUStringLiteral COMMAND_UPSEARCH = u".uno:UpSearch";
 constexpr OUStringLiteral COMMAND_FINDALL = u".uno:FindAll";
 constexpr OUStringLiteral COMMAND_MATCHCASE = u".uno:MatchCase";
 constexpr OUStringLiteral COMMAND_SEARCHFORMATTED = u".uno:SearchFormattedDisplayString";
-
-const sal_Int32       REMEMBER_SIZE = 10;
 
 class CheckButtonItemWindow final : public InterimItemWindow
 {
@@ -192,6 +191,9 @@ void impl_executeSearch( const css::uno::Reference< css::uno::XComponentContext 
 
 }
 
+// tdf#154818 - remember last search string
+OUString FindTextFieldControl::m_sRememberedSearchString;
+
 FindTextFieldControl::FindTextFieldControl( vcl::Window* pParent,
     css::uno::Reference< css::frame::XFrame > xFrame,
     css::uno::Reference< css::uno::XComponentContext > xContext) :
@@ -214,21 +216,24 @@ FindTextFieldControl::FindTextFieldControl( vcl::Window* pParent,
 
     m_xWidget->set_size_request(250, -1);
     SetSizePixel(m_xWidget->get_preferred_size());
+
+    // tdf#154269 - respect FindReplaceRememberedSearches expert option
+    m_nRememberSize = officecfg::Office::Common::Misc::FindReplaceRememberedSearches::get();
+    if (m_nRememberSize < 1)
+        m_nRememberSize = 1;
 }
 
 void FindTextFieldControl::Remember_Impl(const OUString& rStr)
 {
-    const sal_Int32 nCount = m_xWidget->get_count();
+    if (rStr.isEmpty())
+        return;
 
-    for (sal_Int32 i=0; i<nCount; ++i)
-    {
-        if (rStr == m_xWidget->get_text(i))
-            return;
-    }
-
-    if (nCount == REMEMBER_SIZE)
-        m_xWidget->remove(REMEMBER_SIZE-1);
-
+    // tdf#154818 - rearrange the search items
+    const auto nPos = m_xWidget->find_text(rStr);
+    if (nPos != -1)
+        m_xWidget->remove(nPos);
+    else if (m_xWidget->get_count() >= m_nRememberSize)
+        m_xWidget->remove(m_nRememberSize - 1);
     m_xWidget->insert_text(0, rStr);
 }
 
@@ -257,10 +262,12 @@ void FindTextFieldControl::SetTextToSelected_Impl()
         m_xWidget->set_entry_text(aString);
         m_aChangeHdl.Call(*m_xWidget);
     }
-    else if (get_count() > 0)
+    // tdf#154818 - reuse last search string
+    else if (!m_sRememberedSearchString.isEmpty() || get_count() > 0)
     {
-        // Else, prepopulate with last search word (fdo#84256)
-        m_xWidget->set_entry_text(m_xWidget->get_text(0));
+        // prepopulate with last search word (fdo#84256)
+        m_xWidget->set_entry_text(m_sRememberedSearchString.isEmpty() ? m_xWidget->get_text(0)
+                                                                      : m_sRememberedSearchString);
     }
 }
 
@@ -326,7 +333,9 @@ IMPL_LINK(FindTextFieldControl, KeyInputHdl, const KeyEvent&, rKeyEvent, bool)
 
 void FindTextFieldControl::ActivateFind(bool bShift)
 {
-    Remember_Impl(m_xWidget->get_active_text());
+    // tdf#154818 - remember last search string
+    m_sRememberedSearchString = m_xWidget->get_active_text();
+    Remember_Impl(m_sRememberedSearchString);
 
     vcl::Window* pWindow = GetParent();
     ToolBox* pToolBox = static_cast<ToolBox*>(pWindow);

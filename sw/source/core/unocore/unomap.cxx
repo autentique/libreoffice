@@ -46,6 +46,7 @@
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/XTheme.hpp>
+#include <com/sun/star/util/XComplexColor.hpp>
 #include <com/sun/star/view/PaperOrientation.hpp>
 #include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/drawing/HomogenMatrix3.hpp>
@@ -185,6 +186,7 @@ o3tl::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetPropertyM
                     { UNO_NAME_ROW_SPAN,     FN_UNO_CELL_ROW_SPAN, cppu::UnoType<sal_Int32>::get(),  0, 0 },
                     { UNO_NAME_CELL_INTEROP_GRAB_BAG, RES_FRMATR_GRABBAG, cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(), PROPERTY_NONE, 0 },
                     { UNO_NAME_PARENT_TEXT, FN_UNO_PARENT_TEXT, cppu::UnoType<text::XText>::get(), PropertyAttribute::MAYBEVOID | PropertyAttribute::READONLY, 0 },
+                    { UNO_NAME_HAS_TEXT_CHANGES_ONLY, RES_PRINT, cppu::UnoType<bool>::get()  , PropertyAttribute::MAYBEVOID, 0},
                     REDLINE_NODE_PROPERTIES
                 };
                 m_aMapEntriesArr[nPropertyId] = aCellMap_Impl;
@@ -1468,7 +1470,7 @@ o3tl::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetPropertyM
                     { UNO_NAME_CHAR_COLOR,               RES_CHRATR_COLOR, cppu::UnoType<sal_Int32>::get(), PROPERTY_NONE,  0 },
                     { UNO_NAME_CHAR_COLOR_THEME,         RES_CHRATR_COLOR, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_COLOR_THEME_INDEX },
                     { UNO_NAME_CHAR_COLOR_TINT_OR_SHADE, RES_CHRATR_COLOR, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_COLOR_TINT_OR_SHADE },
-                    { UNO_NAME_CHAR_COLOR_THEME_REFERENCE,    RES_CHRATR_COLOR, cppu::UnoType<css::uno::XInterface>::get(), PROPERTY_NONE, MID_COLOR_THEME_REFERENCE },
+                    { UNO_NAME_CHAR_COMPLEX_COLOR, RES_CHRATR_COLOR, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE, MID_COMPLEX_COLOR },
                     // SvxShadowedItem
                     { UNO_NAME_CHAR_SHADOWED,          RES_CHRATR_SHADOWED,    cppu::UnoType<bool>::get(),               PROPERTY_NONE,  0                                    },
                     // SvxContouredItem

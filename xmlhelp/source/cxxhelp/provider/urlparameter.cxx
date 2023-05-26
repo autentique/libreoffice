@@ -102,7 +102,7 @@ OString URLParameter::getByName( const char* par )
     else if( strcmp( par,"HelpPrefix" ) == 0 )
         val = m_aPrefix;
 
-    return OString( val.getStr(),val.getLength(),RTL_TEXTENCODING_UTF8 );
+    return OUStringToOString( val, RTL_TEXTENCODING_UTF8 );
 }
 
 
@@ -255,7 +255,7 @@ void URLParameter::readHelpDataFile()
         if( !pHdf )
             break;
 
-        OString keyStr( m_aId.getStr(),m_aId.getLength(),RTL_TEXTENCODING_UTF8 );
+        OString keyStr = OUStringToOString( m_aId,RTL_TEXTENCODING_UTF8 );
         bSuccess = pHdf->getValueForKey( keyStr, aHDFData );
         if( bSuccess )
         {
@@ -737,14 +737,12 @@ InputStreamTransformer::InputStreamTransformer( URLParameter* urlParam,
         parString[last++] = "System";
         parString[last++] = "'" + urlParam->getByName( "System" ) + "'";
         parString[last++] = "productname";
-        parString[last++] = "'" + OString(
-            pDatabases->getProductName().getStr(),
-            pDatabases->getProductName().getLength(),
+        parString[last++] = "'" + OUStringToOString(
+            pDatabases->getProductName(),
             RTL_TEXTENCODING_UTF8 ) + "'";
         parString[last++] = "productversion";
         parString[last++] = "'" +
-            OString(  pDatabases->getProductVersion().getStr(),
-                          pDatabases->getProductVersion().getLength(),
+            OUStringToOString(  pDatabases->getProductVersion(),
                           RTL_TEXTENCODING_UTF8 ) + "'";
 
         parString[last++] = "imgtheme";
@@ -829,9 +827,8 @@ InputStreamTransformer::InputStreamTransformer( URLParameter* urlParam,
 
         OUString xslURL = pDatabases->getInstallPathAsURL();
 
-        OString xslURLascii = OString(
-                xslURL.getStr(),
-                xslURL.getLength(),
+        OString xslURLascii = OUStringToOString(
+                xslURL,
                 RTL_TEXTENCODING_UTF8) +
             "main_transform.xsl";
 

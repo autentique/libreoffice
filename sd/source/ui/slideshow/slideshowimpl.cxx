@@ -756,6 +756,7 @@ bool SlideshowImpl::startPreview(
         maPresSettings.mbMouseAsPen = false;
         maPresSettings.mbLockedPages = false;
         maPresSettings.mbAlwaysOnTop = false;
+        maPresSettings.mbUseNavigation = false;
         maPresSettings.mbFullScreen = false;
         maPresSettings.mbAnimationAllowed = true;
         maPresSettings.mnPauseTimeout = 0;
@@ -876,6 +877,7 @@ bool SlideshowImpl::startShow( PresentationSettingsEx const * pPresSettings )
             maPresSettings.mbMouseAsPen = false;
             maPresSettings.mnPauseTimeout = 0;
             maPresSettings.mbShowPauseLogo = false;
+            maPresSettings.mbUseNavigation = false;
         }
 
         if( pStartPage )
@@ -1076,6 +1078,37 @@ bool SlideshowImpl::startShowImpl( const Sequence< beans::PropertyValue >& aProp
                         -1,
                         Any( xPointerBitmap ),
                         beans::PropertyState_DIRECT_VALUE ) );
+            }
+
+            if (maPresSettings.mbUseNavigation)
+            {
+                BitmapEx prevSlideBm(BMP_PREV_SLIDE);
+                const Reference<rendering::XBitmap> xPrevSBitmap(
+                    vcl::unotools::xBitmapFromBitmapEx(prevSlideBm));
+                if (xPrevSBitmap.is())
+                {
+                    mxShow->setProperty(beans::PropertyValue("NavigationSlidePrev", -1,
+                                                             Any(xPrevSBitmap),
+                                                             beans::PropertyState_DIRECT_VALUE));
+                }
+                BitmapEx menuSlideBm(BMP_MENU_SLIDE);
+                const Reference<rendering::XBitmap> xMenuSBitmap(
+                    vcl::unotools::xBitmapFromBitmapEx(menuSlideBm));
+                if (xMenuSBitmap.is())
+                {
+                    mxShow->setProperty(beans::PropertyValue("NavigationSlideMenu", -1,
+                                                             Any(xMenuSBitmap),
+                                                             beans::PropertyState_DIRECT_VALUE));
+                }
+                BitmapEx nextSlideBm(BMP_NEXT_SLIDE);
+                const Reference<rendering::XBitmap> xNextSBitmap(
+                    vcl::unotools::xBitmapFromBitmapEx(nextSlideBm));
+                if (xNextSBitmap.is())
+                {
+                    mxShow->setProperty(beans::PropertyValue("NavigationSlideNext", -1,
+                                                             Any(xNextSBitmap),
+                                                             beans::PropertyState_DIRECT_VALUE));
+                }
             }
         }
 
@@ -1579,6 +1612,12 @@ sal_Int32 SlideshowImpl::getSlideNumberForBookmark( const OUString& rStrBookmark
     return ( nPgNum - 1) >> 1;
 }
 
+void SlideshowImpl::contextMenuShow(const css::awt::Point& point)
+{
+    maPopupMousePos = { point.X, point.Y };
+    mnContextMenuEvent = Application::PostUserEvent(LINK(this, SlideshowImpl, ContextMenuHdl));
+}
+
 void SlideshowImpl::hyperLinkClicked( OUString const& aHyperLink )
 {
     OUString aBookmark( aHyperLink );
@@ -2004,7 +2043,7 @@ IMPL_LINK_NOARG(SlideshowImpl, ContextMenuHdl, void*, void)
                     OUString sId(OUString::number(CM_SLIDES + nPageNumber));
                     xPageMenu->append_check(sId, pPage->GetName());
                     if (nPageNumber == nCurrentSlideNumber)
-                        xPageMenu->set_active(sId.toUtf8(), true);
+                        xPageMenu->set_active(sId, true);
                 }
             }
         }
@@ -2048,7 +2087,7 @@ IMPL_LINK_NOARG(SlideshowImpl, ContextMenuHdl, void*, void)
         }
 
         if (nWidth == mdUserPaintStrokeWidth)
-            xWidthMenu->set_active(OString::number(nWidth), true);
+            xWidthMenu->set_active(OUString::number(nWidth), true);
     }
 
     ::tools::Rectangle aRect(maPopupMousePos, Size(1,1));
@@ -2062,31 +2101,31 @@ IMPL_LINK_NOARG(SlideshowImpl, ContextMenuHdl, void*, void)
         resume();
 }
 
-void SlideshowImpl::ContextMenuSelectHdl(std::string_view rMenuId)
+void SlideshowImpl::ContextMenuSelectHdl(std::u16string_view rMenuId)
 {
-    if (rMenuId == "prev")
+    if (rMenuId == u"prev")
     {
         gotoPreviousSlide();
         mbWasPaused = false;
     }
-    else if(rMenuId == "next")
+    else if(rMenuId == u"next")
     {
         gotoNextSlide();
         mbWasPaused = false;
     }
-    else if (rMenuId == "first")
+    else if (rMenuId == u"first")
     {
         gotoFirstSlide();
         mbWasPaused = false;
     }
-    else if (rMenuId == "last")
+    else if (rMenuId == u"last")
     {
         gotoLastSlide();
         mbWasPaused = false;
     }
-    else if (rMenuId == "black" || rMenuId == "white")
+    else if (rMenuId == u"black" || rMenuId == u"white")
     {
-        const Color aBlankColor(rMenuId == "white" ? COL_WHITE : COL_BLACK);
+        const Color aBlankColor(rMenuId == u"white" ? COL_WHITE : COL_BLACK);
         if( mbWasPaused )
         {
             if( mpShowWindow->GetShowWindowMode() == SHOWWINDOWMODE_BLANK )
@@ -2106,7 +2145,7 @@ void SlideshowImpl::ContextMenuSelectHdl(std::string_view rMenuId)
             mbWasPaused = true;
         }
     }
-    else if (rMenuId == "color")
+    else if (rMenuId == u"color")
     {
         //Open a color picker based on SvColorDialog
         ::Color aColor( ColorTransparency, mnUserPaintColor );
@@ -2120,42 +2159,42 @@ void SlideshowImpl::ContextMenuSelectHdl(std::string_view rMenuId)
         }
         mbWasPaused = false;
     }
-    else if (rMenuId == "4")
+    else if (rMenuId == u"4")
     {
         setPenWidth(4.0);
         mbWasPaused = false;
     }
-    else if (rMenuId == "100")
+    else if (rMenuId == u"100")
     {
         setPenWidth(100.0);
         mbWasPaused = false;
     }
-    else if (rMenuId == "150")
+    else if (rMenuId == u"150")
     {
         setPenWidth(150.0);
         mbWasPaused = false;
     }
-    else if (rMenuId == "200")
+    else if (rMenuId == u"200")
     {
         setPenWidth(200.0);
         mbWasPaused = false;
     }
-    else if (rMenuId == "400")
+    else if (rMenuId == u"400")
     {
         setPenWidth(400.0);
         mbWasPaused = false;
     }
-    else if (rMenuId == "erase")
+    else if (rMenuId == u"erase")
     {
         setEraseAllInk(true);
         mbWasPaused = false;
     }
-    else if (rMenuId == "pen")
+    else if (rMenuId == u"pen")
     {
         setUsePen(!mbUsePen);
         mbWasPaused = false;
     }
-    else if (rMenuId == "edit")
+    else if (rMenuId == u"edit")
     {
         // When in autoplay mode (pps/ppsx), offer editing of the presentation
         // Turn autostart off, else Impress will close when exiting the Presentation
@@ -2169,7 +2208,7 @@ void SlideshowImpl::ContextMenuSelectHdl(std::string_view rMenuId)
         }
         endPresentation();
     }
-    else if (rMenuId == "end")
+    else if (rMenuId == u"end")
     {
         // in case the user cancels the presentation, switch to current slide
         // in edit mode
@@ -3344,6 +3383,13 @@ void SAL_CALL SlideShowListenerProxy::click( const Reference< XShape >& xShape, 
     SolarMutexGuard aSolarGuard;
     if( mxController.is() )
         mxController->click(xShape );
+}
+
+void SAL_CALL SlideShowListenerProxy::contextMenuShow(const css::awt::Point& point)
+{
+    SolarMutexGuard aSolarGuard;
+    if (mxController.is())
+        mxController->contextMenuShow(point);
 }
 
 } // namespace ::sd

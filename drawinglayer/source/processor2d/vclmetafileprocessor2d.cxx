@@ -285,40 +285,7 @@ void VclMetafileProcessor2D::impConvertFillGradientAttributeToVCLGradient(
     // defaults for intensity; those were computed into the start/end colors already
     o_rVCLGradient.SetStartIntensity(100);
     o_rVCLGradient.SetEndIntensity(100);
-
-    switch (rFiGrAtt.getStyle())
-    {
-        default: // attribute::GradientStyle::Linear :
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Linear);
-            break;
-        }
-        case attribute::GradientStyle::Axial:
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Axial);
-            break;
-        }
-        case attribute::GradientStyle::Radial:
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Radial);
-            break;
-        }
-        case attribute::GradientStyle::Elliptical:
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Elliptical);
-            break;
-        }
-        case attribute::GradientStyle::Square:
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Square);
-            break;
-        }
-        case attribute::GradientStyle::Rect:
-        {
-            o_rVCLGradient.SetStyle(GradientStyle::Rect);
-            break;
-        }
-    }
+    o_rVCLGradient.SetStyle(rFiGrAtt.getStyle());
 }
 
 void VclMetafileProcessor2D::impStartSvtGraphicFill(SvtGraphicFill const* pSvtGraphicFill)
@@ -1137,8 +1104,6 @@ void VclMetafileProcessor2D::processControlPrimitive2D(
     if (bPDFExport)
     {
         // PDF export. Emulate data handling from UnoControlPDFExportContact
-        // I have now moved describePDFControl to toolkit, thus i can implement the PDF
-        // form control support now as follows
         std::unique_ptr<vcl::PDFWriter::AnyWidget> pPDFControl(
             ::toolkitform::describePDFControl(rXControl, *mpPDFExtOutDevData));
 
@@ -1159,6 +1124,30 @@ void VclMetafileProcessor2D::processControlPrimitive2D(
             pPDFControl->TextFont.SetFontSize(aFontSize);
 
             mpPDFExtOutDevData->BeginStructureElement(vcl::PDFWriter::Form);
+            vcl::PDFWriter::StructAttributeValue role;
+            switch (pPDFControl->Type)
+            {
+                case vcl::PDFWriter::PushButton:
+                    role = vcl::PDFWriter::Pb;
+                    break;
+                case vcl::PDFWriter::RadioButton:
+                    role = vcl::PDFWriter::Rb;
+                    break;
+                case vcl::PDFWriter::CheckBox:
+                    role = vcl::PDFWriter::Cb;
+                    break;
+                default: // there is a paucity of roles, tv is the catch-all one
+                    role = vcl::PDFWriter::Tv;
+                    break;
+            }
+            // ISO 14289-1:2014, Clause: 7.18.4
+            mpPDFExtOutDevData->SetStructureAttribute(vcl::PDFWriter::Role, role);
+            // ISO 14289-1:2014, Clause: 7.18.1
+            OUString const& rAltText(rControlPrimitive.GetAltText());
+            if (!rAltText.isEmpty())
+            {
+                mpPDFExtOutDevData->SetAlternateText(rAltText);
+            }
             mpPDFExtOutDevData->CreateControl(*pPDFControl);
             mpPDFExtOutDevData->EndStructureElement();
 
@@ -1171,6 +1160,22 @@ void VclMetafileProcessor2D::processControlPrimitive2D(
             // PDF export did not work, try simple output.
             // Fallback to printer output by not setting bDoProcessRecursively
             // to false.
+        }
+    }
+
+    if (!bDoProcessRecursively)
+    {
+        return;
+    }
+
+    if (mpPDFExtOutDevData)
+    { // no corresponding PDF Form, use Figure instead
+        mpPDFExtOutDevData->BeginStructureElement(vcl::PDFWriter::Figure);
+        mpPDFExtOutDevData->SetStructureAttribute(vcl::PDFWriter::Placement, vcl::PDFWriter::Block);
+        OUString const& rAltText(rControlPrimitive.GetAltText());
+        if (!rAltText.isEmpty())
+        {
+            mpPDFExtOutDevData->SetAlternateText(rAltText);
         }
     }
 
@@ -1217,6 +1222,11 @@ void VclMetafileProcessor2D::processControlPrimitive2D(
     if (bDoProcessRecursively)
     {
         process(rControlPrimitive);
+    }
+
+    if (mpPDFExtOutDevData)
+    {
+        mpPDFExtOutDevData->EndStructureElement();
     }
 }
 
@@ -2035,16 +2045,16 @@ void VclMetafileProcessor2D::processPolyPolygonGradientPrimitive2D(
 
         switch (aVCLGradient.GetStyle())
         {
-            default: // GradientStyle::Linear:
-            case GradientStyle::Axial:
+            default: // css::awt::GradientStyle_LINEAR:
+            case css::awt::GradientStyle_AXIAL:
                 eGrad = SvtGraphicFill::GradientType::Linear;
                 break;
-            case GradientStyle::Radial:
-            case GradientStyle::Elliptical:
+            case css::awt::GradientStyle_RADIAL:
+            case css::awt::GradientStyle_ELLIPTICAL:
                 eGrad = SvtGraphicFill::GradientType::Radial;
                 break;
-            case GradientStyle::Square:
-            case GradientStyle::Rect:
+            case css::awt::GradientStyle_SQUARE:
+            case css::awt::GradientStyle_RECT:
                 eGrad = SvtGraphicFill::GradientType::Rectangular;
                 break;
         }
@@ -2226,7 +2236,7 @@ void VclMetafileProcessor2D::processUnifiedTransparencePrimitive2D(
                     basegfx::fround(rUniTransparenceCandidate.getTransparence() * 255.0)));
                 const Color aTransColor(nTransPercentVcl, nTransPercentVcl, nTransPercentVcl);
 
-                aVCLGradient.SetStyle(GradientStyle::Linear);
+                aVCLGradient.SetStyle(css::awt::GradientStyle_LINEAR);
                 aVCLGradient.SetStartColor(aTransColor);
                 aVCLGradient.SetEndColor(aTransColor);
                 aVCLGradient.SetAngle(0_deg10);

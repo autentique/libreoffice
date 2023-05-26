@@ -37,6 +37,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
+using ::std::cerr;
+using ::std::endl;
 
 class ScExportTest3 : public ScModelTestBase
 {
@@ -264,22 +266,11 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testBordersExchangeXLSX)
 
 static OUString toString(const ScBigRange& rRange)
 {
-    OUStringBuffer aBuf;
-    aBuf.append("(columns:");
-    aBuf.append(rRange.aStart.Col());
-    aBuf.append('-');
-    aBuf.append(rRange.aEnd.Col());
-    aBuf.append(";rows:");
-    aBuf.append(rRange.aStart.Row());
-    aBuf.append('-');
-    aBuf.append(rRange.aEnd.Row());
-    aBuf.append(";sheets:");
-    aBuf.append(rRange.aStart.Tab());
-    aBuf.append('-');
-    aBuf.append(rRange.aEnd.Tab());
-    aBuf.append(')');
-
-    return aBuf.makeStringAndClear();
+    return "(columns:" + OUString::number(rRange.aStart.Col()) + "-"
+           + OUString::number(rRange.aEnd.Col()) + ";rows:" + OUString::number(rRange.aStart.Row())
+           + "-" + OUString::number(rRange.aEnd.Row())
+           + ";sheets:" + OUString::number(rRange.aStart.Tab()) + "-"
+           + OUString::number(rRange.aEnd.Tab()) + ")";
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest3, testTrackChangesSimpleXLSX)
@@ -1033,12 +1024,6 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testSwappedOutImageExport)
 {
     std::vector<OUString> aFilterNames{ "calc8", "MS Excel 97", "Calc Office Open XML" };
 
-    // Set cache size to a very small value to make sure one of the images is swapped out
-    std::shared_ptr<comphelper::ConfigurationChanges> xBatch(
-        comphelper::ConfigurationChanges::create());
-    officecfg::Office::Common::Cache::GraphicManager::TotalCacheSize::set(sal_Int32(1), xBatch);
-    xBatch->commit();
-
     for (size_t i = 0; i < aFilterNames.size(); ++i)
     {
         // Check whether the export code swaps in the image which was swapped out before.
@@ -1158,12 +1143,6 @@ CPPUNIT_TEST_FIXTURE(ScExportTest3, testLinkedGraphicRT)
 CPPUNIT_TEST_FIXTURE(ScExportTest3, testImageWithSpecialID)
 {
     std::vector<OUString> aFilterNames{ "calc8", "MS Excel 97", "Calc Office Open XML" };
-
-    // Trigger swap out mechanism to test swapped state factor too.
-    std::shared_ptr<comphelper::ConfigurationChanges> batch(
-        comphelper::ConfigurationChanges::create());
-    officecfg::Office::Common::Cache::GraphicManager::TotalCacheSize::set(sal_Int32(1), batch);
-    batch->commit();
 
     for (size_t i = 0; i < aFilterNames.size(); ++i)
     {

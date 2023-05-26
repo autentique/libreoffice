@@ -29,6 +29,7 @@ private:
     std::unique_ptr<weld::Container> m_xContainer;
     std::unique_ptr<weld::Label> m_xLabel;
     std::unique_ptr<weld::Button> m_xGotoButton;
+    std::unique_ptr<weld::Button> m_xFixButton;
 
     std::shared_ptr<sfx::AccessibilityIssue> const& m_pAccessibilityIssue;
 
@@ -39,6 +40,7 @@ public:
     weld::Widget* get_widget() const { return m_xContainer.get(); }
 
     DECL_LINK(GotoButtonClicked, weld::Button&, void);
+    DECL_LINK(FixButtonClicked, weld::Button&, void);
 };
 
 class A11yCheckIssuesPanel : public PanelLayout,
@@ -54,19 +56,21 @@ public:
                                  boost::property_tree::ptree& /*rState*/) override{};
 
     A11yCheckIssuesPanel(weld::Widget* pParent, SfxBindings* pBindings);
+    void ImplDestroy();
     virtual ~A11yCheckIssuesPanel() override;
 
 private:
     std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aAccessibilityCheckEntries;
     std::unique_ptr<weld::Box> m_xAccessibilityCheckBox;
-    std::unique_ptr<weld::ScrolledWindow> m_xScrolledWindow;
     sfx::AccessibilityIssueCollection m_aIssueCollection;
     std::function<sfx::AccessibilityIssueCollection()> m_getIssueCollection;
     void populateIssues();
 
+    SfxBindings* mpBindings;
     SwDoc* mpDoc;
     ::sfx2::sidebar::ControllerItem maA11yCheckController;
     sal_Int32 mnIssueCount;
+    bool mbAutomaticCheckEnabled;
 };
 
 } //end of namespace sw::sidebar

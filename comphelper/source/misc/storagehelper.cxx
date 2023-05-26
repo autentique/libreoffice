@@ -50,6 +50,7 @@
 #include <ucbhelper/content.hxx>
 
 #include <comphelper/bytereader.hxx>
+#include <comphelper/diagnose_ex.hxx>
 #include <comphelper/fileformat.h>
 #include <comphelper/hash.hxx>
 #include <comphelper/processfactory.hxx>
@@ -388,7 +389,7 @@ uno::Sequence< beans::NamedValue > OStorageHelper::CreatePackageEncryptionData( 
         }
         catch ( uno::Exception& )
         {
-            OSL_ENSURE( false, "Can not create SHA256 digest!" );
+            TOOLS_WARN_EXCEPTION("comphelper", "Can not create SHA256 digest!" );
         }
 
         // MS_1252 encoding was used for SO60 document format password encoding,
@@ -543,16 +544,9 @@ uno::Sequence< beans::NamedValue > OStorageHelper::CreateGpgPackageEncryptionDat
 
 bool OStorageHelper::IsValidZipEntryFileName( std::u16string_view aName, bool bSlashAllowed )
 {
-    return IsValidZipEntryFileName( aName.data(), aName.size(), bSlashAllowed );
-}
-
-
-bool OStorageHelper::IsValidZipEntryFileName(
-    const sal_Unicode *pChar, sal_Int32 nLength, bool bSlashAllowed )
-{
-    for ( sal_Int32 i = 0; i < nLength; i++ )
+    for ( size_t i = 0; i < aName.size(); i++ )
     {
-        switch ( pChar[i] )
+        switch ( aName[i] )
         {
             case '\\':
             case '?':
@@ -567,7 +561,7 @@ bool OStorageHelper::IsValidZipEntryFileName(
                     return false;
                 break;
             default:
-                if ( pChar[i] < 32  || (pChar[i] >= 0xD800 && pChar[i] <= 0xDFFF) )
+                if ( aName[i] < 32  || (aName[i] >= 0xD800 && aName[i] <= 0xDFFF) )
                     return false;
         }
     }

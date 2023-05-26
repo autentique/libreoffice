@@ -109,70 +109,6 @@ const TextFont* Theme::resolveFont( std::u16string_view rName ) const
     return nullptr;
 }
 
-std::unique_ptr<model::Theme> Theme::createSvxTheme() const
-{
-    auto pTheme = std::make_unique<model::Theme>(maThemeName);
-    auto pColorSet = std::make_unique<model::ColorSet>(maClrScheme.GetName());
-    maClrScheme.fill(*pColorSet);
-    pTheme->SetColorSet(std::move(pColorSet));
-
-    model::FontScheme aFontScheme(maFontSchemeName);
-
-    if (auto* pCharProps = getFontStyle(XML_minor))
-    {
-        model::ThemeFont aMinorLatin;
-        pCharProps->maLatinFont.fillThemeFont(aMinorLatin);
-        aFontScheme.setMinorLatin(aMinorLatin);
-
-        model::ThemeFont aMinorAsian;
-        pCharProps->maAsianFont.fillThemeFont(aMinorAsian);
-        aFontScheme.setMinorAsian(aMinorAsian);
-
-        model::ThemeFont aMinorComplex;
-        pCharProps->maComplexFont.fillThemeFont(aMinorComplex);
-        aFontScheme.setMinorComplex(aMinorComplex);
-    }
-
-    if (auto* pCharProps = getFontStyle(XML_major))
-    {
-        model::ThemeFont aMajorLatin;
-        pCharProps->maLatinFont.fillThemeFont(aMajorLatin);
-        aFontScheme.setMajorLatin(aMajorLatin);
-
-        model::ThemeFont aMajorAsian;
-        pCharProps->maAsianFont.fillThemeFont(aMajorAsian);
-        aFontScheme.setMajorAsian(aMajorAsian);
-
-        model::ThemeFont aMajorComplex;
-        pCharProps->maComplexFont.fillThemeFont(aMajorComplex);
-        aFontScheme.setMajorComplex(aMajorComplex);
-    }
-
-    if (maSupplementalFontMap.find(XML_minor) != maSupplementalFontMap.cend())
-    {
-        std::vector<model::ThemeSupplementalFont> aList;
-        for (auto const& [rScript, rTypeface] : maSupplementalFontMap.at(XML_minor))
-        {
-            aList.push_back(model::ThemeSupplementalFont{rScript, rTypeface});
-        }
-        aFontScheme.setMinorSupplementalFontList(aList);
-    }
-
-    if (maSupplementalFontMap.find(XML_major) != maSupplementalFontMap.cend())
-    {
-        std::vector<model::ThemeSupplementalFont> aList;
-        for (auto const& [rScript, rTypeface] : maSupplementalFontMap.at(XML_major))
-        {
-            aList.push_back(model::ThemeSupplementalFont{rScript, rTypeface});
-        }
-        aFontScheme.setMajorSupplementalFontList(aList);
-    }
-
-    pTheme->setFontScheme(aFontScheme);
-
-    return pTheme;
-}
-
 void Theme::addTheme(const css::uno::Reference<css::drawing::XDrawPage>& xDrawPage) const
 {
     SAL_WARN_IF(!xDrawPage.is(), "oox", "DrawPage is not set");
@@ -184,9 +120,7 @@ void Theme::addTheme(const css::uno::Reference<css::drawing::XDrawPage>& xDrawPa
     if (!pPage)
         return;
 
-    std::unique_ptr<model::Theme> pTheme = createSvxTheme();
-
-    pPage->getSdrPageProperties().SetTheme(std::move(pTheme));
+    pPage->getSdrPageProperties().SetTheme(getTheme());
 }
 
 } // namespace oox::drawingml

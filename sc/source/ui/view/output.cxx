@@ -869,7 +869,7 @@ void drawDataBars(vcl::RenderContext& rRenderContext, const ScDataBarInfo* pOldD
     if(pOldDataBarInfo->mbGradient)
     {
         rRenderContext.SetLineColor(pOldDataBarInfo->maColor);
-        Gradient aGradient(GradientStyle::Linear, pOldDataBarInfo->maColor, COL_TRANSPARENT);
+        Gradient aGradient(css::awt::GradientStyle_LINEAR, pOldDataBarInfo->maColor, COL_TRANSPARENT);
         aGradient.SetSteps(255);
 
         if(pOldDataBarInfo->mnLength < 0)
@@ -2377,8 +2377,6 @@ void ScOutputData::DrawSparklines(vcl::RenderContext& rRenderContext)
 void ScOutputData::DrawNoteMarks(vcl::RenderContext& rRenderContext)
 {
 
-    bool bFirst = true;
-
     tools::Long nInitPosX = nScrX;
     if ( bLayoutRTL )
         nInitPosX += nMirrorW - 1;              // always in pixels
@@ -2409,18 +2407,19 @@ void ScOutputData::DrawNoteMarks(vcl::RenderContext& rRenderContext)
                 if (!mpDoc->ColHidden(nX, nTab) && mpDoc->GetNote(nX, pRowInfo[nArrY].nRowNo, nTab)
                     && (bIsMerged || (!pInfo->bHOverlapped && !pInfo->bVOverlapped)))
                 {
-                    if (bFirst)
-                    {
+
+                    const bool bIsDarkBackground = SC_MOD()->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor.IsDark();
+                    const Color aColor = pInfo->pBackground->GetColor();
+                    if ( aColor == COL_AUTO ? bIsDarkBackground : aColor.IsDark() )
                         rRenderContext.SetLineColor(COL_WHITE);
+                    else
+                        rRenderContext.SetLineColor(COL_BLACK);
 
-                        const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
-                        if ( mbUseStyleColor && rStyleSettings.GetHighContrastMode() )
-                            rRenderContext.SetFillColor( SC_MOD()->GetColorConfig().GetColorValue(svtools::FONTCOLOR).nColor );
-                        else
-                            rRenderContext.SetFillColor(COL_LIGHTRED);
-
-                        bFirst = false;
-                    }
+                    const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
+                    if ( mbUseStyleColor && rStyleSettings.GetHighContrastMode() )
+                        rRenderContext.SetFillColor( SC_MOD()->GetColorConfig().GetColorValue(svtools::FONTCOLOR).nColor );
+                    else
+                        rRenderContext.SetFillColor( SC_MOD()->GetColorConfig().GetColorValue(svtools::CALCCOMMENTS).nColor );
 
                     tools::Long nMarkX = nPosX + ( pRowInfo[0].basicCellInfo(nX).nWidth - 2 ) * nLayoutSign;
                     if ( bIsMerged || pInfo->bMerged )
@@ -2613,17 +2612,10 @@ void ScOutputData::DrawClipMarks()
     if (!bAnyClipped)
         return;
 
-    Color aArrowFillCol( COL_LIGHTRED );
+    Color aArrowFillCol( SC_MOD()->GetColorConfig().GetColorValue(svtools::CALCTEXTOVERFLOW).nColor );
+    const bool bIsDarkBackground = SC_MOD()->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor.IsDark();
 
     DrawModeFlags nOldDrawMode = mpDev->GetDrawMode();
-    const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
-    if ( mbUseStyleColor && rStyleSettings.GetHighContrastMode() )
-    {
-        //  use DrawMode to change the arrow's outline color
-        mpDev->SetDrawMode( nOldDrawMode | DrawModeFlags::SettingsLine );
-        //  use text color also for the fill color
-        aArrowFillCol = SC_MOD()->GetColorConfig().GetColorValue(svtools::FONTCOLOR).nColor;
-    }
 
     tools::Long nInitPosX = nScrX;
     if ( bLayoutRTL )
@@ -2715,6 +2707,12 @@ void ScOutputData::DrawClipMarks()
 
                     tools::Long nMarkPixel = static_cast<tools::Long>( SC_CLIPMARK_SIZE * mnPPTX );
                     Size aMarkSize( nMarkPixel, (nMarkPixel-1)*2 );
+
+                    const Color aColor = pInfo->pBackground ? pInfo->pBackground->GetColor() : COL_AUTO;
+                    if ( aColor == COL_AUTO ? bIsDarkBackground : aColor.IsDark() )
+                        mpDev->SetDrawMode( nOldDrawMode | DrawModeFlags::WhiteLine );
+                    else
+                        mpDev->SetDrawMode( nOldDrawMode | DrawModeFlags::BlackLine );
 
                     if (bVertical)
                     {

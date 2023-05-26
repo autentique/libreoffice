@@ -173,7 +173,8 @@ static SvxAutoCorrect* lcl_IsAutoCorr()
     SvxAutoCorrect* pACorr = SvxAutoCorrCfg::Get().GetAutoCorrect();
     if( pACorr && !pACorr->IsAutoCorrFlag( ACFlags::CapitalStartSentence | ACFlags::CapitalStartWord |
                             ACFlags::AddNonBrkSpace | ACFlags::ChgOrdinalNumber | ACFlags::TransliterateRTL |
-                            ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect ))
+                            ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect |
+                            ACFlags::SetDOIAttr ))
         pACorr = nullptr;
     return pACorr;
 }
@@ -442,10 +443,10 @@ void SwWrtShell::InsertObject( const svt::EmbeddedObjectRef& xRef, SvGlobalName 
                 {
                     SfxSlotPool* pSlotPool = SW_MOD()->GetSlotPool();
                     const SfxSlot* pSlot = pSlotPool->GetSlot(nSlotId);
-                    OString aCmd = OString::Concat(".uno:") + pSlot->GetUnoName();
+                    OUString aCmd = pSlot->GetCommand();
                     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
                     ScopedVclPtr<SfxAbstractInsertObjectDialog> pDlg(pFact->CreateInsertObjectDialog(GetFrameWeld(mxDoc->GetDocShell()),
-                                OUString::fromUtf8( aCmd ), xStor, &aServerList));
+                                aCmd, xStor, &aServerList));
                     if (pDlg)
                     {
                         pDlg->Execute();
@@ -914,8 +915,13 @@ void SwWrtShell::CalcAndSetScale( svt::EmbeddedObjectRef& xObj,
     }
     else
     {
-        aArea.Width ( tools::Long( aArea.Width()  / pCli->GetScaleWidth() ) );
-        aArea.Height( tools::Long( aArea.Height() / pCli->GetScaleHeight() ) );
+        tools::Long nWidth(pCli->GetScaleWidth());
+        tools::Long nHeight(pCli->GetScaleHeight());
+        if (nWidth && nHeight)
+        {
+            aArea.Width ( aArea.Width()  / nWidth );
+            aArea.Height( aArea.Height() / nHeight );
+        }
     }
 
     pCli->SetObjAreaAndScale( aArea.SVRect(), aScaleWidth, aScaleHeight );
@@ -1108,7 +1114,7 @@ void SwWrtShell::InsertContentControl(SwContentControlType eType)
             SwRewriter aRewriter;
             aRewriter.AddRule(UndoArg1, SwResId(STR_GRAPHIC_DEFNAME));
             StartUndo(SwUndoId::INSERT, &aRewriter);
-            LockPaint();
+            LockPaint(LockPaintReason::InsertGraphic);
             StartAction();
             InsertGraphic(OUString(), OUString(), aBitmap, nullptr, RndStdIds::FLY_AS_CHAR);
 
@@ -2182,6 +2188,7 @@ void SwWrtShell::ChangeHeaderOrFooter(
                     rMaster.SetFormatAttr( SwFormatFooter( bOn ));
                 if( bOn )
                 {
+                    // keep in sync with FN_PGNUMBER_WIZARD
                     constexpr tools::Long constTwips_5mm = o3tl::toTwips(5, o3tl::Length::mm);
                     SvxULSpaceItem aUL(bHeader ? 0 : constTwips_5mm, bHeader ? constTwips_5mm : 0, RES_UL_SPACE );
                     SwFrameFormat* pFormat = bHeader ?
@@ -2358,13 +2365,8 @@ bool SwWrtShell::IsOutlineContentVisible(const size_t nPos)
         }
         if (aIdx.GetNode().IsSectionNode())
         {
-            const SwSectionFormat* pFormat =
-                    aIdx.GetNode().GetSectionNode()->GetSection().GetFormat();
-            if (!pFormat)
-                return false;
-            SwPtrMsgPoolItem aAskItem(RES_CONTENT_VISIBLE, nullptr);
-            pFormat->GetInfo(aAskItem);
-            return aAskItem.pObject;
+            const auto pFormat = aIdx.GetNode().GetSectionNode()->GetSection().GetFormat();
+            return pFormat && pFormat->IsVisible();
         }
     }
 
@@ -2632,14 +2634,14 @@ void SwWrtShell::MakeAllFoldedOutlineContentVisible(bool bMakeVisible)
     GetView().GetDocShell()->Broadcast(SfxHint(SfxHintId::DocChanged));
 }
 
-bool SwWrtShell::GetAttrOutlineContentVisible(const size_t nPos)
+bool SwWrtShell::GetAttrOutlineContentVisible(const size_t nPos) const
 {
     bool bVisibleAttr = true;
     GetNodes().GetOutLineNds()[nPos]->GetTextNode()->GetAttrOutlineContentVisible(bVisibleAttr);
     return bVisibleAttr;
 }
 
-bool SwWrtShell::HasFoldedOutlineContentSelected()
+bool SwWrtShell::HasFoldedOutlineContentSelected() const
 {
     for(const SwPaM& rPaM : GetCursor()->GetRingContainer())
     {
@@ -2661,7 +2663,7 @@ bool SwWrtShell::HasFoldedOutlineContentSelected()
     return false;
 }
 
-void SwWrtShell::InfoReadOnlyDialog(bool bAsync)
+void SwWrtShell::InfoReadOnlyDialog(bool bAsync) const
 {
     if (bAsync)
     {
@@ -2690,6 +2692,22 @@ void SwWrtShell::InfoReadOnlyDialog(bool bAsync)
         }
         xInfo->run();
     }
+}
+
+bool SwWrtShell::WarnHiddenSectionDialog() const
+{
+    std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(
+        GetView().GetFrameWeld(), "modules/swriter/ui/warnhiddensectiondialog.ui"));
+    std::unique_ptr<weld::MessageDialog> xQuery(
+        xBuilder->weld_message_dialog("WarnHiddenSectionDialog"));
+    if (GetViewOptions()->IsShowOutlineContentVisibilityButton()
+        && HasFoldedOutlineContentSelected())
+    {
+        xQuery->set_primary_text(SwResId(STR_INFORODLG_FOLDED_PRIMARY));
+        xQuery->set_secondary_text(SwResId(STR_INFORODLG_FOLDED_SECONDARY));
+    }
+
+    return (RET_YES == xQuery->run());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

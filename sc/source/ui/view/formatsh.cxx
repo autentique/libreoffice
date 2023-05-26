@@ -517,7 +517,7 @@ void ScFormatShell::ExecuteNumFormat( SfxRequest& rReq )
                 const SfxPoolItem* pItem;
                 if ( pReqArgs->GetItemState( nSlot, true, &pItem ) == SfxItemState::SET )
                 {
-                    sal_uInt16 nFormat = static_cast<const SfxInt16Item *>(pItem)->GetValue();
+                    sal_uInt16 nFormat = static_cast<const SfxUInt16Item *>(pItem)->GetValue();
                     switch(nFormat)
                     {
                     case 0:
@@ -1224,7 +1224,8 @@ void ScFormatShell::ExecuteAttr( SfxRequest& rReq )
 
                     SvxBrushItem aBrushItem(
                         pTabViewShell->GetSelectionPattern()->GetItem( ATTR_BACKGROUND ) );
-                    aBrushItem.SetColor( aColor );
+                    aBrushItem.SetColor(aColor);
+                    aBrushItem.setComplexColor(rNewColorItem.getComplexColor());
 
                     pTabViewShell->ApplyAttr( aBrushItem, false );
                 }
@@ -1237,6 +1238,7 @@ void ScFormatShell::ExecuteAttr( SfxRequest& rReq )
                     const SvxBrushItem& rNewBrushItem = static_cast<const SvxBrushItem&>(
                                             pNewAttrs->Get( GetPool().GetWhich(nSlot) ) );
                     aBrushItem.SetColor(rNewBrushItem.GetColor());
+                    aBrushItem.setComplexColor(rNewBrushItem.getComplexColor());
                     pTabViewShell->ApplyAttr( aBrushItem );
                 }
                 break;
@@ -1812,7 +1814,7 @@ void ScFormatShell::GetNumFormatState( SfxItemSet& rSet )
                         {
                             OUString sPayload = ".uno:NumberFormat=" + aFormat;
                             GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US).getStr());
+                                OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US));
                         }
                     }
                     else

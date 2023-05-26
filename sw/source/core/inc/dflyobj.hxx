@@ -23,6 +23,8 @@
 #include <svx/svdovirt.hxx>
 #include <svx/svdobj.hxx>
 
+#include <swdllapi.h>
+
 namespace drawinglayer::geometry { class ViewInformation2D; }
 
 class SwFlyFrame;
@@ -44,7 +46,6 @@ private:
 
 public:
     SwFlyDrawObj(SdrModel& rSdrModel);
-    SwFlyDrawObj(SdrModel& rSdrModel, SwFlyDrawObj const& rSource);
 
     // for instantiation of this class while loading (via factory
     virtual rtl::Reference<SdrObject> CloneSdrObject(SdrModel& rTargetModel) const override;
@@ -62,7 +63,7 @@ public:
 // shown multiple times if needed (header/footer).
 // For example, if an SwFlyFrameFormat is anchored in a header, then all pages will have a separate
 // SwVirtFlyDrawObj in their headers.
-class SwVirtFlyDrawObj final : public SdrVirtObj
+class SW_DLLPUBLIC SwVirtFlyDrawObj final : public SdrVirtObj
 {
 private:
     SwFlyFrame *m_pFlyFrame;

@@ -19,7 +19,6 @@
 #include <vcl/settings.hxx>
 #include <vcl/filter/PDFiumLibrary.hxx>
 #include <ndtxt.hxx>
-#include <swdtflvr.hxx>
 #include <wrtsh.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <flyfrm.hxx>
@@ -475,9 +474,6 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdf134436)
     SwWrtShell* pWrtShell = pDoc->GetDocShell()->GetWrtShell();
     CPPUNIT_ASSERT(pWrtShell);
 
-    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-    uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(
-        xModel->getCurrentController(), uno::UNO_QUERY);
     uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
     uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(),
                                                     uno::UNO_QUERY);
@@ -757,7 +753,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdf137245)
         CPPUNIT_ASSERT(pFly != nullptr);
     }
 
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), rFormats.size());
 
     // move cursor back to body
@@ -2448,11 +2444,9 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testUnfloatButtonSmallTable)
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testUnfloatButton)
 {
-    SwModelTestBase::FlySplitGuard aGuard;
     // Different use cases where unfloat button should be visible
     const std::vector<OUString> aTestFiles = {
         "unfloatable_floating_table.odt", // Typical use case of multipage floating table
-        "unfloatable_floating_table.doc", // Also the DOC import
     };
 
     for (const OUString& aTestFile : aTestFiles)
@@ -2512,11 +2506,9 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testUnfloatButtonReadOnlyMode)
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testUnfloating)
 {
-    SwModelTestBase::FlySplitGuard aGuard;
     // Test unfloating with tables imported from different file formats
     const std::vector<OUString> aTestFiles = {
         "unfloatable_floating_table.odt",
-        "unfloatable_floating_table.doc",
     };
 
     for (const OUString& aTestFile : aTestFiles)
@@ -2700,12 +2692,12 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdf122942)
     pWrtShell->EndCreate(SdrCreateCmd::ForceEnd);
 
     // Make sure that the shape is inserted.
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), rFormats.size());
 
     reload("writer8", "tdf122942.odt");
     pDoc = getSwDoc();
-    const SwFrameFormats& rFormats2 = *pDoc->GetSpzFrameFormats();
+    const auto& rFormats2 = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), rFormats2.size());
 
     // Make sure the top of the inserted shape does not move outside the existing shape, even after
@@ -3099,7 +3091,6 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest2, testTdf139120)
         dispatchCommand(mxComponent, ".uno:Delete", {});
     }
 
-    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(OUString("Lorem ipsum sit amet."), pTextDoc->getText()->getString());
 
     for (int i = 0; i < 6; ++i)

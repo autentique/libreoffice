@@ -415,6 +415,15 @@ SwEditRegionDlg::SwEditRegionDlg(weld::Window* pParent, SwWrtShell& rWrtSh)
 
     m_xTree->show();
     m_bDontCheckPasswd = false;
+
+    if(comphelper::LibreOfficeKit::isActive())
+    {
+        m_xDDECB->hide();
+        m_xDDECommandFT->hide();
+        m_xFileNameFT->hide();
+        m_xFileNameED->hide();
+        m_xFilePB->hide();
+    }
 }
 
 bool SwEditRegionDlg::CheckPasswd(weld::Toggleable* pBox)
@@ -1175,7 +1184,8 @@ IMPL_LINK(SwEditRegionDlg, DDEHdl, weld::Toggleable&, rButton, void)
     {
         m_xDDECommandFT->hide();
         m_xFileNameFT->set_sensitive(bFile);
-        m_xFileNameFT->show();
+        if(!comphelper::LibreOfficeKit::isActive())
+            m_xFileNameFT->show();
         m_xSubRegionED->show();
         m_xSubRegionFT->show();
         m_xSubRegionED->set_sensitive(bFile);
@@ -1391,7 +1401,7 @@ SwInsertSectionTabDialog::~SwInsertSectionTabDialog()
 {
 }
 
-void SwInsertSectionTabDialog::PageCreated(const OString& rId, SfxTabPage &rPage)
+void SwInsertSectionTabDialog::PageCreated(const OUString& rId, SfxTabPage &rPage)
 {
     if (rId == "section")
         static_cast<SwInsertSectionTabPage&>(rPage).SetWrtShell(m_rWrtSh);
@@ -1742,7 +1752,8 @@ IMPL_LINK( SwInsertSectionTabPage, DDEHdl, weld::Toggleable&, rButton, void )
     {
         m_xDDECommandFT->hide();
         m_xFileNameFT->set_sensitive(bFile);
-        m_xFileNameFT->show();
+        if(!comphelper::LibreOfficeKit::isActive())
+            m_xFileNameFT->show();
         m_xSubRegionFT->show();
         m_xSubRegionED->show();
         m_xSubRegionED->set_sensitive(bFile);
@@ -2037,7 +2048,7 @@ SwSectionPropertyTabDialog::~SwSectionPropertyTabDialog()
 {
 }
 
-void SwSectionPropertyTabDialog::PageCreated(const OString& rId, SfxTabPage &rPage)
+void SwSectionPropertyTabDialog::PageCreated(const OUString& rId, SfxTabPage &rPage)
 {
     if (rId == "background")
     {

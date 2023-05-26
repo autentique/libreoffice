@@ -132,7 +132,7 @@ inline SvxFont& SvxCharBasePage::GetPreviewCTLFont()
     return m_aPreviewWin.GetCTLFont();
 }
 
-SvxCharBasePage::SvxCharBasePage(weld::Container* pPage, weld::DialogController* pController, const OUString& rUIXMLDescription, const OString& rID, const SfxItemSet& rItemset)
+SvxCharBasePage::SvxCharBasePage(weld::Container* pPage, weld::DialogController* pController, const OUString& rUIXMLDescription, const OUString& rID, const SfxItemSet& rItemset)
     : SfxTabPage(pPage, pController, rUIXMLDescription, rID, &rItemset)
     , m_bPreviewBackgroundToCharacter( false )
 {
@@ -1572,7 +1572,7 @@ bool SvxCharEffectsPage::FillItemSetColor_Impl( SfxItemSet& rSet )
     sal_uInt16 nWhich = GetWhich( SID_ATTR_CHAR_COLOR );
     const SfxItemSet& rOldSet = GetItemSet();
 
-    svx::NamedThemedColor aSelectedColor;
+    NamedColor aSelectedColor;
     bool bChanged = m_bNewFontColor;
 
     if (bChanged)
@@ -1600,10 +1600,11 @@ bool SvxCharEffectsPage::FillItemSetColor_Impl( SfxItemSet& rSet )
         model::ThemeColorType eType = model::convertToThemeColorType(aSelectedColor.m_nThemeIndex);
         if (eType != model::ThemeColorType::Unknown)
         {
-            aItem.GetThemeColor().setType(eType);
-            aItem.GetThemeColor().clearTransformations();
-            aItem.GetThemeColor().addTransformation({model::TransformationType::LumMod, aSelectedColor.m_nLumMod});
-            aItem.GetThemeColor().addTransformation({model::TransformationType::LumOff, aSelectedColor.m_nLumOff});
+            model::ComplexColor aComplexColor;
+            aComplexColor.setSchemeColor(eType);
+            aComplexColor.addTransformation({model::TransformationType::LumMod, aSelectedColor.m_nLumMod});
+            aComplexColor.addTransformation({model::TransformationType::LumOff, aSelectedColor.m_nLumOff});
+            aItem.setComplexColor(aComplexColor);
         }
 
         rSet.Put(aItem);
@@ -2240,7 +2241,7 @@ bool SvxCharEffectsPage::FillItemSet( SfxItemSet* rSet )
 
     if (bChanged)
     {
-        rSet->Put( SvxEmphasisMarkItem( eMark, nWhich ) );
+        rSet->Put( SvxEmphasisMarkItem( eMark, TypedWhichId<SvxEmphasisMarkItem>(nWhich) ) );
         bModified = true;
     }
     else if ( SfxItemState::DEFAULT == rOldSet.GetItemState( nWhich, false ) )
@@ -2809,7 +2810,7 @@ void SvxCharPositionPage::Reset( const SfxItemSet* rSet )
         m_xScaleWidthMF->set_value(100, FieldUnit::PERCENT);
 
     if ( rSet->GetItemState( SID_ATTR_CHAR_WIDTH_FIT_TO_LINE ) >= SfxItemState::DEFAULT )
-        m_nScaleWidthItemSetVal = static_cast<const SfxUInt16Item&>( rSet->Get( SID_ATTR_CHAR_WIDTH_FIT_TO_LINE )).GetValue();
+        m_nScaleWidthItemSetVal = rSet->Get( SID_ATTR_CHAR_WIDTH_FIT_TO_LINE ).GetValue();
 
     // Rotation
     nWhich = GetWhich( SID_ATTR_CHAR_ROTATED );
@@ -2970,7 +2971,7 @@ bool SvxCharPositionPage::FillItemSet( SfxItemSet* rSet )
     nWhich = GetWhich( SID_ATTR_CHAR_SCALEWIDTH );
     if (m_xScaleWidthMF->get_value_changed_from_saved())
     {
-        rSet->Put(SvxCharScaleWidthItem(static_cast<sal_uInt16>(m_xScaleWidthMF->get_value(FieldUnit::PERCENT)), nWhich));
+        rSet->Put(SvxCharScaleWidthItem(static_cast<sal_uInt16>(m_xScaleWidthMF->get_value(FieldUnit::PERCENT)), TypedWhichId<SvxCharScaleWidthItem>(nWhich)));
         bModified = true;
     }
     else if ( SfxItemState::DEFAULT == rOldSet.GetItemState( nWhich, false ) )
@@ -2983,7 +2984,7 @@ bool SvxCharPositionPage::FillItemSet( SfxItemSet* rSet )
          m_x270degRB->get_state_changed_from_saved()  ||
          m_xFitToLineCB->get_state_changed_from_saved() )
     {
-        SvxCharRotateItem aItem( 0_deg10, m_xFitToLineCB->get_active(), nWhich );
+        SvxCharRotateItem aItem( 0_deg10, m_xFitToLineCB->get_active(), TypedWhichId<SvxCharRotateItem>(nWhich) );
         if (m_x90degRB->get_active())
             aItem.SetBottomToTop();
         else if (m_x270degRB->get_active())

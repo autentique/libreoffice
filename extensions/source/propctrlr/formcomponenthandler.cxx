@@ -192,14 +192,14 @@ namespace pcr
 
     namespace
     {
-        bool lcl_isLanguageDependentProperty( const OUString& aName )
+        bool lcl_isLanguageDependentProperty( std::u16string_view aName )
         {
             bool bRet = false;
 
             const LanguageDependentProp* pLangDepProp = aLanguageDependentProp;
             while( pLangDepProp->pPropName != nullptr )
             {
-                if( aName.equalsAsciiL( pLangDepProp->pPropName, pLangDepProp->nPropNameLength ))
+                if( o3tl::equalsAscii( aName, std::string_view(pLangDepProp->pPropName, pLangDepProp->nPropNameLength) ))
                 {
                     bRet = true;
                     break;
@@ -210,7 +210,7 @@ namespace pcr
         }
 
         Reference< resource::XStringResourceResolver > lcl_getStringResourceResolverForProperty
-            ( const Reference< XPropertySet >& _xComponent, const OUString& _rPropertyName,
+            ( const Reference< XPropertySet >& _xComponent, std::u16string_view _rPropertyName,
               const Any& _rPropertyValue )
         {
             Reference< resource::XStringResourceResolver > xRet;
@@ -739,8 +739,7 @@ namespace pcr
             else
             {
                 // font name
-                displayName.append( aFont.Name );
-                displayName.append( ", " );
+                displayName.append( aFont.Name + ", " );
 
                 // font style
                 ::FontWeight  eWeight = vcl::unohelper::ConvertFontWeight( aFont.Weight );
@@ -762,8 +761,7 @@ namespace pcr
                 // font size
                 if ( aFont.Height )
                 {
-                    displayName.append( ", " );
-                    displayName.append( sal_Int32( aFont.Height ) );
+                    displayName.append( ", " + OUString::number( sal_Int32( aFont.Height ) ) );
                 }
             }
 
@@ -2526,8 +2524,7 @@ namespace pcr
             OUStringBuffer sTemp;
             if ( bAdd )
             {
-                sTemp.append(_sName);
-                sTemp.append("/");
+                sTemp.append(OUString::Concat(_sName) + "/");
             }
             sTemp.append(rQueryName);
             Reference< XNameAccess > xSubQueries(_xQueryNames->getByName(rQueryName),UNO_QUERY);

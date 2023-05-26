@@ -36,6 +36,7 @@
 #include <txtftn.hxx>
 #include <txtfrm.hxx>
 #include <svl/itemiter.hxx>
+#include <o3tl/string_view.hxx>
 #include <o3tl/vector_utils.hxx>
 #include <svx/swframetypes.hxx>
 #include <fmtanchr.hxx>
@@ -96,8 +97,7 @@ class NoTextNodeAltTextCheck : public NodeCheck
         if (!pNoTextNode)
             return;
 
-        OUString sAlternative = pNoTextNode->GetTitle();
-        if (!sAlternative.isEmpty())
+        if (!pNoTextNode->GetTitle().isEmpty() || !pNoTextNode->GetDescription().isEmpty())
             return;
 
         OUString sName = pNoTextNode->GetFlyFormat()->GetName();
@@ -436,6 +436,8 @@ private:
         }
 
         const SwPageDesc* pPageDescription = pTextNode->FindPageDesc();
+        if (!pPageDescription)
+            return;
         const SwFrameFormat& rPageFormat = pPageDescription->GetMaster();
         const SwAttrSet& rPageSet = rPageFormat.GetAttrSet();
 
@@ -1253,7 +1255,7 @@ public:
         const uno::Reference<document::XDocumentProperties> xDocumentProperties(
             xDPS->getDocumentProperties());
         OUString sTitle = xDocumentProperties->getTitle();
-        if (sTitle.trim().isEmpty())
+        if (o3tl::trim(sTitle).empty())
         {
             lclAddIssue(m_rIssueCollection, SwResId(STR_DOCUMENT_TITLE),
                         sfx::AccessibilityIssueID::DOCUMENT_TITLE);

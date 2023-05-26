@@ -602,6 +602,31 @@ void MSWordExportBase::OutputSectionBreaks( const SfxItemSet *pSet, const SwNode
                         bNewPageDesc |= SetCurrentPageDescFromNode( rNd );
                     }
                 }
+
+                // If the columns are different in LO's adjacent sections, create a new MS section
+                if (!bNewPageDesc && pBreak->GetBreak() == SvxBreak::PageBefore
+                    && Sections().CurrentSectionInfo())
+                {
+                    const SwSectionFormat* pSectionFormat = MSWordExportBase::GetSectionFormat(rNd);
+                    if (pSectionFormat)
+                    {
+                        const SwFormatCol& rNewSect = pSectionFormat->GetFormatAttr(RES_COL);
+                        const SwFormatCol& rPrevSect
+                            = MSWordSections::GetFormatCol(m_rDoc,
+                                                           *Sections().CurrentSectionInfo());
+                        if (rNewSect.GetNumCols() != rPrevSect.GetNumCols()
+                            || !rNewSect.IsOrtho() || !rPrevSect.IsOrtho()
+                            || rNewSect.GetLineStyle() != rPrevSect.GetLineStyle()
+                            || rNewSect.GetLineWidth() != rPrevSect.GetLineWidth()
+                            || rNewSect.GetLineColor() != rPrevSect.GetLineColor()
+                            || rNewSect.GetLineHeight() != rPrevSect.GetLineHeight()
+                            || rNewSect.GetLineAdj() != rPrevSect.GetLineAdj())
+                        {
+                            bNewPageDesc = true;
+                        }
+                    }
+                }
+
                 if ( !bNewPageDesc )
                     AttrOutput().OutputItem( *pBreak );
             }
@@ -1106,7 +1131,10 @@ void WW8AttributeOutput::StartRun( const SwRedlineData* pRedlineData, sal_Int32 
     {
         const OUString &rComment = pRedlineData->GetComment();
         //Only possible to export to main text
-        if (!rComment.isEmpty() && (m_rWW8Export.m_nTextTyp == TXT_MAINTEXT))
+        if (!rComment.isEmpty() && (m_rWW8Export.m_nTextTyp == TXT_MAINTEXT) &&
+            // tdf#153016 don't export the new automatic comments added by tdf#148032
+            rComment != SwResId(STR_REDLINE_COMMENT_DELETED) &&
+            rComment != SwResId(STR_REDLINE_COMMENT_ADDED))
         {
             if (m_rWW8Export.m_pAtn->IsNewRedlineComment(pRedlineData))
             {
@@ -5059,7 +5087,7 @@ void WW8AttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
             break;
         case SvxAdjust::BlockLine:
         case SvxAdjust::Block:
-            nAdj = nAdjBiDi = 3;
+            nAdj = nAdjBiDi = rAdjust.GetLastBlock() == SvxAdjust::Block ? 4 : 3;
             break;
         case SvxAdjust::Center:
             nAdj = nAdjBiDi = 1;

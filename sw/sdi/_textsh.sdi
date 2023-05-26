@@ -425,7 +425,6 @@ interface BaseText
     [
         ExecMethod = Execute ;
         StateMethod = GetState;
-        DisableFlags="SfxDisableFlags::SwOnProtectedCursor";
     ]
     FN_TABLE_UNSET_READ_ONLY // status(final|play)
     [
@@ -1006,6 +1005,12 @@ interface BaseText
         StateMethod = StateField ;
     ]
     FN_EDIT_FIELD // status(final|play)
+    [
+        ExecMethod = ExecField ;
+        StateMethod = StateField ;
+        DisableFlags="SfxDisableFlags::SwOnProtectedCursor";
+    ]
+    FN_UPDATE_SEL_FIELD
     [
         ExecMethod = ExecField ;
         StateMethod = StateField ;

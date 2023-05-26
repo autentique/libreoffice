@@ -270,8 +270,10 @@ static SwHTMLWriter& OutHTML_SwField( SwHTMLWriter& rWrt, const SwField* pField,
     {
         OStringBuffer sOut("<"
             + rWrt.GetNamespace()
-            + OOO_STRING_SVTOOLS_HTML_sdfield " "
-            OOO_STRING_SVTOOLS_HTML_O_type "="
+            + OOO_STRING_SVTOOLS_HTML_sdfield
+            " "
+            OOO_STRING_SVTOOLS_HTML_O_type
+            "="
             + pTypeStr);
         if( pSubStr )
         {
@@ -539,7 +541,7 @@ SwHTMLWriter& OutHTML_SwFormatField( SwHTMLWriter& rWrt, const SfxPoolItem& rHt 
     {
         const SwTextField *pTextField = rField.GetTextField();
         OSL_ENSURE( pTextField, "Where is the txt fld?" );
-        if( pTextField )
+        if (pTextField && rWrt.m_pDoc->GetDocShell() && rWrt.m_pDoc->GetDocShell()->GetView())
         {
             // ReqIF-XHTML doesn't allow specifying a background color.
             const SwViewOption* pViewOptions = rWrt.m_pDoc->GetDocShell()->GetView()->GetWrtShell().GetViewOptions();
@@ -554,17 +556,15 @@ SwHTMLWriter& OutHTML_SwFormatField( SwHTMLWriter& rWrt, const SfxPoolItem& rHt 
 
             if (bFieldShadings)
             {
-                OStringBuffer sOut;
-                sOut.append("<" + rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_span);
-                sOut.append(" " OOO_STRING_SVTOOLS_HTML_O_style "=\"");
-                sOut.append(sCSS1_P_background);
-                sOut.append(": ");
-
                 const Color& rColor = pViewOptions->GetFieldShadingsColor();
-                sOut.append(GetCSS1_Color(rColor));
-                sOut.append("\">");
+                OString sOut(
+                    "<" + rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_span
+                    " " OOO_STRING_SVTOOLS_HTML_O_style "=\""
+                    + sCSS1_P_background
+                    + ": "
+                    + GetCSS1_Color(rColor)
+                    + "\">");
                 rWrt.Strm().WriteOString(sOut);
-                sOut.setLength(0);
             }
 
             OutHTML_SwField( rWrt, pField, pTextField->GetTextNode(),

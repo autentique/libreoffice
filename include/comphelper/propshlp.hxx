@@ -66,24 +66,6 @@ public:
     */
     OPropertySetHelper(bool bIgnoreRuntimeExceptionsWhileFiring);
 
-    /** Constructor.
-
-        @param i_pFireEvents
-                        additional event notifier
-
-        @param bIgnoreRuntimeExceptionsWhileFiring
-                        indicates whether occurring RuntimeExceptions will be
-                        ignored when firing notifications
-                        (vetoableChange(), propertyChange())
-                        to listeners.
-                        PropertyVetoExceptions may still be thrown.
-                        This flag is useful in an inter-process scenario when
-                        remote bridges may break down
-                        (firing DisposedExceptions).
-    */
-    OPropertySetHelper(cppu::IEventNotificationHook* i_pFireEvents,
-                       bool bIgnoreRuntimeExceptionsWhileFiring = false);
-
     /**
        Only returns a reference to XMultiPropertySet, XFastPropertySet, XPropertySet and
        XEventListener.
@@ -116,25 +98,26 @@ public:
      */
     virtual css::uno::Any SAL_CALL
     getPropertyValue(const ::rtl::OUString& aPropertyName) override final;
+
     /** Ignored if the property is not bound. */
     virtual void SAL_CALL addPropertyChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
+        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override final;
 
     /** Ignored if the property is not bound. */
     virtual void SAL_CALL removePropertyChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override;
+        const css::uno::Reference<css::beans::XPropertyChangeListener>& aListener) override final;
 
     /** Ignored if the property is not constrained. */
     virtual void SAL_CALL addVetoableChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override final;
 
     /** Ignored if the property is not constrained. */
     virtual void SAL_CALL removeVetoableChangeListener(
         const ::rtl::OUString& aPropertyName,
-        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override;
+        const css::uno::Reference<css::beans::XVetoableChangeListener>& aListener) override final;
 
     /**
        Throw UnknownPropertyException or PropertyVetoException if the property with the name
@@ -158,18 +141,18 @@ public:
                       const css::uno::Sequence<css::uno::Any>& Values) override;
 
     virtual css::uno::Sequence<css::uno::Any> SAL_CALL
-    getPropertyValues(const css::uno::Sequence<::rtl::OUString>& PropertyNames) override;
+    getPropertyValues(const css::uno::Sequence<::rtl::OUString>& PropertyNames) override final;
 
     virtual void SAL_CALL addPropertiesChangeListener(
         const css::uno::Sequence<::rtl::OUString>& PropertyNames,
-        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override;
+        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override final;
 
     virtual void SAL_CALL removePropertiesChangeListener(
-        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override;
+        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override final;
 
     virtual void SAL_CALL firePropertiesChangeEvent(
         const css::uno::Sequence<::rtl::OUString>& PropertyNames,
-        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override;
+        const css::uno::Reference<css::beans::XPropertiesChangeListener>& Listener) override final;
 
     /**
        The property sequence is created in the call. The interface isn't used after the call.
@@ -183,10 +166,6 @@ protected:
      */
     ~OPropertySetHelper();
 
-    /** Override this if you need to do something special during setPropertyValue */
-    virtual void setPropertyValueImpl(std::unique_lock<std::mutex>& rGuard,
-                                      const ::rtl::OUString& rPropertyName,
-                                      const css::uno::Any& aValue);
     /** Override this if you need to do something special during setFastPropertyValue */
     virtual void setFastPropertyValueImpl(std::unique_lock<std::mutex>& rGuard, sal_Int32 nHandle,
                                           const css::uno::Any& rValue);
@@ -319,7 +298,6 @@ private:
      */
     comphelper::OInterfaceContainerHelper4<css::beans::XVetoableChangeListener>
         maVetoableChangeListeners;
-    cppu::IEventNotificationHook* const m_pFireEvents = nullptr;
     std::vector<sal_Int32> m_handles;
     std::vector<css::uno::Any> m_newValues;
     std::vector<css::uno::Any> m_oldValues;

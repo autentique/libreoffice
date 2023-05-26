@@ -47,11 +47,15 @@
 
 #include <document.hxx>
 #include <docpool.hxx>
+#include <stlpool.hxx>
+#include <stylehelper.hxx>
 #include <patattr.hxx>
 #include <drwlayer.hxx>
 #include <userdat.hxx>
 #include <detfunc.hxx>
 #include <editutil.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 #include <utility>
 
 using namespace com::sun::star;
@@ -76,8 +80,8 @@ public:
     static void         SetBasicCaptionSettings( SdrCaptionObj& rCaption, bool bShown );
     /** Stores the cell position of the note in the user data area of the caption. */
     static void         SetCaptionUserData( SdrCaptionObj& rCaption, const ScAddress& rPos );
-    /** Sets all default formatting attributes to the caption object. */
-    static void         SetDefaultItems( SdrCaptionObj& rCaption, ScDocument& rDoc, const SfxItemSet* pExtraItemSet );
+    /** Sets all hard formatting attributes to the caption object. */
+    static void         SetExtraItems( SdrCaptionObj& rCaption, const SfxItemSet& rExtraItemSet );
 };
 
 void ScCaptionUtil::SetCaptionLayer( SdrCaptionObj& rCaption, bool bShown )
@@ -89,9 +93,9 @@ void ScCaptionUtil::SetCaptionLayer( SdrCaptionObj& rCaption, bool bShown )
 
 void ScCaptionUtil::SetBasicCaptionSettings( SdrCaptionObj& rCaption, bool bShown )
 {
-    SetCaptionLayer( rCaption, bShown );
     rCaption.SetFixedTail();
     rCaption.SetSpecialTextBoxShadow();
+    SetCaptionLayer( rCaption, bShown );
 }
 
 void ScCaptionUtil::SetCaptionUserData( SdrCaptionObj& rCaption, const ScAddress& rPos )
@@ -103,60 +107,19 @@ void ScCaptionUtil::SetCaptionUserData( SdrCaptionObj& rCaption, const ScAddress
     pObjData->meType = ScDrawObjData::CellNote;
 }
 
-void ScCaptionUtil::SetDefaultItems( SdrCaptionObj& rCaption, ScDocument& rDoc, const SfxItemSet* pExtraItemSet )
+void ScCaptionUtil::SetExtraItems( SdrCaptionObj& rCaption, const SfxItemSet& rExtraItemSet )
 {
     SfxItemSet aItemSet = rCaption.GetMergedItemSet();
 
-    // caption tail arrow
-    ::basegfx::B2DPolygon aTriangle;
-    aTriangle.append( ::basegfx::B2DPoint( 10.0,  0.0 ) );
-    aTriangle.append( ::basegfx::B2DPoint(  0.0, 30.0 ) );
-    aTriangle.append( ::basegfx::B2DPoint( 20.0, 30.0 ) );
-    aTriangle.setClosed( true );
-    /*  Line ends are now created with an empty name. The
-        checkForUniqueItem() method then finds a unique name for the item's
-        value. */
-    aItemSet.Put( XLineStartItem( OUString(), ::basegfx::B2DPolyPolygon( aTriangle ) ) );
-    aItemSet.Put( XLineStartWidthItem( 200 ) );
-    aItemSet.Put( XLineStartCenterItem( false ) );
-    aItemSet.Put( XFillStyleItem( drawing::FillStyle_SOLID ) );
-    aItemSet.Put( XFillColorItem( OUString(), ScDetectiveFunc::GetCommentColor() ) );
-    aItemSet.Put( SdrCaptionEscDirItem( SdrCaptionEscDir::BestFit ) );
-
-    // shadow
-    /*  SdrShadowItem has sal_False, instead the shadow is set for the
-        rectangle only with SetSpecialTextBoxShadow() when the object is
-        created (item must be set to adjust objects from older files). */
-    aItemSet.Put( makeSdrShadowItem( false ) );
+    aItemSet.Put(rExtraItemSet);
+    // reset shadow visibility (see also ScNoteUtil::CreateNoteFromCaption)
+    aItemSet.ClearItem(SDRATTR_SHADOW);
+    // ... but not distance, as that will fallback to wrong values
+    // if the comment is shown and then opened in older versions:
     aItemSet.Put( makeSdrShadowXDistItem( 100 ) );
     aItemSet.Put( makeSdrShadowYDistItem( 100 ) );
 
-    // text attributes
-    aItemSet.Put( makeSdrTextLeftDistItem( 100 ) );
-    aItemSet.Put( makeSdrTextRightDistItem( 100 ) );
-    aItemSet.Put( makeSdrTextUpperDistItem( 100 ) );
-    aItemSet.Put( makeSdrTextLowerDistItem( 100 ) );
-    aItemSet.Put( makeSdrTextAutoGrowWidthItem( false ) );
-    aItemSet.Put( makeSdrTextAutoGrowHeightItem( true ) );
-    // use the default cell style to be able to modify the caption font
-    const ScPatternAttr& rDefPattern = rDoc.GetPool()->GetDefaultItem( ATTR_PATTERN );
-    rDefPattern.FillEditItemSet( &aItemSet );
-
-    if (pExtraItemSet)
-    {
-        /* Updates caption item set according to the passed item set while removing shadow items. */
-
-        aItemSet.Put(*pExtraItemSet);
-        // reset shadow items
-        aItemSet.Put( makeSdrShadowItem( false ) );
-        aItemSet.Put( makeSdrShadowXDistItem( 100 ) );
-        aItemSet.Put( makeSdrShadowYDistItem( 100 ) );
-    }
-
     rCaption.SetMergedItemSet( aItemSet );
-
-    if (pExtraItemSet)
-        rCaption.SetSpecialTextBoxShadow();
 }
 
 /** Helper for creation and manipulation of caption drawing objects independent
@@ -458,6 +421,7 @@ struct ScCaptionInitData
 {
     std::optional< SfxItemSet > moItemSet;  /// Caption object formatting.
     std::optional< OutlinerParaObject > mxOutlinerObj; /// Text object with all text portion formatting.
+    OUString            maStyleName;        /// Drawing style associated with the caption object.
     OUString            maSimpleText;       /// Simple text without formatting.
     Point               maCaptionOffset;    /// Caption position relative to cell corner.
     Size                maCaptionSize;      /// Size of the caption object.
@@ -567,15 +531,6 @@ OUString ScPostIt::GetText() const
     if( maNoteData.mxInitData )
         return maNoteData.mxInitData->maSimpleText;
     return OUString();
-}
-
-bool ScPostIt::HasMultiLineText() const
-{
-    if( const EditTextObject* pEditObj = GetEditTextObject() )
-        return pEditObj->GetParagraphCount() > 1;
-    if( maNoteData.mxInitData )
-        return maNoteData.mxInitData->maSimpleText.indexOf( '\n' ) >= 0;
-    return false;
 }
 
 void ScPostIt::SetText( const ScAddress& rPos, const OUString& rText )
@@ -694,8 +649,23 @@ void ScPostIt::CreateCaptionFromInitData( const ScAddress& rPos ) const
     else
         maNoteData.mxCaption->SetText( xInitData->maSimpleText );
 
-    // copy all items or set default items; reset shadow items
-    ScCaptionUtil::SetDefaultItems( *maNoteData.mxCaption, mrDoc, xInitData->moItemSet ? &*xInitData->moItemSet : nullptr );
+    if (!xInitData->maStyleName.isEmpty())
+    {
+        if (auto pStyleSheet = mrDoc.GetStyleSheetPool()->Find(xInitData->maStyleName, SfxStyleFamily::Frame))
+            maNoteData.mxCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), true);
+
+        if (xInitData->moItemSet)
+            maNoteData.mxCaption->SetMergedItemSet(*xInitData->moItemSet);
+    }
+    else
+    {
+        if (auto pStyleSheet = mrDoc.GetStyleSheetPool()->Find(ScResId(STR_STYLENAME_NOTE), SfxStyleFamily::Frame))
+            maNoteData.mxCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), true);
+
+        // copy all items and reset shadow items
+        if (xInitData->moItemSet)
+            ScCaptionUtil::SetExtraItems(*maNoteData.mxCaption, *xInitData->moItemSet);
+    }
 
     // set position and size of the caption object
     if( xInitData->mbDefaultPosSize )
@@ -749,6 +719,14 @@ void ScPostIt::CreateCaption( const ScAddress& rPos, const SdrCaptionObj* pCapti
         if( OutlinerParaObject* pOPO = pCaption->GetOutlinerParaObject() )
             maNoteData.mxCaption->SetOutlinerParaObject( *pOPO );
         // copy formatting items (after text has been copied to apply font formatting)
+        if (auto pStyleSheet = pCaption->GetStyleSheet())
+        {
+            auto pPool = mrDoc.GetStyleSheetPool();
+            pPool->CopyStyleFrom(pStyleSheet->GetPool(), pStyleSheet->GetName(), pStyleSheet->GetFamily(), true);
+
+            if (auto pDestStyleSheet = pPool->Find(pStyleSheet->GetName(), pStyleSheet->GetFamily()))
+                maNoteData.mxCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pDestStyleSheet), true);
+        }
         maNoteData.mxCaption->SetMergedItemSetAndBroadcast( pCaption->GetMergedItemSet() );
         // move textbox position relative to new cell, copy textbox size
         tools::Rectangle aCaptRect = pCaption->GetLogicRect();
@@ -759,8 +737,14 @@ void ScPostIt::CreateCaption( const ScAddress& rPos, const SdrCaptionObj* pCapti
     }
     else
     {
-        // set default formatting and default position
-        ScCaptionUtil::SetDefaultItems( *maNoteData.mxCaption, mrDoc, nullptr );
+        if (auto pStyleSheet = mrDoc.GetStyleSheetPool()->Find(ScResId(STR_STYLENAME_NOTE), SfxStyleFamily::Frame))
+            maNoteData.mxCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), true);
+        // set default size, undoing sdr::TextProperties::SetStyleSheet's
+        // adjustment that use a wrong min height.
+        tools::Rectangle aCaptRect = maNoteData.mxCaption->GetLogicRect();
+        aCaptRect.SetSize({ SC_NOTECAPTION_WIDTH, SC_NOTECAPTION_HEIGHT });
+        maNoteData.mxCaption->SetLogicRect(aCaptRect);
+        // set default position
         aCreator.AutoPlaceCaption();
     }
 
@@ -849,6 +833,8 @@ rtl::Reference<SdrCaptionObj> ScNoteUtil::CreateTempCaption(
         if( OutlinerParaObject* pOPO = pNoteCaption->GetOutlinerParaObject() )
             pCaption->SetOutlinerParaObject( *pOPO );
         // set formatting (must be done after setting text) and resize the box to fit the text
+        if (auto pStyleSheet = pNoteCaption->GetStyleSheet())
+            pCaption->SetStyleSheet(pStyleSheet, true);
         pCaption->SetMergedItemSetAndBroadcast( pNoteCaption->GetMergedItemSet() );
         tools::Rectangle aCaptRect( pCaption->GetLogicRect().TopLeft(), pNoteCaption->GetLogicRect().GetSize() );
         pCaption->SetLogicRect( aCaptRect );
@@ -857,7 +843,8 @@ rtl::Reference<SdrCaptionObj> ScNoteUtil::CreateTempCaption(
     {
         // if pNoteCaption is null, then aBuffer contains some text
         pCaption->SetText( aBuffer.makeStringAndClear() );
-        ScCaptionUtil::SetDefaultItems( *pCaption, rDoc, nullptr );
+        if (auto pStyleSheet = rDoc.GetStyleSheetPool()->Find(ScResId(STR_STYLENAME_NOTE), SfxStyleFamily::Frame))
+            pCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), true);
         // adjust caption size to text size
         tools::Long nMaxWidth = ::std::min< tools::Long >( aVisRect.GetWidth() * 2 / 3, SC_NOTECAPTION_MAXWIDTH_TEMP );
         pCaption->SetMergedItem( makeSdrTextAutoGrowWidthItem( true ) );
@@ -875,7 +862,7 @@ rtl::Reference<SdrCaptionObj> ScNoteUtil::CreateTempCaption(
 }
 
 ScPostIt* ScNoteUtil::CreateNoteFromCaption(
-        ScDocument& rDoc, const ScAddress& rPos, SdrCaptionObj* pCaption )
+        ScDocument& rDoc, const ScAddress& rPos, SdrCaptionObj* pCaption, bool bHasStyle )
 {
     ScNoteData aNoteData( true/*bShown*/ );
     aNoteData.mxCaption = pCaption;
@@ -887,11 +874,22 @@ ScPostIt* ScNoteUtil::CreateNoteFromCaption(
     // ScNoteCaptionCreator c'tor updates the caption object to be part of a note
     ScNoteCaptionCreator aCreator( rDoc, rPos, aNoteData.mxCaption, true/*bShown*/ );
 
+    if (!bHasStyle)
+    {
+        if (auto pStyleSheet = rDoc.GetStyleSheetPool()->Find(ScResId(STR_STYLENAME_NOTE), SfxStyleFamily::Frame))
+            aNoteData.mxCaption->SetStyleSheet(static_cast<SfxStyleSheet*>(pStyleSheet), true);
+
+        /* We used to show a shadow despite of the shadow item being set to false.
+           Clear the existing item, so it inherits the true setting from the style.
+           Setting explicitly to true would corrupt the shadow when opened in older versions. */
+        aNoteData.mxCaption->ClearMergedItem(SDRATTR_SHADOW);
+    }
+
     return pNote;
 }
 
 ScPostIt* ScNoteUtil::CreateNoteFromObjectData(
-        ScDocument& rDoc, const ScAddress& rPos, SfxItemSet&& rItemSet,
+        ScDocument& rDoc, const ScAddress& rPos, SfxItemSet&& rItemSet, const OUString& rStyleName,
         const OutlinerParaObject& rOutlinerObj, const tools::Rectangle& rCaptionRect,
         bool bShown )
 {
@@ -900,6 +898,7 @@ ScPostIt* ScNoteUtil::CreateNoteFromObjectData(
     ScCaptionInitData& rInitData = *aNoteData.mxInitData;
     rInitData.moItemSet.emplace(std::move(rItemSet));
     rInitData.mxOutlinerObj = rOutlinerObj;
+    rInitData.maStyleName = ScStyleNameConversion::ProgrammaticToDisplayName(rStyleName, SfxStyleFamily::Frame);
 
     // convert absolute caption position to relative position
     rInitData.mbDefaultPosSize = rCaptionRect.IsEmpty();
@@ -933,6 +932,7 @@ ScPostIt* ScNoteUtil::CreateNoteFromString(
         aNoteData.mxInitData = std::make_shared<ScCaptionInitData>();
         ScCaptionInitData& rInitData = *aNoteData.mxInitData;
         rInitData.maSimpleText = rNoteText;
+        rInitData.maStyleName = ScResId(STR_STYLENAME_NOTE);
         rInitData.mbDefaultPosSize = true;
 
         /*  Create the note and insert it into the document. If the note is

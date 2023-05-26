@@ -726,7 +726,7 @@ inline void SwEditWin::EnterArea()
  */
 void SwEditWin::InsFrame(sal_uInt16 nCols)
 {
-    StdDrawMode( SdrObjKind::NONE, false );
+    StdDrawMode(SdrObjKind::NewFrame, false);
     m_bInsFrame = true;
     m_nInsFrameColCount = nCols;
 }
@@ -1930,7 +1930,7 @@ KEYINPUT_CHECKTABLE_INSDEL:
                     }
                     else if (!rSh.IsCursorInParagraphMetadataField())
                     {
-                        rSh.InfoReadOnlyDialog();
+                        rSh.InfoReadOnlyDialog(false);
                         eKeyState = SwKeyState::End;
                     }
                     break;
@@ -2084,7 +2084,7 @@ KEYINPUT_CHECKTABLE_INSDEL:
                     }
                     else if (!rSh.IsCursorInParagraphMetadataField())
                     {
-                        rSh.InfoReadOnlyDialog();
+                        rSh.InfoReadOnlyDialog(false);
                         eKeyState = SwKeyState::End;
                     }
                     break;
@@ -2570,7 +2570,8 @@ KEYINPUT_CHECKTABLE_INSDEL:
                     pACorr->IsAutoCorrFlag( ACFlags::CapitalStartSentence | ACFlags::CapitalStartWord |
                                             ACFlags::ChgOrdinalNumber | ACFlags::AddNonBrkSpace |
                                             ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr |
-                                            ACFlags::Autocorrect | ACFlags::TransliterateRTL ) &&
+                                            ACFlags::Autocorrect | ACFlags::TransliterateRTL |
+                                            ACFlags::SetDOIAttr ) &&
                     '\"' != aCh && '\'' != aCh && '*' != aCh && '_' != aCh
                     )
                 {
@@ -2608,7 +2609,7 @@ KEYINPUT_CHECKTABLE_INSDEL:
                 pACorr->IsAutoCorrFlag( ACFlags::CapitalStartSentence | ACFlags::CapitalStartWord |
                                         ACFlags::ChgOrdinalNumber | ACFlags::TransliterateRTL |
                                         ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr |
-                                        ACFlags::Autocorrect ) &&
+                                        ACFlags::Autocorrect | ACFlags::SetDOIAttr ) &&
                 !rSh.HasReadonlySel() )
             {
                 FlushInBuffer();
@@ -2965,9 +2966,9 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
 
             if ( !bActive )
             {
-                // When in Hide-Whitespace mode, we don't want header
-                // and footer controls.
-                if (!rSh.GetViewOptions()->IsHideWhitespaceMode())
+                // HeaderFooter menu implies header/footer controls, so only do this with IsUseHeaderFooterMenu enabled.
+                // But, additionally, when in Hide-Whitespace mode, we don't want those controls.
+                if (rSh.GetViewOptions()->IsUseHeaderFooterMenu() && !rSh.GetViewOptions()->IsHideWhitespaceMode())
                 {
                     SwPaM aPam(*rSh.GetCurrentShellCursor().GetPoint());
                     const bool bWasInHeader = aPam.GetPoint()->GetNode().FindHeaderStartNode() != nullptr;
@@ -2992,7 +2993,7 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                         // if the cursor cannot be positioned on-screen, then the user would need to scroll back again to use the control.
                         // This should only be done for the footer. The cursor can always be re-positioned near the header. tdf#134023.
                         if ( eControl == FrameControlType::Footer && !bSeparatorWasVisible
-                             && rSh.GetViewOptions()->IsUseHeaderFooterMenu() && !Application::IsHeadlessModeEnabled() )
+                             && !Application::IsHeadlessModeEnabled() )
                             return;
                     }
                 }
@@ -3005,12 +3006,7 @@ void SwEditWin::MouseButtonDown(const MouseEvent& _rMEvt)
                 rSh.SetShowHeaderFooterSeparator( FrameControlType::Footer, eControl == FrameControlType::Footer );
 
                 if ( !rSh.IsHeaderFooterEdit() )
-                {
                     rSh.ToggleHeaderFooterEdit();
-
-                    // Repaint everything
-                    rSh.GetWin()->Invalidate();
-                }
             }
         }
     }

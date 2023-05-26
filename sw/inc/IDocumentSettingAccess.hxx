@@ -92,6 +92,7 @@ enum class DocumentSettingId
     // tdf#129448: Auto first-line indent should not be effected by line space
     AUTO_FIRST_LINE_INDENT_DISREGARD_LINE_SPACE,
     HYPHENATE_URLS, ///< tdf#152952
+    DO_NOT_BREAK_WRAPPED_TABLES,
     // COMPATIBILITY FLAGS END
     BROWSE_MODE,
     HTML_MODE,
@@ -126,7 +127,9 @@ enum class DocumentSettingId
     NO_NUMBERING_SHOW_FOLLOWBY,
     // drop cap punctuation: smaller dashes, bullet, asterisks, quotation marks etc.
     // by extending the rounding box of the glyph to the baseline
-    DROP_CAP_PUNCTUATION
+    DROP_CAP_PUNCTUATION,
+    // render NBSP as standard-space-width (prettier when justified)
+    USE_VARIABLE_WIDTH_NBSP,
 };
 
 /** Provides access to settings of a document

@@ -732,6 +732,8 @@ CPPUNIT_TEST_FIXTURE(Test, testFdo37606)
 
         pWrtShell->SelAll(); // Selects the whole table.
         pWrtShell->SelAll(); // Selects the whole document.
+        pShellCursor = pWrtShell->getShellCursor(false);
+
         SwTextNode& rStart = dynamic_cast<SwTextNode&>(pShellCursor->Start()->GetNode());
         CPPUNIT_ASSERT_EQUAL(OUString("A1"), rStart.GetText());
 
@@ -798,11 +800,11 @@ CPPUNIT_TEST_FIXTURE(Test, testFdo69862)
     SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument *>(mxComponent.get());
     CPPUNIT_ASSERT(pTextDoc);
     SwWrtShell* pWrtShell = pTextDoc->GetDocShell()->GetWrtShell();
-    SwShellCursor* pShellCursor = pWrtShell->getShellCursor(false);
 
     pWrtShell->SelAll(); // Selects A1.
     pWrtShell->SelAll(); // Selects the whole table.
     pWrtShell->SelAll(); // Selects the whole document.
+    SwShellCursor* pShellCursor = pWrtShell->getShellCursor(false);
     SwTextNode& rStart = dynamic_cast<SwTextNode&>(pShellCursor->Start()->GetNode());
     // This was "Footnote.", as Ctrl-A also selected footnotes, but it should not.
     CPPUNIT_ASSERT_EQUAL(OUString("A1"), rStart.GetText());
@@ -843,8 +845,8 @@ CPPUNIT_TEST_FIXTURE(Test, testSpellmenuRedline)
     // Make sure that if we show the spellcheck popup menu (for the current
     // document, which contains redlines), then the last two entries will be
     // always 'go to next/previous change'.
-    CPPUNIT_ASSERT_EQUAL(OString("next"), rMenu.GetItemIdent(rMenu.GetItemId(rMenu.GetItemCount() - 2)));
-    CPPUNIT_ASSERT_EQUAL(OString("prev"), rMenu.GetItemIdent(rMenu.GetItemId(rMenu.GetItemCount() - 1)));
+    CPPUNIT_ASSERT_EQUAL(OUString("next"), rMenu.GetItemIdent(rMenu.GetItemId(rMenu.GetItemCount() - 2)));
+    CPPUNIT_ASSERT_EQUAL(OUString("prev"), rMenu.GetItemIdent(rMenu.GetItemId(rMenu.GetItemCount() - 1)));
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf107776)
@@ -1509,6 +1511,27 @@ CPPUNIT_TEST_FIXTURE(Test, testWindowsFileZone)
         officecfg::Office::Common::Security::Scripting::WindowsSecurityZone::ZoneIntranet>(
         mxDesktop, aTempFile.GetURL(), 2, 1, false);
 #endif
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testEmptyTrailingSpans)
+{
+    createSwDoc("emptyParagraphLoosesFontHeight.fodt");
+
+    CPPUNIT_ASSERT_EQUAL(3, getParagraphs());
+
+    auto xPara2 = getParagraph(2);
+    CPPUNIT_ASSERT_EQUAL(float(11), getProperty<float>(xPara2, "CharHeight"));
+    auto xRun = getRun(xPara2, 1);
+    CPPUNIT_ASSERT_EQUAL(float(8), getProperty<float>(xRun, "CharHeight"));
+    // Both empty spans merge -> no more runs
+    CPPUNIT_ASSERT_THROW(getRun(xPara2, 2), css::container::NoSuchElementException);
+
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    auto height1 = getXPath(pXmlDoc, "/root/page/body/txt[1]/infos/bounds", "height").toInt32();
+    auto height2 = getXPath(pXmlDoc, "/root/page/body/txt[2]/infos/bounds", "height").toInt32();
+    CPPUNIT_ASSERT_EQUAL(height1, height2);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(184, height2, 1); // allow a bit of room for rounding just in case
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

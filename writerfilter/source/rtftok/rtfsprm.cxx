@@ -47,11 +47,9 @@ std::string RTFSprm::toString() const
         aBuf.append(sal_Int32(m_nKeyword));
     else
         aBuf.append(sResult.c_str());
-    aBuf.append("', '");
-    aBuf.append(m_pValue->toString().c_str());
-    aBuf.append("')");
+    aBuf.append("', '" + m_pValue->toString() + "')");
 
-    return aBuf.makeStringAndClear().getStr();
+    return std::string(aBuf);
 }
 #endif
 

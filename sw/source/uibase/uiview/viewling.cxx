@@ -65,6 +65,7 @@
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <com/sun/star/awt/PopupMenuDirection.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -636,7 +637,8 @@ bool SwView::ExecSpellPopup(const Point& rPt)
         {
             const bool bOldViewLock = m_pWrtShell->IsViewLocked();
             m_pWrtShell->LockView( true );
-            m_pWrtShell->Push();
+            if (!comphelper::LibreOfficeKit::isActive())
+                m_pWrtShell->Push();
             SwRect aToFill;
 
             SwCursorShell *pCursorShell = m_pWrtShell.get();
@@ -787,7 +789,7 @@ bool SwView::ExecSpellPopup(const Point& rPt)
 
                                 std::stringstream aStream;
                                 boost::property_tree::write_json(aStream, aRoot, true);
-                                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, aStream.str().c_str());
+                                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, OString(aStream.str()));
                             }
                         }
                         else

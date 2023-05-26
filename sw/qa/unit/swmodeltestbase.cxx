@@ -36,29 +36,11 @@
 
 using namespace css;
 
-SwModelTestBase::FlySplitGuard::FlySplitGuard()
-{
-    std::shared_ptr<comphelper::ConfigurationChanges> pChanges(
-        comphelper::ConfigurationChanges::create());
-    officecfg::Office::Writer::Filter::Import::DOCX::ImportFloatingTableAsSplitFly::set(true,
-                                                                                        pChanges);
-    pChanges->commit();
-}
-
-SwModelTestBase::FlySplitGuard::~FlySplitGuard()
-{
-    std::shared_ptr<comphelper::ConfigurationChanges> pChanges(
-        comphelper::ConfigurationChanges::create());
-    officecfg::Office::Writer::Filter::Import::DOCX::ImportFloatingTableAsSplitFly::set(false,
-                                                                                        pChanges);
-    pChanges->commit();
-}
-
-void SwModelTestBase::paste(std::u16string_view aFilename,
+void SwModelTestBase::paste(std::u16string_view aFilename, OUString aInstance,
                             uno::Reference<text::XTextRange> const& xTextRange)
 {
-    uno::Reference<document::XFilter> xFilter(
-        m_xSFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"), uno::UNO_QUERY_THROW);
+    uno::Reference<document::XFilter> xFilter(m_xSFactory->createInstance(aInstance),
+                                              uno::UNO_QUERY_THROW);
     uno::Reference<document::XImporter> xImporter(xFilter, uno::UNO_QUERY_THROW);
     xImporter->setTargetDocument(mxComponent);
     std::unique_ptr<SvStream> pStream = utl::UcbStreamHelper::CreateStream(
@@ -624,10 +606,10 @@ SwDocShell* SwModelTestBase::getSwDocShell()
 
 void SwModelTestBase::WrapReqifFromTempFile(SvMemoryStream& rStream)
 {
-    rStream.WriteCharPtr("<reqif-xhtml:html xmlns:reqif-xhtml=\"http://www.w3.org/1999/xhtml\">\n");
+    rStream.WriteOString("<reqif-xhtml:html xmlns:reqif-xhtml=\"http://www.w3.org/1999/xhtml\">\n");
     SvFileStream aFileStream(maTempFile.GetURL(), StreamMode::READ);
     rStream.WriteStream(aFileStream);
-    rStream.WriteCharPtr("</reqif-xhtml:html>\n");
+    rStream.WriteOString("</reqif-xhtml:html>\n");
     rStream.Seek(0);
 }
 

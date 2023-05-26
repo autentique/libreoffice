@@ -632,9 +632,10 @@ void SvxUnoTextRangeBase::getPropertyValue( const SfxItemPropertyMapEntry* pMap,
             // get presentation string for field
             std::optional<Color> pTColor;
             std::optional<Color> pFColor;
+            std::optional<FontLineStyle> pFldLineStyle;
 
             SvxTextForwarder* pForwarder = mpEditSource->GetTextForwarder();
-            OUString aPresentation( pForwarder->CalcFieldValue( SvxFieldItem(*pData, EE_FEATURE_FIELD), maSelection.nStartPara, maSelection.nStartPos, pTColor, pFColor ) );
+            OUString aPresentation( pForwarder->CalcFieldValue( SvxFieldItem(*pData, EE_FEATURE_FIELD), maSelection.nStartPara, maSelection.nStartPos, pTColor, pFColor, pFldLineStyle ) );
 
             uno::Reference< text::XTextField > xField( new SvxUnoTextField( xAnchor, aPresentation, pData ) );
             rAny <<= xField;
@@ -1142,7 +1143,7 @@ bool SvxUnoTextRangeBase::_getOnePropertyStates(const SfxItemSet* pSet, const Sf
             switch (pMap->nMemberId)
             {
                 case MID_COLOR_THEME_INDEX:
-                    if (pColor->GetThemeColor().getType() == model::ThemeColorType::Unknown)
+                    if (pColor->getComplexColor().meSchemeType == model::ThemeColorType::Unknown)
                     {
                         eItemState = SfxItemState::DEFAULT;
                     }
@@ -1150,7 +1151,7 @@ bool SvxUnoTextRangeBase::_getOnePropertyStates(const SfxItemSet* pSet, const Sf
                 case MID_COLOR_LUM_MOD:
                 {
                     sal_Int16 nLumMod = 10000;
-                    for (auto const& rTransform : pColor->GetThemeColor().getTransformations())
+                    for (auto const& rTransform : pColor->getComplexColor().getTransformations())
                     {
                         if (rTransform.meType == model::TransformationType::LumMod)
                             nLumMod = rTransform.mnValue;
@@ -1164,7 +1165,7 @@ bool SvxUnoTextRangeBase::_getOnePropertyStates(const SfxItemSet* pSet, const Sf
                 case MID_COLOR_LUM_OFF:
                 {
                     sal_Int16 nLumOff = 0;
-                    for (auto const& rTransform : pColor->GetThemeColor().getTransformations())
+                    for (auto const& rTransform : pColor->getComplexColor().getTransformations())
                     {
                         if (rTransform.meType == model::TransformationType::LumOff)
                             nLumOff = rTransform.mnValue;
@@ -1175,8 +1176,8 @@ bool SvxUnoTextRangeBase::_getOnePropertyStates(const SfxItemSet* pSet, const Sf
                     }
                     break;
                 }
-                case MID_COLOR_THEME_REFERENCE:
-                    if (pColor->GetThemeColor().getType() == model::ThemeColorType::Unknown)
+                case MID_COMPLEX_COLOR:
+                    if (pColor->getComplexColor().meType == model::ColorType::Unused)
                     {
                         eItemState = SfxItemState::DEFAULT;
                     }
@@ -1885,7 +1886,7 @@ void SAL_CALL SvxUnoTextBase::insertTextContent( const uno::Reference< text::XTe
     GetEditSource()->UpdateData();
 
     uno::Reference<beans::XPropertySet> xPropSetContent(xContent, uno::UNO_QUERY);
-    if (!xContent.is())
+    if (!xPropSetContent.is())
         throw lang::IllegalArgumentException();
 
     xPropSetContent->setPropertyValue(UNO_TC_PROP_ANCHOR, uno::Any(xRange));
@@ -2340,7 +2341,7 @@ void SvxDummyTextSource::QuickInsertLineBreak( const ESelection& )
 {
 };
 
-OUString SvxDummyTextSource::CalcFieldValue( const SvxFieldItem&, sal_Int32, sal_Int32, std::optional<Color>&, std::optional<Color>& )
+OUString SvxDummyTextSource::CalcFieldValue( const SvxFieldItem&, sal_Int32, sal_Int32, std::optional<Color>&, std::optional<Color>&, std::optional<FontLineStyle>& )
 {
     return OUString();
 }

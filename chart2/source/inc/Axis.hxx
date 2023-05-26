@@ -28,9 +28,11 @@
 #include <com/sun/star/util/XCloneable.hpp>
 #include "ModifyListenerHelper.hxx"
 #include "charttoolsdllapi.hxx"
+#include "PropertyHelper.hxx"
 
 namespace chart
 {
+class GridProperties;
 class Title;
 
 namespace impl
@@ -105,6 +107,9 @@ public:
     rtl::Reference< ::chart::Title > getTitleObject2() const;
     void setTitleObject( const rtl::Reference< ::chart::Title >& xNewTitle );
 
+    rtl::Reference< ::chart::GridProperties > getGridProperties2();
+    std::vector< rtl::Reference< ::chart::GridProperties > > getSubGridProperties2();
+
 private:
     // ____ XModifyListener ____
     virtual void SAL_CALL modified(
@@ -126,12 +131,14 @@ private:
 
     css::chart2::ScaleData             m_aScaleData;
 
-    css::uno::Reference< css::beans::XPropertySet >     m_xGrid;
+    rtl::Reference< ::chart::GridProperties >     m_xGrid;
 
-    css::uno::Sequence< css::uno::Reference< css::beans::XPropertySet > >     m_aSubGridProperties;
+    std::vector< rtl::Reference< ::chart::GridProperties > >     m_aSubGridProperties;
 
     rtl::Reference< ::chart::Title >          m_xTitle;
 };
+
+OOO_DLLPUBLIC_CHARTTOOLS const ::chart::tPropertyValueMap &  StaticAxisDefaults();
 
 } //  namespace chart
 

@@ -54,7 +54,6 @@ class ScPaintLockData;
 class ScChangeAction;
 class ScImportOptions;
 class ScDocShellModificator;
-class ScOptSolverSave;
 class ScSheetSaveData;
 class ScFlatBoolRowSegments;
 struct ScColWidthParam;
@@ -103,7 +102,6 @@ class SC_DLLPUBLIC ScDocShell final: public SfxObjectShell, public SfxListener
 
     std::unique_ptr<ScAutoStyleList>    m_pAutoStyleList;
     std::unique_ptr<ScPaintLockData>    m_pPaintLockData;
-    std::unique_ptr<ScOptSolverSave>    m_pSolverSaveData;
     std::unique_ptr<ScSheetSaveData>    m_pSheetSaveData;
     std::unique_ptr<ScFormatSaveData>   m_pFormatSaveData;
 
@@ -183,6 +181,7 @@ public:
                                bool bTemplate = false ) const override;
 
     virtual std::set<Color> GetDocColors() override;
+    virtual std::vector<Color> GetThemeColors() override;
 
     virtual bool    InitNew( const css::uno::Reference< css::embed::XStorage >& ) override;
     virtual bool    Load( SfxMedium& rMedium ) override;
@@ -412,8 +411,6 @@ public:
 
     virtual HiddenInformation GetHiddenInformationState( HiddenInformation nStates ) override;
 
-    const ScOptSolverSave* GetSolverSaveData() const    { return m_pSolverSaveData.get(); }     // may be null
-    void            SetSolverSaveData( std::unique_ptr<ScOptSolverSave> pData );
     ScSheetSaveData* GetSheetSaveData();
     ScFormatSaveData* GetFormatSaveData();
 

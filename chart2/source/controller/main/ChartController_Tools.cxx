@@ -74,7 +74,6 @@
 #include <svx/unoapi.hxx>
 #include <svx/unopage.hxx>
 #include <svx/unoshape.hxx>
-#include <svx/xgrad.hxx>
 #include <PropertyHelper.hxx>
 
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
@@ -113,7 +112,7 @@ bool lcl_deleteDataSeries(
                     ActionDescriptionProvider::ActionType::Delete, SchResId( STR_OBJECT_DATASERIES )),
                 xUndoManager );
 
-            rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xModel );
+            rtl::Reference< Diagram > xDiagram = xModel->getFirstChartDiagram();
             rtl::Reference< Axis > xAxis = xDiagram->getAttachedAxis( xSeries );
 
             DataSeriesHelper::deleteSeries( xSeries, xChartType );
@@ -185,7 +184,7 @@ void ChartController::executeDispatch_NewArrangement()
     try
     {
         rtl::Reference<::chart::ChartModel> xModel( getChartModel() );
-        rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xModel );
+        rtl::Reference< Diagram > xDiagram = xModel->getFirstChartDiagram();
         if( xDiagram.is())
         {
             UndoGuard aUndoGuard(
@@ -199,15 +198,15 @@ void ChartController::executeDispatch_NewArrangement()
             xDiagram->setPropertyToDefault( "PosSizeExcludeAxes");
 
             // 3d rotation
-            ThreeDHelper::set3DSettingsToDefault( xDiagram );
+            xDiagram->set3DSettingsToDefault();
 
             // legend
-            Reference< beans::XPropertyState > xLegendState( xDiagram->getLegend(), uno::UNO_QUERY );
-            if( xLegendState.is())
+            rtl::Reference< Legend > xLegend = xDiagram->getLegend2();
+            if( xLegend.is())
             {
-                xLegendState->setPropertyToDefault( "RelativePosition");
-                xLegendState->setPropertyToDefault( "RelativeSize");
-                xLegendState->setPropertyToDefault( "AnchorPosition");
+                xLegend->setPropertyToDefault( "RelativePosition");
+                xLegend->setPropertyToDefault( "RelativeSize");
+                xLegend->setPropertyToDefault( "AnchorPosition");
             }
 
             // titles
@@ -633,14 +632,14 @@ bool ChartController::executeDispatch_Delete()
                 rtl::Reference< Diagram > xDiagram( xChartDoc->getFirstChartDiagram());
                 if( xDiagram.is())
                 {
-                    uno::Reference< beans::XPropertySet > xLegendProp( xDiagram->getLegend(), uno::UNO_QUERY );
-                    if( xLegendProp.is())
+                    rtl::Reference< Legend > xLegend( xDiagram->getLegend2() );
+                    if( xLegend.is())
                     {
                         UndoGuard aUndoGuard(
                             ActionDescriptionProvider::createDescription(
                                 ActionDescriptionProvider::ActionType::Delete, SchResId( STR_OBJECT_LEGEND )),
                             m_xUndoManager );
-                        xLegendProp->setPropertyValue( "Show", uno::Any( false ));
+                        xLegend->setPropertyValue( "Show", uno::Any( false ));
                         bReturn = true;
                         aUndoGuard.commit();
                     }
@@ -957,8 +956,8 @@ void ChartController::executeDispatch_FillColor(sal_uInt32 nColor)
 
 void ChartController::executeDispatch_FillGradient(std::u16string_view sJSONGradient)
 {
-    XGradient aXGradient = XGradient::fromJSON(sJSONGradient);
-    css::awt::Gradient aGradient = aXGradient.toGradientUNO();
+    basegfx::BGradient aBGradient = basegfx::BGradient::fromJSON(sJSONGradient);
+    css::awt::Gradient aGradient = aBGradient.getAsGradient2();
 
     try
     {
@@ -973,9 +972,9 @@ void ChartController::executeDispatch_FillGradient(std::u16string_view sJSONGrad
             if( xPropSet.is() )
             {
                 OUString aPrefferedName =
-                    OUString::number(static_cast<sal_Int32>(Color(aXGradient.GetColorStops().front().getStopColor())))
-                    + OUString::number(static_cast<sal_Int32>(Color(aXGradient.GetColorStops().back().getStopColor())))
-                    + OUString::number(static_cast<sal_Int32>(aXGradient.GetAngle().get()));
+                    OUString::number(static_cast<sal_Int32>(Color(aBGradient.GetColorStops().front().getStopColor())))
+                    + OUString::number(static_cast<sal_Int32>(Color(aBGradient.GetColorStops().back().getStopColor())))
+                    + OUString::number(static_cast<sal_Int32>(aBGradient.GetAngle().get()));
 
                 OUString aNewName = PropertyHelper::addGradientUniqueNameToTable(css::uno::Any(aGradient),
                                         xChartModel,

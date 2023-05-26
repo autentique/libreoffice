@@ -80,9 +80,6 @@ static const char *KeyStr( KeySym n ) { return Null( XKeysymToString( n ) ); }
 
 static const char *GetAtomName( Display *d, Atom a )
 { return Null( XGetAtomName( d, a ) ); }
-
-static double Hypothenuse( tools::Long w, tools::Long h )
-{ return sqrt( static_cast<double>((w*w)+(h*h)) ); }
 #endif
 
 static int ColorDiff( int r, int g, int b )
@@ -2207,7 +2204,7 @@ void SalDisplay::PrintInfo() const
     SAL_INFO( "vcl", "Screen" );
     SAL_INFO( "vcl", "\tResolution/Size   \t" << aResolution_.A() << "*" << aResolution_.B()
             << " " << m_aScreens[m_nXDefaultScreen.getXScreen()].m_aSize.Width() << "*" << m_aScreens[m_nXDefaultScreen.getXScreen()].m_aSize.Height()
-            << " " << (Hypothenuse( DisplayWidthMM ( pDisp_, m_nXDefaultScreen.getXScreen() ),
+            << " " << (std::hypot( DisplayWidthMM ( pDisp_, m_nXDefaultScreen.getXScreen() ),
                           DisplayHeightMM( pDisp_, m_nXDefaultScreen.getXScreen() ) ) / 25.4 ) << "\"" );
     SAL_INFO( "vcl", "\tBlack&White       \t" << GetColormap(m_nXDefaultScreen).GetBlackPixel() << " "
             << GetColormap(m_nXDefaultScreen).GetWhitePixel() );
@@ -2316,36 +2313,6 @@ Time SalDisplay::GetEventTimeImpl( bool i_bAlwaysReget ) const
     return m_nLastUserEventTime;
 }
 
-bool SalDisplay::XIfEventWithTimeout( XEvent* o_pEvent, XPointer i_pPredicateData,
-                                      X_if_predicate i_pPredicate ) const
-{
-    /* #i99360# ugly workaround an X11 library bug
-       this replaces the following call:
-       XIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData );
-    */
-    bool bRet = true;
-
-    if( ! XCheckIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData ) )
-    {
-        // wait for some event to arrive
-        struct pollfd aFD;
-        aFD.fd = ConnectionNumber(GetDisplay());
-        aFD.events = POLLIN;
-        aFD.revents = 0;
-        tools::Long nTimeout = 1000;
-        (void)poll(&aFD, 1, nTimeout);
-        if( ! XCheckIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData ) )
-        {
-            (void)poll(&aFD, 1, nTimeout); // try once more for a packet of events from the Xserver
-            if( ! XCheckIfEvent( GetDisplay(), o_pEvent, i_pPredicate, i_pPredicateData ) )
-            {
-                bRet = false;
-            }
-        }
-    }
-    return bRet;
-}
-
 SalVisual::SalVisual()
     : eRGBMode_(SalRGB::RGB), nRedShift_(0), nGreenShift_(0), nBlueShift_(0)
     , nRedBits_(0), nGreenBits_(0), nBlueBits_(0)
@@ -2425,39 +2392,6 @@ SalVisual::SalVisual( const XVisualInfo* pXVI )
 
 #define SALCOLOR        SalRGB::RGB
 #define SALCOLORREVERSE SalRGB::BGR
-
-Color SalVisual::GetTCColor( Pixel nPixel ) const
-{
-    if( SALCOLOR == eRGBMode_ )
-        return Color(ColorTransparency, nPixel);
-
-    if( SALCOLORREVERSE == eRGBMode_ )
-        return Color( (nPixel & 0x0000FF),
-                              (nPixel & 0x00FF00) >>  8,
-                              (nPixel & 0xFF0000) >> 16);
-
-    Pixel r = nPixel & red_mask;
-    Pixel g = nPixel & green_mask;
-    Pixel b = nPixel & blue_mask;
-
-    if( SalRGB::otherSalRGB != eRGBMode_ ) // 8+8+8=24
-        return Color( r >> nRedShift_,
-                              g >> nGreenShift_,
-                              b >> nBlueShift_ );
-
-    if( nRedShift_ > 0 )   r >>= nRedShift_;   else r <<= -nRedShift_;
-    if( nGreenShift_ > 0 ) g >>= nGreenShift_; else g <<= -nGreenShift_;
-    if( nBlueShift_ > 0 )  b >>= nBlueShift_;  else b <<= -nBlueShift_;
-
-    if( nRedBits_ != 8 )
-        r |= (r & 0xff) >> (8-nRedBits_);
-    if( nGreenBits_ != 8 )
-        g |= (g & 0xff) >> (8-nGreenBits_);
-    if( nBlueBits_ != 8 )
-        b |= (b & 0xff) >> (8-nBlueBits_);
-
-    return Color( r, g, b );
-}
 
 Pixel SalVisual::GetTCPixel( Color nColor ) const
 {
@@ -2689,42 +2623,6 @@ void SalColormap::GetLookupTable()
         for( int g = 0; g < 256; g += 17 )
             for( int b = 0; b < 256; b += 17 )
                 m_aLookupTable[i++] = sal_Lookup( m_aPalette, r, g, b, m_nUsed );
-}
-
-Color SalColormap::GetColor( Pixel nPixel ) const
-{
-    if( m_nBlackPixel == nPixel ) return COL_BLACK;
-    if( m_nWhitePixel == nPixel ) return COL_WHITE;
-
-    if( m_aVisual.GetVisual() )
-    {
-        if( m_aVisual.GetClass() == TrueColor )
-            return m_aVisual.GetTCColor( nPixel );
-
-        if( m_aPalette.empty()
-            && m_hColormap
-            && m_aVisual.GetDepth() <= 12
-            && m_aVisual.GetClass() == PseudoColor )
-            const_cast<SalColormap*>(this)->GetPalette();
-    }
-
-    if( !m_aPalette.empty() && nPixel < m_nUsed )
-        return m_aPalette[nPixel];
-
-    if( !m_hColormap )
-    {
-        SAL_WARN("vcl", "SalColormap::GetColor() !m_hColormap");
-        return Color(ColorTransparency, nPixel);
-    }
-
-    // DirectColor, StaticColor, StaticGray, GrayScale
-    XColor aColor;
-
-    aColor.pixel = nPixel;
-
-    XQueryColor( m_pDisplay->GetDisplay(), m_hColormap, &aColor );
-
-    return Color( aColor.red>>8, aColor.green>>8, aColor.blue>>8 );
 }
 
 inline bool SalColormap::GetXPixel( XColor &rColor,

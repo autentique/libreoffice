@@ -1446,8 +1446,8 @@ void SAL_CALL SfxBaseModel::close( sal_Bool bDeliverOwnership )
     if ( impl_isDisposed() || m_pData->m_bClosed || m_pData->m_bClosing )
         return;
 
-    Reference< XInterface > xSelfHold( static_cast< ::cppu::OWeakObject* >(this) );
-    lang::EventObject       aSource  ( static_cast< ::cppu::OWeakObject* >(this) );
+    Reference< XInterface > xSelfHold( getXWeak() );
+    lang::EventObject       aSource  ( getXWeak() );
     comphelper::OInterfaceContainerHelper2* pContainer = m_pData->m_aInterfaceContainer.getContainer( cppu::UnoType<util::XCloseListener>::get());
     if (pContainer!=nullptr)
     {
@@ -3217,7 +3217,7 @@ void SfxBaseModel::impl_store(  const   OUString&                   sURL        
         std::stringstream aErrCode;
         aErrCode << nErrCode;
         throw task::ErrorCodeIOException(
-            "SfxBaseModel::impl_store <" + sURL + "> failed: " + OUString::fromUtf8(aErrCode.str().c_str()),
+            "SfxBaseModel::impl_store <" + sURL + "> failed: " + OUString::fromUtf8(aErrCode.str()),
             Reference< XInterface >(), sal_uInt32(nErrCode));
     }
 }
@@ -3586,10 +3586,7 @@ static void ConvertSlotsToCommands( SfxObjectShell const * pDoc, Reference< cont
                 const SfxSlot* pSlot = pModule->GetSlotPool()->GetSlot( nSlot );
                 if ( pSlot )
                 {
-                    OUStringBuffer aStrBuf( ".uno:"  );
-                    aStrBuf.appendAscii( pSlot->GetUnoName() );
-
-                    aCommand = aStrBuf.makeStringAndClear();
+                    aCommand = pSlot->GetCommand();
                     aSeqPropValue.getArray()[nIndex].Value <<= aCommand;
                     rToolbarDefinition->replaceByIndex( i, Any( aSeqPropValue ));
                 }

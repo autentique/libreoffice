@@ -473,19 +473,18 @@ public:
 
     void OutBasic(const SwHTMLWriter& rHTMLWrt);
 
+    // Used to indent inner blocks using dl/dd tags
     void OutAndSetDefList( sal_uInt16 nNewLvl );
 
     void OutStyleSheet( const SwPageDesc& rPageDesc );
 
-    inline void OutCSS1_PropertyAscii( const char *pProp,
-                                       const char *pVal );
-    inline void OutCSS1_PropertyAscii( const char *pProp,
+    inline void OutCSS1_PropertyAscii( std::string_view pProp,
                                        std::string_view rVal );
-    inline void OutCSS1_Property( const char *pProp, const OUString& rVal );
-    void OutCSS1_Property( const char *pProp, std::string_view pVal,
+    inline void OutCSS1_Property( std::string_view pProp, const OUString& rVal );
+    void OutCSS1_Property( std::string_view pProp, std::string_view pVal,
                            const OUString *pSVal, std::optional<sw::Css1Background> oBackground = std::nullopt );
-    void OutCSS1_UnitProperty( const char *pProp, tools::Long nVal );
-    void OutCSS1_PixelProperty( const char *pProp, tools::Long nVal, bool bVert );
+    void OutCSS1_UnitProperty( std::string_view pProp, tools::Long nVal );
+    void OutCSS1_PixelProperty( std::string_view pProp, tools::Long nVal, bool bVert );
     void OutCSS1_SfxItemSet( const SfxItemSet& rItemSet, bool bDeep=true );
 
     // events of BODY tag from SFX configuration
@@ -545,9 +544,9 @@ public:
 
     static sal_uInt32 ToPixel( sal_uInt32 nVal, const bool bVert );
 
-    sal_uInt16 GuessFrameType( const SwFrameFormat& rFrameFormat,
+    SwHTMLFrameType GuessFrameType( const SwFrameFormat& rFrameFormat,
                          const SdrObject*& rpStrObj );
-    static sal_uInt16 GuessOLENodeFrameType( const SwNode& rNd );
+    static SwHTMLFrameType GuessOLENodeFrameType( const SwNode& rNd );
 
     void CollectFlyFrames();
 
@@ -629,19 +628,13 @@ inline bool SwHTMLWriter::IsCSS1Script( sal_uInt16 n ) const
     return CSS1_OUTMODE_ANY_SCRIPT == nScript || n == nScript;
 }
 
-inline void SwHTMLWriter::OutCSS1_PropertyAscii( const char *pProp,
-                                                 const char *pVal )
-{
-    OutCSS1_Property( pProp, pVal, nullptr );
-}
-
-inline void SwHTMLWriter::OutCSS1_PropertyAscii( const char *pProp,
+inline void SwHTMLWriter::OutCSS1_PropertyAscii( std::string_view pProp,
                                                  std::string_view rVal )
 {
     OutCSS1_Property( pProp, rVal, nullptr );
 }
 
-inline void SwHTMLWriter::OutCSS1_Property( const char *pProp,
+inline void SwHTMLWriter::OutCSS1_Property( std::string_view pProp,
                                             const OUString& rVal )
 {
     OutCSS1_Property( pProp, std::string_view(), &rVal );
@@ -698,7 +691,7 @@ SwHTMLWriter& OutHTML_ImageStart( HtmlWriter& rHtml, SwHTMLWriter&, const SwFram
                        const Size& rRealSize, HtmlFrmOpts nFrameOpts,
                        const char *pMarkType,
                        const ImageMap *pGenImgMap,
-                       const OUString& rMimeType = OUString() );
+                       std::u16string_view rMimeType = {} );
 SwHTMLWriter& OutHTML_ImageEnd( HtmlWriter& rHtml, SwHTMLWriter& );
 
 SwHTMLWriter& OutHTML_BulletImage( SwHTMLWriter& rWrt, const char *pTag,
@@ -723,8 +716,7 @@ SwHTMLWriter& OutCSS1_NumberBulletListStyleOpt( SwHTMLWriter& rWrt, const SwNumR
                                     sal_uInt8 nLevel );
 
 SwHTMLWriter& OutHTML_NumberBulletListStart( SwHTMLWriter& rWrt,
-                                 const SwHTMLNumRuleInfo& rInfo,
-                                 bool& rAtLeastOneNumbered );
+                                 const SwHTMLNumRuleInfo& rInfo );
 SwHTMLWriter& OutHTML_NumberBulletListEnd( SwHTMLWriter& rWrt,
                                const SwHTMLNumRuleInfo& rNextInfo );
 

@@ -158,7 +158,7 @@ sal_uInt32 VMLExport::EnterGroup( const OUString& rShapeName, const tools::Recta
         AddRectangleDimensions( aStyle, *pRect, rbAbsolutePos );
 
     if ( !aStyle.isEmpty() )
-        pAttrList->add( XML_style, aStyle.makeStringAndClear() );
+        pAttrList->add( XML_style, aStyle );
 
     // coordorigin/coordsize
     if ( pRect && ( mnGroupLevel == 1 ) )
@@ -335,7 +335,7 @@ static void impl_AddInt( sax_fastparser::FastAttributeList *pAttrList, sal_Int32
     if ( !pAttrList )
         return;
 
-    pAttrList->add( nElement, OString::number( nValue ).getStr() );
+    pAttrList->add( nElement, OString::number( nValue ) );
 }
 
 static sal_uInt16 impl_GetUInt16( const sal_uInt8* &pVal )
@@ -1080,8 +1080,7 @@ void VMLExport::Commit( EscherPropertyContainer& rProps, const tools::Rectangle&
                 if ( opt.nProp.size() )
                 {
                     const sal_uInt8 *pIt = opt.nProp.data();
-                    OStringBuffer buf;
-                    buf.append( "    ( " );
+                    OStringBuffer buf( "    ( " );
                     for ( int nCount = opt.nProp.size(); nCount; --nCount )
                     {
                         buf.append( OString::number(static_cast<sal_Int32>(*pIt), 16) + " ");
@@ -1189,7 +1188,7 @@ void VMLExport::AddRectangleDimensions( OStringBuffer& rBuffer, const tools::Rec
     AddFlipXY();
 }
 
-void VMLExport::AddShapeAttribute( sal_Int32 nAttribute, const OString& rValue )
+void VMLExport::AddShapeAttribute( sal_Int32 nAttribute, std::string_view rValue )
 {
     m_pShapeAttrList->add( nAttribute, rValue );
 }

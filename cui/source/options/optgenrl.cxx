@@ -80,7 +80,7 @@ namespace Lang
 struct
 {
     // id of the text
-    const char *pTextId;
+    OUString pTextId;
     // language flags (see Lang above):
     // which language is this row for?
     unsigned nLangFlags;
@@ -110,7 +110,7 @@ struct
     // in which row?
     RowType eRow;
     // id of the edit box
-    const char *pEditId;
+    OUString pEditId;
     // id for SvtUserOptions in unotools/useroptions.hxx
     UserOptToken nUserOptionsId;
     // id for settings the focus (defined in svx/optgenrl.hxx)
@@ -365,7 +365,7 @@ void SvxGeneralTabPage::Reset( const SfxItemSet* rSet )
 
     if (rSet->GetItemState(SID_FIELD_GRABFOCUS) == SfxItemState::SET)
     {
-        EditPosition nField = static_cast<EditPosition>(static_cast<const SfxUInt16Item&>(rSet->Get(SID_FIELD_GRABFOCUS)).GetValue());
+        EditPosition nField = static_cast<EditPosition>(rSet->Get(SID_FIELD_GRABFOCUS).GetValue());
         if (nField != EditPosition::UNKNOWN)
         {
             for (auto const & i: vFields)

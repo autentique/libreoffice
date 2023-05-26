@@ -1004,6 +1004,13 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="MenuInsert-PageNumberWizard">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="action_name">.uno:PageNumberWizard</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem" id="separator4">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
@@ -1129,13 +1136,6 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="action_name">.uno:InsertFrameInteract</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="MenuInsert-InsertObjectFloatingFrame">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="action_name">.uno:InsertObjectFloatingFrame</property>
       </object>
     </child>
     <child>
@@ -1275,6 +1275,13 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="action_name">.uno:TitlePageDialog</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="MenuPage-PageNumberWizard">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="action_name">.uno:PageNumberWizard</property>
       </object>
     </child>
     <child>
@@ -5650,8 +5657,11 @@
                               <object class="sfxlo-NotebookbarToolBox" id="LineA12">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="toolbar_style">both-horiz</property>
+                                <property name="valign">center</property>
+                                <property name="vexpand">True</property>
+                                <property name="toolbar_style">both</property>
                                 <property name="show_arrow">False</property>
+                                <property name="icon_size">3</property>
                                 <child>
                                   <object class="GtkToolButton" id="Insert-InsertObjectStarMath1">
                                     <property name="visible">True</property>

@@ -49,6 +49,7 @@
 #include <tools/color.hxx>
 #include <vcl/mapmod.hxx>
 #include <svx/EnhancedCustomShape2d.hxx>
+#include <basegfx/utils/bgradient.hxx>
 
 class Graphic;
 class SdrObjCustomShape;
@@ -58,7 +59,7 @@ enum class SvxTimeFormat;
 namespace com::sun::star {
 namespace awt {
     struct FontDescriptor;
-    struct Gradient;
+    struct Gradient2;
 }
 namespace beans {
     struct PropertyValue;
@@ -139,16 +140,140 @@ protected:
     virtual ~DMLTextExport() {}
 };
 
+constexpr const char* getComponentDir(DocumentType eDocumentType)
+{
+    switch (eDocumentType)
+    {
+        case DOCUMENT_DOCX: return "word";
+        case DOCUMENT_PPTX: return "ppt";
+        case DOCUMENT_XLSX: return "xl";
+    }
+
+    return "";
+}
+
+constexpr const char* getRelationCompPrefix(DocumentType eDocumentType)
+{
+    switch (eDocumentType)
+    {
+        case DOCUMENT_DOCX: return "";
+        case DOCUMENT_PPTX:
+        case DOCUMENT_XLSX: return "../";
+    }
+
+    return "";
+}
+
+class OOX_DLLPUBLIC GraphicExportCache
+{
+private:
+    std::stack<sal_Int32> mnImageCounter;
+    std::stack<std::unordered_map<BitmapChecksum, OUString>> maExportGraphics;
+    std::stack<sal_Int32> mnWdpImageCounter;
+    std::stack<std::map<OUString, OUString>> maWdpCache;
+
+    GraphicExportCache() = default;
+public:
+    static GraphicExportCache& get();
+
+    void push()
+    {
+        mnImageCounter.push(1);
+        maExportGraphics.emplace();
+        mnWdpImageCounter.push(1);
+        maWdpCache.emplace();
+    }
+
+    void pop()
+    {
+        mnImageCounter.pop();
+        maExportGraphics.pop();
+        mnWdpImageCounter.pop();
+        maWdpCache.pop();
+    }
+
+    bool hasExportGraphics()
+    {
+        return !maExportGraphics.empty();
+    }
+
+    void addExportGraphics(BitmapChecksum aChecksum, OUString const& sPath)
+    {
+        maExportGraphics.top()[aChecksum] = sPath;
+    }
+
+    OUString findExportGraphics(BitmapChecksum aChecksum)
+    {
+        OUString sPath;
+        if (!hasExportGraphics())
+            return sPath;
+
+        auto aIterator = maExportGraphics.top().find(aChecksum);
+        if (aIterator != maExportGraphics.top().end())
+            sPath = aIterator->second;
+        return sPath;
+    }
+
+    sal_Int32 nextImageCount()
+    {
+        sal_Int32 nCount = mnImageCounter.top();
+        mnImageCounter.top()++;
+        return nCount;
+    }
+
+    bool hasWdpCache()
+    {
+        return !maWdpCache.empty();
+    }
+
+    OUString findWdpID(OUString const& rFileId)
+    {
+        OUString aPath;
+        if (!hasWdpCache())
+            return aPath;
+        auto aCachedItem = maWdpCache.top().find(rFileId);
+        if (aCachedItem != maWdpCache.top().end())
+            aPath = aCachedItem->second;
+        return aPath;
+    }
+
+    void addToWdpCache(OUString const& rFileId, OUString const& rId)
+    {
+        if (hasWdpCache())
+            maWdpCache.top()[rFileId] = rId;
+    }
+
+    sal_Int32 nextWdpImageCount()
+    {
+        sal_Int32 nCount = mnWdpImageCounter.top();
+        mnWdpImageCounter.top()++;
+        return nCount;
+    }
+};
+
+class GraphicExport
+{
+    sax_fastparser::FSHelperPtr mpFS;
+    oox::core::XmlFilterBase* mpFilterBase;
+    DocumentType meDocumentType;
+
+public:
+    GraphicExport(sax_fastparser::FSHelperPtr pFS, ::oox::core::XmlFilterBase* pFilterBase, DocumentType eDocumentType)
+        : mpFS(pFS)
+        , mpFilterBase(pFilterBase)
+        , meDocumentType(eDocumentType)
+    {}
+
+    OUString writeToStorage(Graphic const& rGraphic, bool bRelPathToMedia = false);
+    OUString writeBlip(Graphic const& rGraphic, std::vector<model::BlipEffect> const& rEffects, bool bRelPathToMedia = false);
+};
+
 class OOX_DLLPUBLIC DrawingML
 {
 
 private:
-    static std::stack<sal_Int32> mnImageCounter;
-    static std::stack<sal_Int32> mnWdpImageCounter;
-    static std::stack<std::map<OUString, OUString>> maWdpCache;
     static sal_Int32 mnDrawingMLCount;
     static sal_Int32 mnVmlCount;
-    static std::stack<std::unordered_map<BitmapChecksum, OUString>> maExportGraphics;
 
     /// To specify where write eg. the images to (like 'ppt', or 'word' - according to the OPC).
     DocumentType meDocumentType;
@@ -198,7 +323,7 @@ protected:
     const char* GetComponentDir() const;
     const char* GetRelationCompPrefix() const;
 
-    static bool EqualGradients( css::awt::Gradient aGradient1, css::awt::Gradient aGradient2 );
+    static bool EqualGradients( const css::awt::Gradient2& rGradient1, const css::awt::Gradient2& rGradient2 );
     bool IsFontworkShape(const css::uno::Reference< css::beans::XPropertySet >& rXShapePropSet);
 
     void WriteGlowEffect(const css::uno::Reference<css::beans::XPropertySet>& rXPropSet);
@@ -231,7 +356,7 @@ public:
     void WriteColor( const OUString& sColorSchemeName, const css::uno::Sequence< css::beans::PropertyValue >& aTransformations, sal_Int32 nAlpha = MAX_PERCENT );
     void WriteColor( const ::Color nColor, const css::uno::Sequence< css::beans::PropertyValue >& aTransformations, sal_Int32 nAlpha = MAX_PERCENT );
     void WriteColorTransformations( const css::uno::Sequence< css::beans::PropertyValue >& aTransformations, sal_Int32 nAlpha = MAX_PERCENT );
-    void WriteGradientStop(sal_uInt16 nStop, ::Color nColor, sal_Int32 nAlpha = MAX_PERCENT);
+    void WriteGradientStop(double fOffset, const basegfx::BColor& rColor, const basegfx::BColor& rAlpha);
     void WriteLineArrow( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet, bool bLineStart );
     void WriteConnectorConnections( sal_Int32 nStartGlueId, sal_Int32 nEndGlueId, sal_Int32 nStartID, sal_Int32 nEndID );
 
@@ -244,10 +369,17 @@ public:
     void WriteSolidFill( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
     void WriteGradientFill( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
 
-    void WriteGradientFill( css::awt::Gradient rGradient, css::awt::Gradient rTransparenceGradient,
-                            const css::uno::Reference<css::beans::XPropertySet>& rXPropSet = css::uno::Reference<css::beans::XPropertySet>());
+    /* New API for WriteGradientFill:
+       If a BGradient is given, it will be used. Else, the 'Fix' entry will be used for
+       Color or Transparency. That way, less Pseudo(Color|Transparency)Gradients have to be
+       created at caller side.
+       NOTE: Giving no Gradient at all (both nullptr) is an error.
+    */
+    void WriteGradientFill(
+        const basegfx::BGradient* pColorGradient, sal_Int32 nFixColor,
+        const basegfx::BGradient* pTransparenceGradient, double fFixTransparence = 0.0);
 
-    void WriteGrabBagGradientFill( const css::uno::Sequence< css::beans::PropertyValue >& aGradientStops, css::awt::Gradient rGradient);
+    void WriteGrabBagGradientFill( const css::uno::Sequence< css::beans::PropertyValue >& aGradientStops, const basegfx::BGradient& rGradient);
 
     void WriteBlipOrNormalFill(const css::uno::Reference<css::beans::XPropertySet>& rXPropSet,
                                const OUString& rURLPropName, const css::awt::Size& rSize = {});
@@ -315,7 +447,7 @@ public:
 
         @returns true if any paragraph properties were written
     */
-    bool WriteParagraphProperties(const css::uno::Reference< css::text::XTextContent >& rParagraph, const css::uno::Reference<css::beans::XPropertySet>& rXShapePropSet, float fFirstCharHeight, sal_Int32 nElement);
+    bool WriteParagraphProperties(const css::uno::Reference< css::text::XTextContent >& rParagraph, float fFirstCharHeight, sal_Int32 nElement);
     void WriteParagraphNumbering(const css::uno::Reference< css::beans::XPropertySet >& rXPropSet, float fFirstCharHeight,
                                   sal_Int16 nLevel );
     void WriteParagraphTabStops(const css::uno::Reference<css::beans::XPropertySet>& rXPropSet);
@@ -360,9 +492,6 @@ public:
 
     static void ResetMlCounters();
 
-    static void PushExportGraphics();
-    static void PopExportGraphics();
-
     static sal_Int32 getNewDrawingUniqueId() { return ++mnDrawingMLCount; }
     static sal_Int32 getNewVMLUniqueId() { return ++mnVmlCount; }
     static sal_Int32 getNewChartUniqueId() { return ++mnChartCount; }
@@ -380,8 +509,8 @@ public:
                                         const OUString& sFullStream,
                                         std::u16string_view sRelativeStream,
                                         const css::uno::Reference< css::io::XOutputStream >& xParentRelation,
-                                        const char* sContentType,
-                                        const char* sRelationshipType,
+                                        const OUString& sContentType,
+                                        const OUString& sRelationshipType,
                                         OUString* pRelationshipId );
 
 };

@@ -189,7 +189,7 @@ bool SwCursorShell::GotoFooterText()
     return nullptr != pFrame;
 }
 
-bool SwCursorShell::SetCursorInHdFt( size_t nDescNo, bool bInHeader )
+bool SwCursorShell::SetCursorInHdFt(size_t nDescNo, bool bInHeader, bool bEven, bool bFirst)
 {
     SwDoc *pMyDoc = GetDoc();
     const SwPageDesc* pDesc = nullptr;
@@ -216,14 +216,17 @@ bool SwCursorShell::SetCursorInHdFt( size_t nDescNo, bool bInHeader )
     const SwFormatContent* pCnt = nullptr;
     if( bInHeader )
     {
-        // mirrored pages? ignore for now
-        const SwFormatHeader& rHd = pDesc->GetMaster().GetHeader();
+        const SwFormatHeader& rHd
+            = bEven ? bFirst ? pDesc->GetFirstLeft().GetHeader() : pDesc->GetLeft().GetHeader()
+                    : bFirst ? pDesc->GetFirstMaster().GetHeader() : pDesc->GetMaster().GetHeader();
         if( rHd.GetHeaderFormat() )
             pCnt = &rHd.GetHeaderFormat()->GetContent();
     }
     else
     {
-        const SwFormatFooter& rFt = pDesc->GetMaster().GetFooter();
+        const SwFormatFooter& rFt
+            = bEven ? bFirst ? pDesc->GetFirstLeft().GetFooter() : pDesc->GetLeft().GetFooter()
+                    : bFirst ? pDesc->GetFirstMaster().GetFooter() : pDesc->GetMaster().GetFooter();
         if( rFt.GetFooterFormat() )
             pCnt = &rFt.GetFooterFormat()->GetContent();
     }
@@ -1876,7 +1879,8 @@ bool SwCursorShell::GetContentAtPos( const Point& rPt,
             }
         }
 
-        if( !bRet && ( IsAttrAtPos::TableRedline & rContentAtPos.eContentAtPos ) )
+        if( !bRet && ( ( IsAttrAtPos::TableRedline & rContentAtPos.eContentAtPos ) ||
+                     ( IsAttrAtPos::TableColRedline & rContentAtPos.eContentAtPos ) ) )
         {
             const SwTableNode* pTableNd;
             const SwTableBox* pBox;
@@ -1886,17 +1890,34 @@ bool SwCursorShell::GetContentAtPos( const Point& rPt,
                 nullptr != ( pBox = pTableNd->GetTable().GetTableBox(
                 pSttNd->GetIndex() )) &&
                 nullptr != ( pTableLine = pBox->GetUpper() ) &&
-                RedlineType::None != pTableLine->GetRedlineType() )
+                ( RedlineType::None != pBox->GetRedlineType() ||
+                RedlineType::None != pTableLine->GetRedlineType() ) )
             {
-                SwRedlineTable::size_type nPos = 0;
-                nPos = pTableLine->UpdateTextChangesOnly(nPos);
-                if ( nPos != SwRedlineTable::npos )
+                const SwRedlineTable& aRedlineTable = GetDoc()->getIDocumentRedlineAccess().GetRedlineTable();
+                if ( RedlineType::None != pTableLine->GetRedlineType() )
                 {
-                    rContentAtPos.aFnd.pRedl = GetDoc()->getIDocumentRedlineAccess().GetRedlineTable()[nPos];
-                    rContentAtPos.eContentAtPos = IsAttrAtPos::TableRedline;
-                    bRet = true;
+                    SwRedlineTable::size_type nPos = 0;
+                    nPos = pTableLine->UpdateTextChangesOnly(nPos);
+                    if ( nPos != SwRedlineTable::npos )
+                    {
+                        rContentAtPos.aFnd.pRedl = aRedlineTable[nPos];
+                        rContentAtPos.eContentAtPos = IsAttrAtPos::TableRedline;
+                        bRet = true;
+                    }
                 }
-
+                else
+                {
+                    SwRedlineTable::size_type n = 0;
+                    SwNodeIndex aIdx( *pSttNd, 1 );
+                    const SwPosition aBoxStart(aIdx);
+                    const SwRangeRedline* pFnd = aRedlineTable.FindAtPosition( aBoxStart, n, /*next=*/true );
+                    if( pFnd && RedlineType::Delete == pFnd->GetType() )
+                    {
+                        rContentAtPos.aFnd.pRedl = aRedlineTable[n];
+                        rContentAtPos.eContentAtPos = IsAttrAtPos::TableColRedline;
+                        bRet = true;
+                    }
+                }
             }
         }
 
@@ -2746,10 +2767,9 @@ bool SwCursorShell::SelectNxtPrvHyperlink( bool bNext )
 
     // then check all the Flys with a URL or image map
     {
-        const SwFrameFormats* pFormats = GetDoc()->GetSpzFrameFormats();
-        for( SwFrameFormats::size_type n = 0, nEnd = pFormats->size(); n < nEnd; ++n )
+        for(sw::SpzFrameFormat* pSpz: *GetDoc()->GetSpzFrameFormats())
         {
-            SwFlyFrameFormat* pFormat = static_cast<SwFlyFrameFormat*>((*pFormats)[ n ]);
+            auto pFormat = static_cast<SwFlyFrameFormat*>(pSpz);
             const SwFormatURL& rURLItem = pFormat->GetURL();
             if( rURLItem.GetMap() || !rURLItem.GetURL().isEmpty() )
             {

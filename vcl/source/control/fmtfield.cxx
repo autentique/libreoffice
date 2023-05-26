@@ -266,6 +266,7 @@ Formatter::Formatter()
     ,m_bAutoColor(false)
     ,m_bEnableNaN(false)
     ,m_bDisableRemainderFactor(false)
+    ,m_bDefaultValueSet(false)
     ,m_ValueState(valueDirty)
     ,m_dCurrentValue(0)
     ,m_dDefaultValue(0)
@@ -791,7 +792,11 @@ bool Formatter::ImplGetValue(double& dNewVal)
     if (m_ValueState == valueDouble)
         return true;
 
-    dNewVal = m_dDefaultValue;
+    // tdf#155241 default to m_dDefaultValue only if explicitly set
+    // otherwise default to m_dCurrentValue
+    if (m_bDefaultValueSet)
+        dNewVal = m_dDefaultValue;
+
     OUString sText(GetEntryText());
     if (sText.isEmpty())
         return true;
@@ -1096,9 +1101,7 @@ void DoubleCurrencyField::UpdateCurrencyFormat()
     OUStringBuffer sNewFormat;
     if (bThSep)
     {
-        sNewFormat.append('#');
-        sNewFormat.append(aLocaleInfo.getNumThousandSep());
-        sNewFormat.append("##0");
+        sNewFormat.append("#" + aLocaleInfo.getNumThousandSep() + "##0");
     }
     else
         sNewFormat.append('0');
@@ -1114,30 +1117,24 @@ void DoubleCurrencyField::UpdateCurrencyFormat()
         OUString sSymbol = getCurrencySymbol();
         sSymbol = comphelper::string::strip(sSymbol, ' ');
 
-        OUStringBuffer sTemp("[$");
-        sTemp.append(sSymbol);
-        sTemp.append("] ");
-        sTemp.append(sNewFormat);
-
+        sNewFormat =
+            "[$" + sSymbol + "] "
+            + sNewFormat
         // for negative values : $ -0.00, not -$ 0.00...
         // (the real solution would be a possibility to choose a "positive currency format" and a "negative currency format"...
         // But not now... (and hey, you could take a formatted field for this...))
         // FS - 31.03.00 74642
-        sTemp.append(";[$");
-        sTemp.append(sSymbol);
-        sTemp.append("] -");
-        sTemp.append(sNewFormat);
-
-        sNewFormat = sTemp;
+            + ";[$"
+            + sSymbol
+            + "] -"
+            + sNewFormat;
     }
     else
     {
         OUString sTemp = getCurrencySymbol();
         sTemp = comphelper::string::strip(sTemp, ' ');
 
-        sNewFormat.append(" [$");
-        sNewFormat.append(sTemp);
-        sNewFormat.append(']');
+        sNewFormat.append(" [$" + sTemp + "]");
     }
 
     // set this new basic format
@@ -1168,7 +1165,7 @@ void FormattedField::SetText(const OUString& rStr, const Selection& rNewSelectio
     SetSelection(rNewSelection);
 }
 
-bool FormattedField::set_property(const OString &rKey, const OUString &rValue)
+bool FormattedField::set_property(const OUString &rKey, const OUString &rValue)
 {
     if (rKey == "digits")
         GetFormatter().SetDecimalDigits(rValue.toInt32());

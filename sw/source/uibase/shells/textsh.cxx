@@ -167,7 +167,8 @@ void SwTextShell::ExecInsert(SfxRequest &rReq)
                 && pACorr->IsAutoCorrFlag(
                     ACFlags::CapitalStartSentence | ACFlags::CapitalStartWord |
                     ACFlags::AddNonBrkSpace | ACFlags::ChgOrdinalNumber | ACFlags::TransliterateRTL |
-                    ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect ) )
+                    ACFlags::ChgToEnEmDash | ACFlags::SetINetAttr | ACFlags::Autocorrect |
+                    ACFlags::SetDOIAttr ) )
             {
                 rSh.AutoCorrect( *pACorr, cIns );
             }
@@ -454,7 +455,7 @@ void SwTextShell::ExecInsert(SfxRequest &rReq)
             aStartPos.AdjustX(-constTwips_4cm);
             aStartPos.AdjustY(-constTwips_2cm);
             Size aSize(2 * constTwips_4cm, 2 * constTwips_2cm);
-            GetShell().LockPaint();
+            GetShell().LockPaint(LockPaintReason::InsertFrame);
             GetShell().StartAllAction();
             SwFlyFrameAttrMgr aMgr( true, GetShellPtr(), Frmmgr_Type::TEXT, nullptr );
             if(nCols > 1)
@@ -511,7 +512,7 @@ void SwTextShell::ExecInsert(SfxRequest &rReq)
                 }
             }
 
-            GetShell().LockPaint();
+            GetShell().LockPaint(LockPaintReason::InsertFrame);
             GetShell().StartAllAction();
 
             aMgr.InsertFlyFrame(eAnchor, aPos, aSize);
@@ -534,7 +535,7 @@ void SwTextShell::ExecInsert(SfxRequest &rReq)
             {
                 //local variable necessary at least after call of .AutoCaption() because this could be deleted at this point
                 SwWrtShell& rShell = GetShell();
-                rShell.LockPaint();
+                rShell.LockPaint(LockPaintReason::InsertFrame);
                 rShell.StartAllAction();
                 rShell.StartUndo(SwUndoId::INSERT);
 

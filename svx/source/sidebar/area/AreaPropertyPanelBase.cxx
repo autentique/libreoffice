@@ -37,7 +37,7 @@
 using namespace css;
 using namespace css::uno;
 
-constexpr OStringLiteral SIDEBARGRADIENT = "sidebargradient";
+constexpr OUStringLiteral SIDEBARGRADIENT = u"sidebargradient";
 
 namespace svx::sidebar {
 
@@ -128,7 +128,7 @@ void AreaPropertyPanelBase::Initialize()
     maGradientLinear.SetYOffset(DEFAULT_CENTERY);
     maGradientLinear.SetAngle(Degree10(DEFAULT_ANGLE));
     maGradientLinear.SetColorStops(
-        basegfx::utils::createColorStopsFromStartEndColor(
+        basegfx::BColorStops(
             Color(DEFAULT_STARTVALUE).getBColor(),
             Color(DEFAULT_ENDVALUE).getBColor()));
     maGradientLinear.SetBorder(DEFAULT_BORDER);
@@ -180,7 +180,7 @@ void AreaPropertyPanelBase::Initialize()
     mxBmpImport->connect_clicked( LINK(this, AreaPropertyPanelBase, ClickImportBitmapHdl));
 }
 
-IMPL_LINK_NOARG(AreaPropertyPanelBase, ToolbarHdl_Impl, const OString&, void)
+IMPL_LINK_NOARG(AreaPropertyPanelBase, ToolbarHdl_Impl, const OUString&, void)
 {
     mxBTNGradient->set_menu_item_active(SIDEBARGRADIENT, !mxBTNGradient->get_menu_item_active(SIDEBARGRADIENT));
 }
@@ -297,10 +297,7 @@ void AreaPropertyPanelBase::SelectFillAttrHdl_Impl()
 
             if (pSh && pSh->GetItem(SID_COLOR_TABLE))
             {
-                XGradient aGradient(
-                    basegfx::utils::createColorStopsFromStartEndColor(
-                        mxLbFillGradFrom->GetSelectEntryColor().getBColor(),
-                        mxLbFillGradTo->GetSelectEntryColor().getBColor()));
+                basegfx::BGradient aGradient(createColorStops());
                 aGradient.SetAngle(Degree10(mxMTRAngle->get_value(FieldUnit::DEGREE) * 10));
                 aGradient.SetGradientStyle(static_cast<css::awt::GradientStyle>(mxGradientStyle->get_active()));
 
@@ -480,7 +477,7 @@ void AreaPropertyPanelBase::FillStyleChanged(bool bUpdateModel)
                 const SvxGradientListItem* pItem = pSh->GetItem(SID_GRADIENT_LIST);
                 if (pItem->GetGradientList()->Count() > 0)
                 {
-                    const XGradient aGradient
+                    const basegfx::BGradient aGradient
                         = pItem->GetGradientList()->GetGradient(0)->GetGradient();
                     const OUString aName = pItem->GetGradientList()->GetGradient(0)->GetName();
                     const XFillGradientItem aXFillGradientItem(aName, aGradient);
@@ -490,6 +487,12 @@ void AreaPropertyPanelBase::FillStyleChanged(bool bUpdateModel)
                     setFillStyleAndGradient(&aXFillStyleItem, aXFillGradientItem);
                     mxLbFillGradFrom->SelectEntry(Color(aGradient.GetColorStops().front().getStopColor()));
                     mxLbFillGradTo->SelectEntry(Color(aGradient.GetColorStops().back().getStopColor()));
+
+                    // MCGR: preserve in-between ColorStops if given
+                    if (aGradient.GetColorStops().size() > 2)
+                        maColorStops = basegfx::BColorStops(aGradient.GetColorStops().begin() + 1, aGradient.GetColorStops().end() - 1);
+                    else
+                        maColorStops.clear();
 
                     mxMTRAngle->set_value(toDegrees(aGradient.GetAngle()), FieldUnit::DEGREE);
                     css::awt::GradientStyle eXGS = aGradient.GetGradientStyle();
@@ -508,12 +511,19 @@ void AreaPropertyPanelBase::FillStyleChanged(bool bUpdateModel)
                     {
                         const OUString aString(mpFillGradientItem->GetName());
                         mxLbFillAttr->set_active_text(aString);
-                        const XGradient aGradient = mpFillGradientItem->GetGradientValue();
+                        const basegfx::BGradient aGradient = mpFillGradientItem->GetGradientValue();
                         mxLbFillGradFrom->SelectEntry(Color(aGradient.GetColorStops().front().getStopColor()));
                         mxLbFillGradTo->SelectEntry(Color(aGradient.GetColorStops().back().getStopColor()));
+
+                        // MCGR: preserve in-between ColorStops if given
+                        if (aGradient.GetColorStops().size() > 2)
+                            maColorStops = basegfx::BColorStops(aGradient.GetColorStops().begin() + 1, aGradient.GetColorStops().end() - 1);
+                        else
+                            maColorStops.clear();
+
                         mxGradientStyle->set_active(
                             sal::static_int_cast<sal_Int32>(aGradient.GetGradientStyle()));
-                        if (mxGradientStyle->get_active() == sal_Int32(GradientStyle::Radial))
+                        if (mxGradientStyle->get_active() == sal_Int32(css::awt::GradientStyle_RADIAL))
                             mxMTRAngle->set_sensitive(false);
                         else
                             mxMTRAngle->set_value(toDegrees(aGradient.GetAngle()),
@@ -705,7 +715,7 @@ void AreaPropertyPanelBase::ImpUpdateTransparencies()
         {
             if(mpFloatTransparenceItem->IsEnabled())
             {
-                const XGradient& rGradient = mpFloatTransparenceItem->GetGradientValue();
+                const basegfx::BGradient& rGradient = mpFloatTransparenceItem->GetGradientValue();
                 sal_Int32 nEntryPos(0);
                 OUString* pImage = nullptr;
 
@@ -1257,7 +1267,7 @@ IMPL_LINK_NOARG(AreaPropertyPanelBase, ChangeTrgrTypeHdl_Impl, weld::ComboBox&, 
         nSelectType -= 2;
     }
 
-    XGradient aTmpGradient;
+    basegfx::BGradient aTmpGradient;
 
     switch(static_cast<css::awt::GradientStyle>(nSelectType))
     {
@@ -1303,7 +1313,7 @@ IMPL_LINK_NOARG(AreaPropertyPanelBase, ModifyTransparentHdl_Impl, weld::MetricSp
     setFillTransparence(aLinearItem);
 }
 
-const XGradient& AreaPropertyPanelBase::GetGradient (const css::awt::GradientStyle eStyle) const
+const basegfx::BGradient& AreaPropertyPanelBase::GetGradient (const css::awt::GradientStyle eStyle) const
 {
     switch (eStyle)
     {
@@ -1323,7 +1333,7 @@ const XGradient& AreaPropertyPanelBase::GetGradient (const css::awt::GradientSty
     }
 }
 
-void AreaPropertyPanelBase::SetGradient (const XGradient& rGradient)
+void AreaPropertyPanelBase::SetGradient (const basegfx::BGradient& rGradient)
 {
     switch (rGradient.GetGradientStyle())
     {
@@ -1353,6 +1363,22 @@ void AreaPropertyPanelBase::SetGradient (const XGradient& rGradient)
 sal_Int32 AreaPropertyPanelBase::GetSelectedTransparencyTypeIndex() const
 {
     return mxLBTransType->get_active();
+}
+
+basegfx::BColorStops AreaPropertyPanelBase::createColorStops()
+{
+    basegfx::BColorStops aColorStops;
+
+    aColorStops.emplace_back(0.0, mxLbFillGradFrom->GetSelectEntryColor().getBColor());
+
+    if(!maColorStops.empty())
+    {
+        aColorStops.insert(aColorStops.begin(), maColorStops.begin(), maColorStops.end());
+    }
+
+    aColorStops.emplace_back(1.0, mxLbFillGradTo->GetSelectEntryColor().getBColor());
+
+    return aColorStops;
 }
 
 } // end of namespace svx::sidebar

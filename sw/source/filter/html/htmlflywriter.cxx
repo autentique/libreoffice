@@ -158,7 +158,7 @@ HTMLOutEvent const aIMapEventTable[] =
     { nullptr, nullptr, SvMacroItemId::NONE }
 };
 
-sal_uInt16 SwHTMLWriter::GuessFrameType( const SwFrameFormat& rFrameFormat,
+SwHTMLFrameType SwHTMLWriter::GuessFrameType( const SwFrameFormat& rFrameFormat,
                                    const SdrObject*& rpSdrObj )
 {
     SwHTMLFrameType eType;
@@ -205,7 +205,7 @@ sal_uInt16 SwHTMLWriter::GuessFrameType( const SwFrameFormat& rFrameFormat,
         else if( pNd->IsOLENode() )
         {
             // applet, plugin, floating frame
-            eType = static_cast<SwHTMLFrameType>(GuessOLENodeFrameType( *pNd ));
+            eType = GuessOLENodeFrameType( *pNd );
         }
         else
         {
@@ -282,7 +282,7 @@ sal_uInt16 SwHTMLWriter::GuessFrameType( const SwFrameFormat& rFrameFormat,
         }
     }
 
-    return static_cast< sal_uInt16 >(eType);
+    return eType;
 }
 
 void SwHTMLWriter::CollectFlyFrames()
@@ -299,7 +299,7 @@ void SwHTMLWriter::CollectFlyFrames()
         const SdrObject *pSdrObj = nullptr;
         const SwNode *pAnchorNode;
         const SwContentNode *pACNd;
-        SwHTMLFrameType eType = static_cast<SwHTMLFrameType>(GuessFrameType( rFrameFormat, pSdrObj ));
+        SwHTMLFrameType eType = GuessFrameType( rFrameFormat, pSdrObj );
 
         AllHtmlFlags nMode;
         const SwFormatAnchor& rAnchor = rFrameFormat.GetAnchor();
@@ -819,7 +819,7 @@ void SwHTMLWriter::writeFrameFormatOptions(HtmlWriter& aHtml, const SwFrameForma
     }
 
     // align
-    const char* pAlignString = nullptr;
+    std::string_view pAlignString;
     RndStdIds eAnchorId = rFrameFormat.GetAnchor().GetAnchorId();
     if( (nFrameOptions & HtmlFrmOpts::Align) &&
         ((RndStdIds::FLY_AT_PARA == eAnchorId) || (RndStdIds::FLY_AT_CHAR == eAnchorId)) && !bReplacement)
@@ -830,12 +830,12 @@ void SwHTMLWriter::writeFrameFormatOptions(HtmlWriter& aHtml, const SwFrameForma
             text::RelOrientation::PRINT_AREA == rHoriOri.GetRelationOrient() )
         {
             pAlignString = text::HoriOrientation::RIGHT == rHoriOri.GetHoriOrient()
-                        ? OOO_STRING_SVTOOLS_HTML_AL_right
-                        : OOO_STRING_SVTOOLS_HTML_AL_left;
+                        ? std::string_view(OOO_STRING_SVTOOLS_HTML_AL_right)
+                        : std::string_view(OOO_STRING_SVTOOLS_HTML_AL_left);
         }
     }
     const SwFormatVertOrient* pVertOrient;
-    if( (nFrameOptions & HtmlFrmOpts::Align) && !pAlignString &&
+    if( (nFrameOptions & HtmlFrmOpts::Align) && pAlignString.empty() &&
         ( !(nFrameOptions & HtmlFrmOpts::SAlign) ||
           (RndStdIds::FLY_AS_CHAR == eAnchorId) ) &&
         (pVertOrient = rItemSet.GetItemIfSet( RES_VERT_ORIENT )) )
@@ -854,7 +854,7 @@ void SwHTMLWriter::writeFrameFormatOptions(HtmlWriter& aHtml, const SwFrameForma
         case text::VertOrientation::NONE:     break;
         }
     }
-    if (pAlignString && !bReplacement)
+    if (!pAlignString.empty() && !bReplacement)
     {
         aHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_align, pAlignString);
     }
@@ -1047,7 +1047,7 @@ void SwHTMLWriter::writeFrameFormatOptions(HtmlWriter& aHtml, const SwFrameForma
     if (!pSurround)
         return;
 
-    const char* pSurroundString = nullptr;
+    std::string_view pSurroundString;
 
     sal_Int16 eHoriOri = rFrameFormat.GetHoriOrient().GetHoriOrient();
     css::text::WrapTextMode eSurround = pSurround->GetSurround();
@@ -1095,7 +1095,7 @@ void SwHTMLWriter::writeFrameFormatOptions(HtmlWriter& aHtml, const SwFrameForma
         break;
     }
 
-    if (pSurroundString)
+    if (!pSurroundString.empty())
     {
         aHtml.start(OOO_STRING_SVTOOLS_HTML_linebreak);
         aHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_clear, pSurroundString);
@@ -1238,7 +1238,7 @@ SwHTMLWriter& OutHTML_ImageStart( HtmlWriter& rHtml, SwHTMLWriter& rWrt, const S
                        const Size &rRealSize, HtmlFrmOpts nFrameOpts,
                        const char *pMarkType,
                        const ImageMap *pAltImgMap,
-                       const OUString& rMimeType )
+                       std::u16string_view rMimeType )
 {
     // <object data="..."> instead of <img src="...">
     bool bReplacement = (nFrameOpts & HtmlFrmOpts::Replacement) || rWrt.mbReqIF;
@@ -1297,17 +1297,17 @@ SwHTMLWriter& OutHTML_ImageStart( HtmlWriter& rHtml, SwHTMLWriter& rWrt, const S
             // Output "href" element if a link or macro exists
             if( !aMapURL.isEmpty() || bEvents )
             {
-                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_href, OUStringToOString(rWrt.convertHyperlinkHRefValue(aMapURL), RTL_TEXTENCODING_UTF8));
+                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_href, rWrt.convertHyperlinkHRefValue(aMapURL));
             }
 
             if( !aName.isEmpty() )
             {
-                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_name, OUStringToOString(aName, RTL_TEXTENCODING_UTF8));
+                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_name, aName);
             }
 
             if( !aTarget.isEmpty() )
             {
-                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_target, OUStringToOString(aTarget, RTL_TEXTENCODING_UTF8));
+                rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_target, aTarget);
             }
 
             if( pMacItem )
@@ -1391,34 +1391,33 @@ SwHTMLWriter& OutHTML_ImageStart( HtmlWriter& rHtml, SwHTMLWriter& rWrt, const S
         aTag = OOO_STRING_SVTOOLS_HTML_object;
     rHtml.start(aTag);
 
-    OStringBuffer sBuffer;
     if(rWrt.mbEmbedImages)
     {
         OUString aGraphicInBase64;
         if (XOutBitmap::GraphicToBase64(rGraphic, aGraphicInBase64))
         {
-            sBuffer.append(OOO_STRING_SVTOOLS_HTML_O_data);
-            sBuffer.append(":");
-            sBuffer.append(OUStringToOString(aGraphicInBase64, RTL_TEXTENCODING_UTF8));
-            rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_src, sBuffer.makeStringAndClear().getStr());
+            OString sBuffer(OString::Concat(OOO_STRING_SVTOOLS_HTML_O_data)
+                + ":"
+                + OUStringToOString(aGraphicInBase64, RTL_TEXTENCODING_UTF8));
+            rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_src, sBuffer);
         }
         else
             rWrt.m_nWarn = WARN_SWG_POOR_LOAD;
     }
     else
     {
-        sBuffer.append(OUStringToOString(aGraphicURL, RTL_TEXTENCODING_UTF8));
+        OString sBuffer(OUStringToOString(aGraphicURL, RTL_TEXTENCODING_UTF8));
         OString aAttribute(OOO_STRING_SVTOOLS_HTML_O_src);
         if (bReplacement)
             aAttribute = OOO_STRING_SVTOOLS_HTML_O_data;
-        rHtml.attribute(aAttribute, sBuffer.makeStringAndClear().getStr());
+        rHtml.attribute(aAttribute, sBuffer);
     }
 
     if (bReplacement)
     {
         // Handle XHTML type attribute for OLE replacement images.
-        if (!rMimeType.isEmpty())
-            rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_type, rMimeType.toUtf8());
+        if (!rMimeType.empty())
+            rHtml.attribute(OOO_STRING_SVTOOLS_HTML_O_type, rMimeType);
     }
 
     // Events
@@ -1523,8 +1522,7 @@ SwHTMLWriter& OutHTML_BulletImage( SwHTMLWriter& rWrt,
     if( pTag )
         sOut.append(OString::Concat("<") + pTag);
 
-    sOut.append(' ');
-    sOut.append(OOO_STRING_SVTOOLS_HTML_O_style "=\"");
+    sOut.append(" " OOO_STRING_SVTOOLS_HTML_O_style "=\"");
     if(!aLink.isEmpty())
     {
         sOut.append(OOO_STRING_SVTOOLS_HTML_O_src "=\"");
@@ -1953,18 +1951,21 @@ static SwHTMLWriter& OutHTML_FrameFormatGrfNode( SwHTMLWriter& rWrt, const SwFra
             Size aMM100Size = o3tl::convert( rSize.GetSize(),
                             o3tl::Length::twip, o3tl::Length::mm100 );
 
-            OUString aFilterName("");
+            OUString aFilterName;
 
-            if (rWrt.mbReqIF && !bWritePNGFallback)
+            if (rWrt.mbReqIF)
             {
-                // Writing image without fallback PNG in ReqIF mode: force PNG
-                // output.
-                // But don't force it when writing the original format and we'll write PNG inside
-                // that.
-                aFilterName = "PNG";
-                nFlags &= ~XOutFlags::UseNativeIfPossible;
+                // In ReqIF mode, do not try to write GIF for other image types
                 nFlags &= ~XOutFlags::UseGifIfSensible;
-                aMimeType = "image/png";
+                if (!bWritePNGFallback)
+                {
+                    // Writing image without fallback PNG in ReqIF mode: force PNG
+                    // output.
+                    // But don't force it when writing the original format and we'll write PNG inside
+                    // that.
+                    aFilterName = "PNG";
+                    nFlags &= ~XOutFlags::UseNativeIfPossible;
+                }
             }
 
             const Graphic& rGraphic = pGrfNd->GetGrf();
@@ -1984,7 +1985,6 @@ static SwHTMLWriter& OutHTML_FrameFormatGrfNode( SwHTMLWriter& rWrt, const SwFra
                 else if (rGraphic.GetGfxLink().IsEMF())
                 {
                     aFilterName = "emf";
-                    aMimeType = "image/x-emf"; // avoid image/x-wmf
                 }
                 else if (pVectorGraphicData && pVectorGraphicData->getType() == VectorGraphicDataType::Wmf)
                 {
@@ -1993,12 +1993,11 @@ static SwHTMLWriter& OutHTML_FrameFormatGrfNode( SwHTMLWriter& rWrt, const SwFra
                 else if (rGraphic.GetGfxLink().GetType() == GfxLinkType::NativeTif)
                 {
                     aFilterName = "tif";
-                    aMimeType = "image/tiff"; // avoid image/x-vclgraphic
                 }
             }
 
             ErrCode nErr = XOutBitmap::WriteGraphic( rGraphic, aGraphicURL,
-                    aFilterName, nFlags, &aMM100Size );
+                    aFilterName, nFlags, &aMM100Size, nullptr, &aMimeType );
             if( nErr )
             {
                 rWrt.m_nWarn = WARN_SWG_POOR_LOAD;

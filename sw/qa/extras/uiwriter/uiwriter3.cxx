@@ -39,6 +39,51 @@ public:
     }
 };
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf151974)
+{
+    createSwDoc("tdf151974.odt");
+
+    CPPUNIT_ASSERT_EQUAL(int(8), getParagraphs());
+
+    auto pLayout = parseLayoutDump();
+    for (size_t i = 1; i < 9; ++i)
+    {
+        OString sPath("/root/page[1]/body/txt[" + OString::number(i)
+                      + "]/SwParaPortion/SwLineLayout");
+        assertXPathChildren(pLayout, sPath, 1);
+    }
+
+    dispatchCommand(mxComponent, ".uno:SelectAll", {});
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    dispatchCommand(mxComponent, ".uno:GoDown", {});
+
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_RETURN);
+    Scheduler::ProcessEventsToIdle();
+
+    // Paste special as RTF
+    uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+        { { "SelectedFormat", uno::Any(static_cast<sal_uInt32>(SotClipboardFormatId::RTF)) } });
+
+    dispatchCommand(mxComponent, ".uno:ClipboardFormatItems", aPropertyValues);
+
+    CPPUNIT_ASSERT_EQUAL(int(16), getParagraphs());
+
+    dumpLayout(mxComponent);
+    pLayout = parseLayoutDump();
+    for (size_t i = 1; i < 16; ++i)
+    {
+        OString sPath("/root/page[1]/body/txt[" + OString::number(i)
+                      + "]/SwParaPortion/SwLineLayout");
+
+        // Without the fix in place, this test would have failed with
+        // - Expected: 1
+        // - Actual  : 2
+        // - In <>, XPath '/root/page[1]/body/txt[1]/SwParaPortion/SwLineLayout' number of child-nodes is incorrect
+        assertXPathChildren(pLayout, sPath, 1);
+    }
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf145731)
 {
     createSwDoc("tdf145731.odt");
@@ -112,6 +157,31 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf139843)
     CPPUNIT_ASSERT_EQUAL(nPages, getPages());
 }
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf143574)
+{
+    createSwDoc("tdf143574.odt");
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
+
+    CPPUNIT_ASSERT_EQUAL(1, getShapes());
+    uno::Reference<drawing::XShapes> xGroupShape(getShape(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xGroupShape->getCount());
+
+    uno::Reference<beans::XPropertySet> xProperties(xGroupShape->getByIndex(2), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(false, xProperties->getPropertyValue("TextBox").get<bool>());
+
+    selectShape(1);
+    dispatchCommand(mxComponent, ".uno:EnterGroup", {});
+
+    // Select a shape in the group
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_TAB);
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the fix in place, this test would have crashed
+    dispatchCommand(mxComponent, ".uno:AddTextBox", {});
+
+    CPPUNIT_ASSERT_EQUAL(true, xProperties->getPropertyValue("TextBox").get<bool>());
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf146848)
 {
     // Reuse existing document
@@ -176,10 +246,12 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf114973)
 {
     createSwDoc("tdf114973.fodt");
 
-    dispatchCommand(mxComponent, ".uno:SelectAll", {});
-
     SwDoc* const pDoc = getSwDoc();
     SwWrtShell* const pWrtShell = pDoc->GetDocShell()->GetWrtShell();
+    pWrtShell->SttEndDoc(true);
+
+    dispatchCommand(mxComponent, ".uno:SelectAll", {});
+
     // bug: cursor jumped into header
     CPPUNIT_ASSERT(!pWrtShell->IsInHeaderFooter());
 
@@ -1032,8 +1104,6 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf139737)
 {
     createSwDoc("tdf139737.fodt");
 
-    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
 
     dispatchCommand(mxComponent, ".uno:Copy", {});
@@ -1634,6 +1704,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf126504)
     //Use selectAll 2 times in a row
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
+    dispatchCommand(mxComponent, ".uno:SelectAll", {});
 
     dispatchCommand(mxComponent, ".uno:Copy", {});
 
@@ -1674,6 +1745,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf133982)
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
     dispatchCommand(mxComponent, ".uno:SelectAll", {});
+    dispatchCommand(mxComponent, ".uno:SelectAll", {});
 
     //Without the fix in place, it would have crashed here
     dispatchCommand(mxComponent, ".uno:Cut", {});
@@ -1706,6 +1778,21 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf134253)
 
     CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xIndexAccess->getCount());
     CPPUNIT_ASSERT_EQUAL(6, getPages());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testNotebookBar)
+{
+    createSwDoc();
+
+    //tdf#154282: Without the fix in place, this test would have crashed
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=notebookbar.ui", {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=Single", {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=Sidebar", {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=notebookbar_compact.ui", {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=notebookbar_groupedbar_compact.ui",
+                    {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=notebookbar_single.ui", {});
+    dispatchCommand(mxComponent, ".uno:ToolbarMode?Mode:string=Default", {});
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, TestAsCharTextBox)
@@ -1757,6 +1844,34 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, TestAsCharTextBox)
 
     CPPUNIT_ASSERT(nTopSideOfShape2 < nTopSideOfTxBx2);
     // Without the fix in place the two texboxes has been fallen apart, and  asserts will broken.
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf155028)
+{
+    createSwDoc("tdf155028.odt");
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
+
+    CPPUNIT_ASSERT_EQUAL(1, getShapes());
+    uno::Reference<drawing::XShapes> xGroupShape(getShape(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(10), xGroupShape->getCount());
+
+    selectShape(1);
+    dispatchCommand(mxComponent, ".uno:EnterGroup", {});
+
+    // Select a shape in the group
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_TAB);
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+
+    // Without the fix in place, this test would have crashed
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(11), xGroupShape->getCount());
+
+    dispatchCommand(mxComponent, ".uno:Undo", {});
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(10), xGroupShape->getCount());
 }
 
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf135581)
@@ -2241,6 +2356,53 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf130680)
 
     dispatchCommand(mxComponent, ".uno:Undo", {});
     CPPUNIT_ASSERT_EQUAL(sal_Int32(23), xIndexAccess->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest3, testTdf150457)
+{
+    createSwDoc();
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
+
+    emulateTyping(*pTextDoc, u"a");
+    dispatchCommand(mxComponent, ".uno:InsertFootnote", {});
+    emulateTyping(*pTextDoc, u"abc");
+
+    auto xFootnotes = pTextDoc->getFootnotes();
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), xFootnotes->getCount());
+    auto xParagraph = uno::Reference<text::XTextRange>(xFootnotes->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("abc"), xParagraph->getString());
+
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_PAGEUP);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_RETURN);
+    emulateTyping(*pTextDoc, u"d");
+
+    dispatchCommand(mxComponent, ".uno:InsertFootnote", {});
+    emulateTyping(*pTextDoc, u"def");
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), xFootnotes->getCount());
+    xParagraph = uno::Reference<text::XTextRange>(xFootnotes->getByIndex(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("def"), xParagraph->getString());
+
+    // This key sequence deletes a footnote and its number (without the fix applied)
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_UP);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_HOME);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_SHIFT | KEY_DOWN);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_DELETE);
+
+    // Page up moves the cursor from the footnote area to the main text, then
+    // doing select all and pressing delete removes all the text and footnote references,
+    // thus removing all the footnotes
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_PAGEUP);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, awt::Key::SELECT_ALL);
+    pTextDoc->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, KEY_DELETE);
+
+    // Without having fix in place, segfault happens after running next line
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the fix, the above action should have already created a crash,
+    // but here we also check to make sure that the number of footnotes are
+    // exactly zero, as expected
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(0), xFootnotes->getCount());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

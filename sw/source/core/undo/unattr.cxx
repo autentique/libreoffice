@@ -120,6 +120,7 @@ SwUndoFormatAttr::SwUndoFormatAttr( SfxItemSet&& rOldSet,
     , m_sFormatName ( rChgFormat.GetName() )
     // #i56253#
     , m_oOldSet( std::move( rOldSet ) )
+    , m_nAnchorContentOffset( 0 )
     , m_nNodeIndex( 0 )
     , m_nFormatWhich( rChgFormat.Which() )
     , m_bSaveDrawPt( bSaveDrawPt )
@@ -134,6 +135,7 @@ SwUndoFormatAttr::SwUndoFormatAttr( const SfxPoolItem& rItem, SwFormat& rChgForm
     : SwUndo( SwUndoId::INSFMTATTR, rChgFormat.GetDoc() )
     , m_sFormatName(rChgFormat.GetName())
     , m_oOldSet( rChgFormat.GetAttrSet().CloneAsValue( false ) )
+    , m_nAnchorContentOffset( 0 )
     , m_nNodeIndex( 0 )
     , m_nFormatWhich( rChgFormat.Which() )
     , m_bSaveDrawPt( bSaveDrawPt )
@@ -153,7 +155,8 @@ void SwUndoFormatAttr::Init( const SwFormat & rFormat )
         SaveFlyAnchor( &rFormat, m_bSaveDrawPt );
     } else if ( RES_FRMFMT == m_nFormatWhich ) {
         const SwDoc* pDoc = rFormat.GetDoc();
-        if (pDoc->GetTableFrameFormats()->ContainsFormat(dynamic_cast<const SwFrameFormat&>(rFormat)))
+        auto pTableFormat = dynamic_cast<const SwTableFormat*>(&rFormat);
+        if (pTableFormat && pDoc->GetTableFrameFormats()->ContainsFormat(const_cast<SwTableFormat*>(pTableFormat)))
         {
             // Table Format: save table position, table formats are volatile!
             SwTable * pTable = SwIterator<SwTable,SwFormat>( rFormat ).First();
@@ -383,24 +386,23 @@ void SwUndoFormatAttr::SaveFlyAnchor( const SwFormat * pFormat, bool bSvDrwPt )
 
     const SwFormatAnchor& rAnchor =
         m_oOldSet->Get( RES_ANCHOR, false );
-    if( !rAnchor.GetAnchorNode() )
+    if( !rAnchor.GetAnchorNode() || rAnchor.GetAnchorId() == RndStdIds::FLY_AT_PAGE)
         return;
 
-    sal_Int32 nContent = 0;
     switch( rAnchor.GetAnchorId() ) {
     case RndStdIds::FLY_AS_CHAR:
     case RndStdIds::FLY_AT_CHAR:
-        nContent = rAnchor.GetAnchorContentOffset();
+        m_nAnchorContentOffset = rAnchor.GetAnchorContentOffset();
         [[fallthrough]];
     case RndStdIds::FLY_AT_PARA:
     case RndStdIds::FLY_AT_FLY:
         m_nNodeIndex = rAnchor.GetAnchorNode()->GetIndex();
         break;
     default:
-        return;
+        assert(false);
     }
 
-    SwFormatAnchor aAnchor( rAnchor.GetAnchorId(), nContent );
+    SwFormatAnchor aAnchor( rAnchor.GetAnchorId(), 0 );
     m_oOldSet->Put( aAnchor );
 }
 
@@ -431,7 +433,7 @@ bool SwUndoFormatAttr::RestoreFlyAnchor(::sw::UndoRedoContext & rContext)
         SwPosition aPos( *pNd );
         if ((RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()) ||
             (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId())) {
-            aPos.SetContent( rAnchor.GetPageNum() );
+            aPos.SetContent( m_nAnchorContentOffset );
             if ( aPos.GetContentIndex() > pNd->GetTextNode()->GetText().getLength()) {
                 // #i35443# - invalid position.
                 // Thus, anchor attribute not restored

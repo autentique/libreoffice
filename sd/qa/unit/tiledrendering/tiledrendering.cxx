@@ -51,6 +51,8 @@
 #include <vcl/cursor.hxx>
 #include <vcl/scheduler.hxx>
 #include <vcl/vclevent.hxx>
+#include <vcl/BitmapReadAccess.hxx>
+#include <vcl/virdev.hxx>
 #include <o3tl/string_view.hxx>
 
 #include <chrono>
@@ -1688,7 +1690,7 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testCommentCallbacks)
     int nComment1 = aView1.m_aCommentCallbackResult.get<int>("id");
     CPPUNIT_ASSERT_EQUAL(nComment1, aView2.m_aCommentCallbackResult.get<int>("id"));
     css::util::DateTime aDateTime;
-    OUString aDateTimeString = OUString::createFromAscii(aView1.m_aCommentCallbackResult.get<std::string>("dateTime").c_str());
+    OUString aDateTimeString = OUString::createFromAscii(aView1.m_aCommentCallbackResult.get<std::string>("dateTime"));
     CPPUNIT_ASSERT(utl::ISO8601parseDateTime(aDateTimeString, aDateTime));
     CPPUNIT_ASSERT_EQUAL(std::string("LOK User1"), aView1.m_aCommentCallbackResult.get<std::string>("author"));
     CPPUNIT_ASSERT_EQUAL(std::string("LOK User1"), aView2.m_aCommentCallbackResult.get<std::string>("author"));
@@ -1713,8 +1715,8 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testCommentCallbacks)
     CPPUNIT_ASSERT_EQUAL(nComment1, aView2.m_aCommentCallbackResult.get<int>("id"));
     CPPUNIT_ASSERT_EQUAL(std::string("LOK User2"), aView1.m_aCommentCallbackResult.get<std::string>("author"));
     CPPUNIT_ASSERT_EQUAL(std::string("LOK User2"), aView2.m_aCommentCallbackResult.get<std::string>("author"));
-    OUString aReplyTextView1 = OUString::createFromAscii(aView1.m_aCommentCallbackResult.get<std::string>("text").c_str());
-    OUString aReplyTextView2 = OUString::createFromAscii(aView2.m_aCommentCallbackResult.get<std::string>("text").c_str());
+    OUString aReplyTextView1 = OUString::createFromAscii(aView1.m_aCommentCallbackResult.get<std::string>("text"));
+    OUString aReplyTextView2 = OUString::createFromAscii(aView2.m_aCommentCallbackResult.get<std::string>("text"));
     CPPUNIT_ASSERT(aReplyTextView1.startsWith("Reply to LOK User1"));
     CPPUNIT_ASSERT(aReplyTextView1.endsWith("Reply to comment"));
     CPPUNIT_ASSERT(aReplyTextView2.startsWith("Reply to LOK User1"));
@@ -2391,6 +2393,118 @@ CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testCutSelectionChange)
     CPPUNIT_ASSERT_EQUAL(static_cast<std::size_t>(0), m_aSelection.size());
 }
 
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testGetViewRenderState)
+{
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    int nFirstViewId = SfxLokHelper::getView();
+    ViewCallback aView1;
+    CPPUNIT_ASSERT_EQUAL(OString(";Default"), pXImpressDocument->getViewRenderState());
+    // Create a second view
+    SfxLokHelper::createView();
+    ViewCallback aView2;
+    CPPUNIT_ASSERT_EQUAL(OString(";Default"), pXImpressDocument->getViewRenderState());
+    // Set to dark scheme
+    {
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Dark")) },
+            }
+        );
+        dispatchCommand(mxComponent, ".uno:ChangeTheme", aPropertyValues);
+    }
+    CPPUNIT_ASSERT_EQUAL(OString(";Dark"), pXImpressDocument->getViewRenderState());
+    // Switch back to the first view, and check that the options string is the same
+    SfxLokHelper::setView(nFirstViewId);
+    CPPUNIT_ASSERT_EQUAL(OString(";Default"), pXImpressDocument->getViewRenderState());
+}
+
+// Helper function to get a tile to a bitmap and check the pixel color
+static void assertTilePixelColor(SdXImpressDocument* pXImpressDocument, int nPixelX, int nPixelY, Color aColor)
+{
+    size_t nCanvasSize = 1024;
+    size_t nTileSize = 256;
+    std::vector<unsigned char> aPixmap(nCanvasSize * nCanvasSize * 4, 0);
+    ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    pDevice->SetOutputSizePixelScaleOffsetAndLOKBuffer(Size(nCanvasSize, nCanvasSize),
+            Fraction(1.0), Point(), aPixmap.data());
+    pXImpressDocument->paintTile(*pDevice, nCanvasSize, nCanvasSize, 0, 0, 15360, 7680);
+    pDevice->EnableMapMode(false);
+    Bitmap aBitmap = pDevice->GetBitmap(Point(0, 0), Size(nTileSize, nTileSize));
+    Bitmap::ScopedReadAccess pAccess(aBitmap);
+    Color aActualColor(pAccess->GetPixel(nPixelX, nPixelY));
+    CPPUNIT_ASSERT_EQUAL(aColor, aActualColor);
+}
+
+// Test that changing the theme in one view doesn't change it in the other view
+CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testThemeViewSeparation)
+{
+    Color aDarkColor(0x1c, 0x1c, 0x1c);
+    // Add a minimal dark scheme
+    {
+        svtools::EditableColorConfig aColorConfig;
+        svtools::ColorConfigValue aValue;
+        aValue.bIsVisible = true;
+        aValue.nColor = aDarkColor;
+        aColorConfig.SetColorValue(svtools::DOCCOLOR, aValue);
+        aColorConfig.AddScheme(u"Dark");
+    }
+    // Add a minimal light scheme
+    {
+        svtools::EditableColorConfig aColorConfig;
+        svtools::ColorConfigValue aValue;
+        aValue.bIsVisible = true;
+        aValue.nColor = COL_WHITE;
+        aColorConfig.SetColorValue(svtools::DOCCOLOR, aValue);
+        aColorConfig.AddScheme(u"Light");
+    }
+    SdXImpressDocument* pXImpressDocument = createDoc("dummy.odp");
+    int nFirstViewId = SfxLokHelper::getView();
+    ViewCallback aView1;
+    // Switch first view to light scheme
+    {
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Light")) },
+            }
+        );
+        dispatchCommand(mxComponent, ".uno:ChangeTheme", aPropertyValues);
+    }
+    // First view is at light scheme
+    assertTilePixelColor(pXImpressDocument, 255, 255, COL_WHITE);
+    // Create second view
+    SfxLokHelper::createView();
+    int nSecondViewId = SfxLokHelper::getView();
+    ViewCallback aView2;
+    // Set second view to dark scheme
+    {
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Dark")) },
+            }
+        );
+        dispatchCommand(mxComponent, ".uno:ChangeTheme", aPropertyValues);
+    }
+    assertTilePixelColor(pXImpressDocument, 255, 255, aDarkColor);
+    // First view still in light scheme
+    SfxLokHelper::setView(nFirstViewId);
+    assertTilePixelColor(pXImpressDocument, 255, 255, COL_WHITE);
+    // Second view still in dark scheme
+    SfxLokHelper::setView(nSecondViewId);
+    assertTilePixelColor(pXImpressDocument, 255, 255, Color(0x1c, 0x1c, 0x1c));
+    // Switch second view back to light scheme
+    {
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Light")) },
+            }
+        );
+        dispatchCommand(mxComponent, ".uno:ChangeTheme", aPropertyValues);
+    }
+    // Now in light scheme
+    assertTilePixelColor(pXImpressDocument, 255, 255, COL_WHITE);
+}
+
 CPPUNIT_TEST_FIXTURE(SdTiledRenderingTest, testRegenerateDiagram)
 {
     // Load the document.
@@ -2511,7 +2625,7 @@ namespace
 void lcl_extractHandleParameters(std::string_view selection, sal_uInt32& id, sal_uInt32& x, sal_uInt32& y)
 {
     OString extraInfo( selection.substr(selection.find("{")) );
-    std::stringstream aStream(extraInfo.getStr());
+    std::stringstream aStream((std::string(extraInfo)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     boost::property_tree::ptree

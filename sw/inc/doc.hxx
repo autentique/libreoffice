@@ -34,6 +34,7 @@
 #include <editeng/numitem.hxx>
 #include "tox.hxx"
 #include "frmfmt.hxx"
+#include "frameformats.hxx"
 #include "charfmt.hxx"
 #include "docary.hxx"
 #include "charformats.hxx"
@@ -163,6 +164,7 @@ namespace sw {
     class DocumentLayoutManager;
     class DocumentStylePoolManager;
     class DocumentExternalDataManager;
+    template<class T> class FrameFormats;
     class GrammarContact;
     class OnlineAccessibilityCheck;
 }
@@ -244,11 +246,11 @@ class SW_DLLPUBLIC SwDoc final
     std::unique_ptr<SwTextFormatColl>  mpDfltTextFormatColl;  //< Defaultformatcollections
     std::unique_ptr<SwGrfFormatColl>   mpDfltGrfFormatColl;
 
-    std::unique_ptr<SwFrameFormats>    mpFrameFormatTable;    //< Format table
+    std::unique_ptr<sw::FrameFormats<SwFrameFormat*>>    mpFrameFormatTable;    //< Format table
     std::unique_ptr<SwCharFormats>     mpCharFormatTable;
-    std::unique_ptr<SwFrameFormats>    mpSpzFrameFormatTable;
+    std::unique_ptr<sw::FrameFormats<sw::SpzFrameFormat*>>    mpSpzFrameFormatTable;
     std::unique_ptr<SwSectionFormats>  mpSectionFormatTable;
-    std::unique_ptr<SwFrameFormats>    mpTableFrameFormatTable; //< For tables
+    std::unique_ptr<sw::TableFrameFormats>    mpTableFrameFormatTable; //< For tables
     std::unique_ptr<SwTextFormatColls> mpTextFormatCollTable;   //< FormatCollections
     std::unique_ptr<SwGrfFormatColls>  mpGrfFormatCollTable;
 
@@ -746,14 +748,14 @@ public:
     bool DontExpandFormat( const SwPosition& rPos, bool bFlag = true );
 
     // Formats
-    const SwFrameFormats* GetFrameFormats() const     { return mpFrameFormatTable.get(); }
-          SwFrameFormats* GetFrameFormats()           { return mpFrameFormatTable.get(); }
+    const sw::FrameFormats<SwFrameFormat*>* GetFrameFormats() const     { return mpFrameFormatTable.get(); }
+          sw::FrameFormats<SwFrameFormat*>* GetFrameFormats()           { return mpFrameFormatTable.get(); }
     const SwCharFormats* GetCharFormats() const   { return mpCharFormatTable.get();}
           SwCharFormats* GetCharFormats()         { return mpCharFormatTable.get();}
 
     // LayoutFormats (frames, DrawObjects), sometimes const sometimes not
-    const SwFrameFormats* GetSpzFrameFormats() const   { return mpSpzFrameFormatTable.get(); }
-          SwFrameFormats* GetSpzFrameFormats()         { return mpSpzFrameFormatTable.get(); }
+    const sw::FrameFormats<sw::SpzFrameFormat*>* GetSpzFrameFormats() const   { return mpSpzFrameFormatTable.get(); }
+          sw::FrameFormats<sw::SpzFrameFormat*>* GetSpzFrameFormats()         { return mpSpzFrameFormatTable.get(); }
 
     const SwFrameFormat *GetDfltFrameFormat() const   { return mpDfltFrameFormat.get(); }
           SwFrameFormat *GetDfltFrameFormat()         { return mpDfltFrameFormat.get(); }
@@ -819,10 +821,10 @@ public:
                                     SwGrfFormatColl *pDerivedFrom);
 
     // Table formatting
-    const SwFrameFormats* GetTableFrameFormats() const  { return mpTableFrameFormatTable.get(); }
-          SwFrameFormats* GetTableFrameFormats()        { return mpTableFrameFormatTable.get(); }
+    const sw::TableFrameFormats* GetTableFrameFormats() const  { return mpTableFrameFormatTable.get(); }
+          sw::TableFrameFormats* GetTableFrameFormats()        { return mpTableFrameFormatTable.get(); }
     size_t GetTableFrameFormatCount( bool bUsed ) const;
-    SwFrameFormat& GetTableFrameFormat(size_t nFormat, bool bUsed ) const;
+    SwTableFormat& GetTableFrameFormat(size_t nFormat, bool bUsed ) const;
     SwTableFormat* MakeTableFrameFormat(const OUString &rFormatName, SwFrameFormat *pDerivedFrom);
     void        DelTableFrameFormat( SwTableFormat* pFormat );
     SwTableFormat* FindTableFormatByName( const OUString& rName, bool bAll = false ) const;
@@ -1178,7 +1180,8 @@ public:
                                 const SwTableAutoFormat* pTAFormat = nullptr,
                                 const std::vector<sal_uInt16> *pColArr = nullptr,
                                 bool bCalledFromShell = false,
-                                bool bNewModel = true );
+                                bool bNewModel = true,
+                                const OUString& rTableName = {} );
 
     // If index is in a table, return TableNode, else 0.
     static SwTableNode* IsIdxInTable( const SwNodeIndex& rIdx );
@@ -1536,7 +1539,7 @@ public:
     void Unchain( SwFrameFormat &rFormat );
 
     // For Copy/Move from FrameShell.
-    SdrObject* CloneSdrObj( const SdrObject&, bool bMoveWithinDoc = false,
+    rtl::Reference<SdrObject> CloneSdrObj( const SdrObject&, bool bMoveWithinDoc = false,
                             bool bInsInPage = true );
 
     // FeShell - Interface end
@@ -1686,6 +1689,8 @@ public:
     bool IsDictionaryMissing() const { return meDictionaryMissing == MissingDictionary::True; }
 
     void SetLanguage(const LanguageType eLang, const sal_uInt16 nId);
+
+    static bool HasParagraphDirectFormatting(const SwPosition& rPos);
 
 private:
     // Copies master header to left / first one, if necessary - used by ChgPageDesc().

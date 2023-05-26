@@ -51,6 +51,7 @@
 #include <com/sun/star/text/XFootnotesSupplier.hpp>
 #include <com/sun/star/text/XLineNumberingProperties.hpp>
 #include <com/sun/star/style/XStyle.hpp>
+#include <com/sun/star/text/LabelFollow.hpp>
 #include <com/sun/star/text/PageNumberType.hpp>
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
@@ -60,6 +61,7 @@
 #include <com/sun/star/text/SizeType.hpp>
 #include <com/sun/star/text/TextContentAnchorType.hpp>
 #include <com/sun/star/text/WrapTextMode.hpp>
+#include <com/sun/star/text/XChapterNumberingSupplier.hpp>
 #include <com/sun/star/text/XDependentTextField.hpp>
 #include <com/sun/star/text/XParagraphCursor.hpp>
 #include <com/sun/star/text/XRedline.hpp>
@@ -310,14 +312,6 @@ static bool IsFieldNestingAllowed(const FieldContextPtr& pOuter, const FieldCont
     return true;
 }
 
-uno::Any FloatingTableInfo::getPropertyValue(std::u16string_view propertyName)
-{
-    for( beans::PropertyValue const & propVal : std::as_const(m_aFrameProperties) )
-        if( propVal.Name == propertyName )
-            return propVal.Value ;
-    return uno::Any() ;
-}
-
 DomainMapper_Impl::DomainMapper_Impl(
             DomainMapper& rDMapper,
             uno::Reference<uno::XComponentContext> xContext,
@@ -349,6 +343,7 @@ DomainMapper_Impl::DomainMapper_Impl(
         m_bStartBibliography(false),
         m_nStartGenericField(0),
         m_bTextInserted(false),
+        m_bTextDeleted(false),
         m_sCurrentPermId(0),
         m_bFrameDirectionSet(false),
         m_bInDocDefaultsImport(false),
@@ -1525,7 +1520,8 @@ bool DomainMapper_Impl::isParaSdtEndDeferred() const
 
 static void lcl_MoveBorderPropertiesToFrame(std::vector<beans::PropertyValue>& rFrameProperties,
     uno::Reference<text::XTextRange> const& xStartTextRange,
-    uno::Reference<text::XTextRange> const& xEndTextRange )
+    uno::Reference<text::XTextRange> const& xEndTextRange,
+    bool bIsRTFImport)
 {
     try
     {
@@ -1550,15 +1546,49 @@ static void lcl_MoveBorderPropertiesToFrame(std::vector<beans::PropertyValue>& r
             PROP_BOTTOM_BORDER_DISTANCE
         };
 
+        // The frame width specified does not include border spacing,
+        // so the frame needs to be increased by the left/right para border spacing amount
+        sal_Int32 nWidth = 0;
+        sal_Int32 nIndexOfWidthProperty = -1;
+        sal_Int16 nType = text::SizeType::FIX;
+        for (size_t i = 0; nType == text::SizeType::FIX && i < rFrameProperties.size(); ++i)
+        {
+            if (rFrameProperties[i].Name == "WidthType")
+                rFrameProperties[i].Value >>= nType;
+            else if (rFrameProperties[i].Name == "Width")
+                nIndexOfWidthProperty = i;
+        }
+        if (nIndexOfWidthProperty > -1 && nType == text::SizeType::FIX)
+            rFrameProperties[nIndexOfWidthProperty].Value >>= nWidth;
+
         for( size_t nProperty = 0; nProperty < SAL_N_ELEMENTS( aBorderProperties ); ++nProperty)
         {
-            OUString sPropertyName = getPropertyName(aBorderProperties[nProperty]);
+            const OUString & sPropertyName = getPropertyName(aBorderProperties[nProperty]);
             beans::PropertyValue aValue;
             aValue.Name = sPropertyName;
             aValue.Value = xTextRangeProperties->getPropertyValue(sPropertyName);
-            rFrameProperties.push_back(aValue);
             if( nProperty < 4 )
                 xTextRangeProperties->setPropertyValue( sPropertyName, uno::Any(table::BorderLine2()));
+            else // border spacing
+            {
+                sal_Int32 nDistance = 0;
+                aValue.Value >>= nDistance;
+
+                // left4/right5 need to be duplicated because of INVERT_BORDER_SPACING (DOCX only)
+                // Do not duplicate the top6/bottom7 border spacing.
+                if (nProperty > 5 || bIsRTFImport)
+                    aValue.Value <<= sal_Int32(0);
+
+                // frames need to be increased by the left/right para border spacing amount
+                // This is needed for RTF as well, but that requires other export/import fixes.
+                if (!bIsRTFImport && nProperty < 6 && nWidth && nDistance)
+                {
+                    nWidth += nDistance;
+                    rFrameProperties[nIndexOfWidthProperty].Value <<= nWidth;
+                }
+            }
+            if (aValue.Value.hasValue())
+                rFrameProperties.push_back(aValue);
         }
     }
     catch( const uno::Exception& )
@@ -1567,10 +1597,9 @@ static void lcl_MoveBorderPropertiesToFrame(std::vector<beans::PropertyValue>& r
 }
 
 
-static void lcl_AddRangeAndStyle(
+static void lcl_AddRange(
     ParagraphPropertiesPtr const & pToBeSavedProperties,
     uno::Reference< text::XTextAppend > const& xTextAppend,
-    const PropertyMapPtr& pPropertyMap,
     TextAppendContext const & rAppendContext)
 {
     uno::Reference<text::XParagraphCursor> xParaCursor(
@@ -1579,16 +1608,6 @@ static void lcl_AddRangeAndStyle(
     xParaCursor->gotoStartOfParagraph( false );
 
     pToBeSavedProperties->SetStartingRange(xParaCursor->getStart());
-    if(pPropertyMap)
-    {
-        std::optional<PropertyMap::Property> aParaStyle = pPropertyMap->getProperty(PROP_PARA_STYLE_NAME);
-        if( aParaStyle )
-        {
-            OUString sName;
-            aParaStyle->second >>= sName;
-            pToBeSavedProperties->SetParaStyleName(sName);
-        }
-    }
 }
 
 
@@ -1597,28 +1616,19 @@ constexpr sal_Int32 DEFAULT_FRAME_MIN_WIDTH = 0;
 constexpr sal_Int32 DEFAULT_FRAME_MIN_HEIGHT = 0;
 constexpr sal_Int32 DEFAULT_VALUE = 0;
 
-void DomainMapper_Impl::CheckUnregisteredFrameConversion( )
+std::vector<css::beans::PropertyValue>
+DomainMapper_Impl::MakeFrameProperties(const ParagraphProperties& rProps)
 {
-    if (m_aTextAppendStack.empty())
-        return;
-    TextAppendContext& rAppendContext = m_aTextAppendStack.top();
-    // n#779642: ignore fly frame inside table as it could lead to messy situations
-    if (!rAppendContext.pLastParagraphProperties)
-        return;
-    if (!rAppendContext.pLastParagraphProperties->IsFrameMode())
-        return;
-    if (!hasTableManager())
-        return;
-    if (getTableManager().isInTable())
-        return;
+    std::vector<beans::PropertyValue> aFrameProperties;
+
     try
     {
         // A paragraph's properties come from direct formatting or somewhere in the style hierarchy
         std::vector<const ParagraphProperties*> vProps;
-        vProps.emplace_back(rAppendContext.pLastParagraphProperties.get());
+        vProps.emplace_back(&rProps);
         sal_Int8 nSafetyLimit = 16;
-        StyleSheetEntryPtr pStyle = GetStyleSheetTable()->FindStyleSheetByConvertedStyleName(
-            rAppendContext.pLastParagraphProperties->GetParaStyleName());
+        StyleSheetEntryPtr pStyle
+            = GetStyleSheetTable()->FindStyleSheetByConvertedStyleName(rProps.GetParaStyleName());
         while (nSafetyLimit-- && pStyle && pStyle->m_pProperties)
         {
             vProps.emplace_back(&pStyle->m_pProperties->props());
@@ -1627,9 +1637,8 @@ void DomainMapper_Impl::CheckUnregisteredFrameConversion( )
                 break;
             pStyle = GetStyleSheetTable()->FindStyleSheetByISTD(pStyle->m_sBaseStyleIdentifier);
         }
-        SAL_WARN_IF(!nSafetyLimit,"writerfilter.dmapper","Inherited style loop likely: early exit");
+        SAL_WARN_IF(!nSafetyLimit, "writerfilter.dmapper", "Inheritance loop likely: early exit");
 
-        std::vector<beans::PropertyValue> aFrameProperties;
 
         sal_Int32 nWidth = -1;
         for (const auto pProp : vProps)
@@ -1805,37 +1814,60 @@ void DomainMapper_Impl::CheckUnregisteredFrameConversion( )
         aFrameProperties.push_back(comphelper::makePropertyValue(
             getPropertyName(PROP_BOTTOM_MARGIN),
             nVertOrient == text::VertOrientation::BOTTOM ? 0 : nBottomDist));
-
-        if (const std::optional<sal_Int16> nDirection = PopFrameDirection())
-        {
-            aFrameProperties.push_back(
-                comphelper::makePropertyValue(getPropertyName(PROP_FRM_DIRECTION), *nDirection));
-        }
-
-        // If there is no fill, the Word default is 100% transparency.
-        // Otherwise CellColorHandler has priority, and this setting
-        // will be ignored.
-        aFrameProperties.push_back(comphelper::makePropertyValue(
-            getPropertyName(PROP_BACK_COLOR_TRANSPARENCY), sal_Int32(100)));
-
-        uno::Sequence<beans::PropertyValue> aGrabBag(comphelper::InitPropertySequence(
-            { { "ParaFrameProperties",
-                uno::Any(rAppendContext.pLastParagraphProperties->IsFrameMode()) } }));
-        aFrameProperties.push_back(comphelper::makePropertyValue("FrameInteropGrabBag", aGrabBag));
-
-        lcl_MoveBorderPropertiesToFrame(aFrameProperties,
-                                        rAppendContext.pLastParagraphProperties->GetStartingRange(),
-                                        rAppendContext.pLastParagraphProperties->GetEndingRange());
-
-        //frame conversion has to be executed after table conversion
-        RegisterFrameConversion(
-            rAppendContext.pLastParagraphProperties->GetStartingRange(),
-            rAppendContext.pLastParagraphProperties->GetEndingRange(),
-            std::move(aFrameProperties) );
     }
-    catch( const uno::Exception& )
+    catch (const uno::Exception&)
     {
     }
+
+    return aFrameProperties;
+}
+
+void DomainMapper_Impl::CheckUnregisteredFrameConversion(bool bPreventOverlap)
+{
+    if (m_aTextAppendStack.empty())
+        return;
+    TextAppendContext& rAppendContext = m_aTextAppendStack.top();
+    // n#779642: ignore fly frame inside table as it could lead to messy situations
+    if (!rAppendContext.pLastParagraphProperties)
+        return;
+    if (!rAppendContext.pLastParagraphProperties->IsFrameMode())
+        return;
+    if (!hasTableManager())
+        return;
+    if (getTableManager().isInTable())
+        return;
+
+    std::vector<beans::PropertyValue> aFrameProperties
+        = MakeFrameProperties(*rAppendContext.pLastParagraphProperties);
+
+    if (const std::optional<sal_Int16> nDirection = PopFrameDirection())
+    {
+        aFrameProperties.push_back(
+            comphelper::makePropertyValue(getPropertyName(PROP_FRM_DIRECTION), *nDirection));
+    }
+
+    if (bPreventOverlap)
+        aFrameProperties.push_back(comphelper::makePropertyValue("AllowOverlap", uno::Any(false)));
+
+    // If there is no fill, the Word default is 100% transparency.
+    // Otherwise CellColorHandler has priority, and this setting
+    // will be ignored.
+    aFrameProperties.push_back(comphelper::makePropertyValue(
+        getPropertyName(PROP_BACK_COLOR_TRANSPARENCY), sal_Int32(100)));
+
+    uno::Sequence<beans::PropertyValue> aGrabBag(comphelper::InitPropertySequence(
+        { { "ParaFrameProperties", uno::Any(true) } }));
+    aFrameProperties.push_back(comphelper::makePropertyValue("FrameInteropGrabBag", aGrabBag));
+
+    lcl_MoveBorderPropertiesToFrame(aFrameProperties,
+                                    rAppendContext.pLastParagraphProperties->GetStartingRange(),
+                                    rAppendContext.pLastParagraphProperties->GetEndingRange(),
+                                    IsRTFImport());
+
+    //frame conversion has to be executed after table conversion, not now
+    RegisterFrameConversion(rAppendContext.pLastParagraphProperties->GetStartingRange(),
+                            rAppendContext.pLastParagraphProperties->GetEndingRange(),
+                            std::move(aFrameProperties));
 }
 
 /// Check if the style or its parent has a list id, recursively.
@@ -2208,6 +2240,16 @@ void DomainMapper_Impl::finishParagraph( const PropertyMapPtr& pPropertyMap, con
               old _and_ new DropCap must not occur
              */
 
+            // The paragraph style is vital to knowing all the frame properties.
+            std::optional<PropertyMap::Property> aParaStyle
+                = pPropertyMap->getProperty(PROP_PARA_STYLE_NAME);
+            if (aParaStyle)
+            {
+                OUString sName;
+                aParaStyle->second >>= sName;
+                pParaContext->props().SetParaStyleName(sName);
+            }
+
             bool bIsDropCap =
                 pParaContext->props().IsFrameMode() &&
                 sal::static_int_cast<Id>(pParaContext->props().GetDropCap()) != NS_ooxml::LN_Value_doc_ST_DropCap_none;
@@ -2244,22 +2286,97 @@ void DomainMapper_Impl::finishParagraph( const PropertyMapPtr& pPropertyMap, con
                     if( pParaContext->props().IsFrameMode() )
                         pToBeSavedProperties = new ParagraphProperties(pParaContext->props());
                 }
-                else if(*rAppendContext.pLastParagraphProperties == pParaContext->props() )
-                {
-                    //handles (7)
-                    rAppendContext.pLastParagraphProperties->SetEndingRange(rAppendContext.xInsertPosition.is() ? rAppendContext.xInsertPosition : xTextAppend->getEnd());
-                    bKeepLastParagraphProperties = true;
-                }
                 else
                 {
-                    //handles (8)(9) and completes (6)
-                    CheckUnregisteredFrameConversion( );
-
-                    // If different frame properties are set on this paragraph, keep them.
-                    if ( !bIsDropCap && pParaContext->props().IsFrameMode() )
+                    const bool bIsFrameMode(pParaContext->props().IsFrameMode());
+                    std::vector<beans::PropertyValue> aCurrFrameProperties;
+                    std::vector<beans::PropertyValue> aPrevFrameProperties;
+                    if (bIsFrameMode)
                     {
-                        pToBeSavedProperties = new ParagraphProperties(pParaContext->props());
-                        lcl_AddRangeAndStyle(pToBeSavedProperties, xTextAppend, pPropertyMap, rAppendContext);
+                        aCurrFrameProperties = MakeFrameProperties(pParaContext->props());
+                        aPrevFrameProperties
+                            = MakeFrameProperties(*rAppendContext.pLastParagraphProperties);
+                    }
+
+                    if (bIsFrameMode && aPrevFrameProperties == aCurrFrameProperties)
+                    {
+                        //handles (7)
+                        rAppendContext.pLastParagraphProperties->SetEndingRange(
+                            rAppendContext.xInsertPosition.is() ? rAppendContext.xInsertPosition
+                                                                : xTextAppend->getEnd());
+                        bKeepLastParagraphProperties = true;
+                    }
+                    else
+                    {
+                        // handles (8)(9) and completes (6)
+
+                        // RTF has an \overlap flag (which we ignore so far)
+                        // but DOCX has nothing like that for framePr
+                        // Always allow overlap in the RTF case - so there can be no regression.
+
+                        // In MSO UI, there is no setting for AllowOverlap for this kind of frame.
+                        // Although they CAN overlap with other anchored things,
+                        // they do not _easily_ overlap with other framePr's,
+                        // so when one frame follows another (8), don't let the first be overlapped.
+                        bool bPreventOverlap = !IsRTFImport() && bIsFrameMode && !bIsDropCap;
+
+                        // Preventing overlap is emulation - so deny overlap as little as possible.
+                        sal_Int16 nVertOrient = text::VertOrientation::NONE;
+                        sal_Int16 nVertOrientRelation = text::RelOrientation::FRAME;
+                        sal_Int32 nCurrVertPos = 0;
+                        sal_Int32 nPrevVertPos = 0;
+                        for (size_t i = 0; bPreventOverlap && i < aCurrFrameProperties.size(); ++i)
+                        {
+                            if (aCurrFrameProperties[i].Name == "VertOrientRelation")
+                            {
+                                aCurrFrameProperties[i].Value >>= nVertOrientRelation;
+                                if (nVertOrientRelation != text::RelOrientation::FRAME)
+                                    bPreventOverlap = false;
+                            }
+                            else if (aCurrFrameProperties[i].Name == "VertOrient")
+                            {
+                                aCurrFrameProperties[i].Value >>= nVertOrient;
+                                if (nVertOrient != text::VertOrientation::NONE)
+                                    bPreventOverlap = false;
+                            }
+                            else if (aCurrFrameProperties[i].Name == "VertOrientPosition")
+                            {
+                                aCurrFrameProperties[i].Value >>= nCurrVertPos;
+                                // arbitrary value. Assume it must be less than 1st line height
+                                if (nCurrVertPos > 20 || nCurrVertPos < -20)
+                                    bPreventOverlap = false;
+                            }
+                        }
+                        for (size_t i = 0; bPreventOverlap && i < aPrevFrameProperties.size(); ++i)
+                        {
+                            if (aPrevFrameProperties[i].Name == "VertOrientRelation")
+                            {
+                                aPrevFrameProperties[i].Value >>= nVertOrientRelation;
+                                if (nVertOrientRelation != text::RelOrientation::FRAME)
+                                    bPreventOverlap = false;
+                            }
+                            else if (aPrevFrameProperties[i].Name == "VertOrient")
+                            {
+                                aPrevFrameProperties[i].Value >>= nVertOrient;
+                                if (nVertOrient != text::VertOrientation::NONE)
+                                    bPreventOverlap = false;
+                            }
+                            else if (aPrevFrameProperties[i].Name == "VertOrientPosition")
+                            {
+                                aPrevFrameProperties[i].Value >>= nPrevVertPos;
+                                if (nPrevVertPos != nCurrVertPos)
+                                    bPreventOverlap = false;
+                            }
+                        }
+
+                        CheckUnregisteredFrameConversion(bPreventOverlap);
+
+                        // If different frame properties are set on this paragraph, keep them.
+                        if (!bIsDropCap && bIsFrameMode)
+                        {
+                            pToBeSavedProperties = new ParagraphProperties(pParaContext->props());
+                            lcl_AddRange(pToBeSavedProperties, xTextAppend, rAppendContext);
+                        }
                     }
                 }
             }
@@ -2270,16 +2387,14 @@ void DomainMapper_Impl::finishParagraph( const PropertyMapPtr& pPropertyMap, con
                 if( !bIsDropCap && pParaContext->props().IsFrameMode() )
                 {
                     pToBeSavedProperties = new ParagraphProperties(pParaContext->props());
-                    lcl_AddRangeAndStyle(pToBeSavedProperties, xTextAppend, pPropertyMap, rAppendContext);
+                    lcl_AddRange(pToBeSavedProperties, xTextAppend, rAppendContext);
                 }
             }
             std::vector<beans::PropertyValue> aProperties;
             if (pPropertyMap)
             {
                 aProperties = comphelper::sequenceToContainer< std::vector<beans::PropertyValue> >(pPropertyMap->GetPropertyValues());
-            }
-            if (pPropertyMap)
-            {
+
                 // tdf#64222 filter out the "paragraph marker" formatting and
                 // set it as a separate paragraph property, not a empty hint at
                 // end of paragraph
@@ -2373,7 +2488,10 @@ void DomainMapper_Impl::finishParagraph( const PropertyMapPtr& pPropertyMap, con
                             m_xPreviousParagraph->getPropertyValue("NumberingStyleName") >>= aPreviousNumberingName;
                         }
 
-                        if (!aPreviousNumberingName.isEmpty() && aCurrentNumberingName == aPreviousNumberingName)
+                        // tdf#133363: remove extra auto space even for mixed list styles
+                        if (!aPreviousNumberingName.isEmpty()
+                            && (aCurrentNumberingName == aPreviousNumberingName
+                                || !isNumberingViaRule))
                         {
                             uno::Sequence<beans::PropertyValue> aPrevPropertiesSeq;
                             m_xPreviousParagraph->getPropertyValue("ParaInteropGrabBag") >>= aPrevPropertiesSeq;
@@ -2498,9 +2616,6 @@ void DomainMapper_Impl::finishParagraph( const PropertyMapPtr& pPropertyMap, con
                         m_aAnchoredObjectAnchors.push_back(aInfo);
                         rAppendContext.m_aAnchoredObjects.clear();
                     }
-
-                    // We're no longer right after a table conversion.
-                    m_bConvertedTable = false;
 
                     if (xCursor.is())
                     {
@@ -4007,7 +4122,7 @@ void DomainMapper_Impl::PushShapeContext( const uno::Reference< drawing::XShape 
                                 if ( bOnlyApplyCharHeight && eId != PROP_CHAR_HEIGHT )
                                     continue;
 
-                                const OUString sPropName = getPropertyName(eId);
+                                const OUString & sPropName = getPropertyName(eId);
                                 if ( beans::PropertyState_DEFAULT_VALUE == xShapePropertyState->getPropertyState(sPropName) )
                                 {
                                     const uno::Any aProp = GetPropertyFromStyleSheet(eId, pEntry, /*bDocDefaults=*/true, /*bPara=*/true);
@@ -4586,7 +4701,11 @@ style::NumberingType::
     CHARS_CYRILLIC_UPPER_LETTER_SR
     CHARS_CYRILLIC_LOWER_LETTER_SR
     CHARS_CYRILLIC_UPPER_LETTER_N_SR
-    CHARS_CYRILLIC_LOWER_LETTER_N_SR*/
+    CHARS_CYRILLIC_LOWER_LETTER_N_SR
+    CHARS_CYRILLIC_UPPER_LETTER_UK
+    CHARS_CYRILLIC_LOWER_LETTER_UK
+    CHARS_CYRILLIC_UPPER_LETTER_N_UK
+    CHARS_CYRILLIC_LOWER_LETTER_N_UK*/
 
         };
         for(const NumberingPairs& rNumberingPair : aNumberingPairs)
@@ -4622,7 +4741,7 @@ static OUString lcl_ParseFormat( const OUString& rCommand )
             // turn date \@ MM into date \@"MM"
             command = OUString::Concat(rCommand.subView(0, delimPos + 2)) + "\"" + o3tl::trim(rCommand.subView(delimPos + 2)) + "\"";
         }
-        return OUString(msfilter::util::findQuotedText(command, "\\@\"", '\"'));
+        return OUString(msfilter::util::findQuotedText(command, u"\\@\"", '\"'));
     }
 
     return OUString();
@@ -5247,8 +5366,7 @@ uno::Reference<beans::XPropertySet> DomainMapper_Impl::FindOrCreateFieldMaster(c
     aFieldMasterName.append('.');
     if ( bIsMergeField && !sDatabaseDataSourceName.isEmpty() )
     {
-        aFieldMasterName.append(sDatabaseDataSourceName);
-        aFieldMasterName.append('.');
+        aFieldMasterName.append(sDatabaseDataSourceName + ".");
     }
     aFieldMasterName.append(rFieldMasterName);
     OUString sFieldMasterName = aFieldMasterName.makeStringAndClear();
@@ -5350,6 +5468,7 @@ FieldContext::FieldContext(uno::Reference< text::XTextRange > xStart)
     : m_bFieldCommandCompleted(false)
     , m_xStartRange(std::move( xStart ))
     , m_bFieldLocked( false )
+    , m_bCommandType(false)
 {
     m_pProperties = new PropertyMap();
 }
@@ -5381,7 +5500,7 @@ void FieldContext::CacheVariableValue(const uno::Any& rAny)
 
 void FieldContext::AppendCommand(std::u16string_view rPart)
 {
-    m_sCommand += rPart;
+    m_sCommand[m_bCommandType] += rPart;
 }
 
 ::std::vector<OUString> FieldContext::GetCommandParts() const
@@ -5450,6 +5569,8 @@ void DomainMapper_Impl::AppendFieldCommand(OUString const & rPartOfCommand)
     OSL_ENSURE( pContext, "no field context available");
     if( pContext )
     {
+        // Set command line type: normal or deleted
+        pContext->SetCommandType(m_bTextDeleted);
         pContext->AppendCommand( rPartOfCommand );
     }
 }
@@ -6472,6 +6593,9 @@ void DomainMapper_Impl::handleToc
 
         }
 
+        uno::Reference<container::XIndexAccess> xChapterNumberingRules;
+        if (auto xSupplier = GetTextDocument().query<text::XChapterNumberingSupplier>())
+            xChapterNumberingRules = xSupplier->getChapterNumberingRules();
         uno::Reference<container::XNameContainer> xStyles;
         if (auto xStylesSupplier = GetTextDocument().query<style::XStyleFamiliesSupplier>())
         {
@@ -6490,13 +6614,32 @@ void DomainMapper_Impl::handleToc
 
             // Get the tab stops coming from the styles; store to the level definitions
             uno::Sequence<style::TabStop> tabStops;
-            if (xStyles)
+            if (xChapterNumberingRules && xStyles)
             {
-                OUString style;
-                xTOC->getPropertyValue("ParaStyleLevel" + OUString::number(nLevel)) >>= style;
-                uno::Reference<beans::XPropertySet> xStyle;
-                if (xStyles->getByName(style) >>= xStyle)
-                    xStyle->getPropertyValue("ParaTabStops") >>= tabStops;
+                // This relies on the chapter numbering rules already defined
+                // (see ListDef::CreateNumberingRules)
+                uno::Sequence<beans::PropertyValue> props;
+                xChapterNumberingRules->getByIndex(nLevel - 1) >>= props;
+                bool bHasNumbering = false;
+                bool bUseTabStop = false;
+                for (const auto& propval : props)
+                {
+                    // We rely on PositionAndSpaceMode being always equal to LABEL_ALIGNMENT,
+                    // because ListDef::CreateNumberingRules doesn't create legacy lists
+                    if (propval.Name == "NumberingType")
+                        bHasNumbering = propval.Value != style::NumberingType::NUMBER_NONE;
+                    else if (propval.Name == "LabelFollowedBy")
+                        bUseTabStop = propval.Value == text::LabelFollow::LISTTAB;
+                    // Do not use FirstLineIndent property from the rules, because it is unreliable
+                }
+                if (bHasNumbering && bUseTabStop)
+                {
+                    OUString style;
+                    xTOC->getPropertyValue("ParaStyleLevel" + OUString::number(nLevel)) >>= style;
+                    uno::Reference<beans::XPropertySet> xStyle;
+                    if (xStyles->getByName(style) >>= xStyle)
+                        xStyle->getPropertyValue("ParaTabStops") >>= tabStops;
+                }
             }
 
             uno::Sequence< beans::PropertyValues > aNewLevel = lcl_createTOXLevelHyperlinks(
@@ -6560,7 +6703,13 @@ uno::Reference<beans::XPropertySet> DomainMapper_Impl::createSectionForRange(
             if (stepLeft)
                 xCursor->goLeft(1, true);
             uno::Reference< text::XTextContent > xSection( m_xTextFactory->createInstance(sObjectType), uno::UNO_QUERY_THROW );
-            xSection->attach( uno::Reference< text::XTextRange >( xCursor, uno::UNO_QUERY_THROW) );
+            try
+            {
+                xSection->attach( uno::Reference< text::XTextRange >( xCursor, uno::UNO_QUERY_THROW) );
+            }
+            catch(const uno::Exception&)
+            {
+            }
             xRet.set(xSection, uno::UNO_QUERY );
         }
         catch(const uno::Exception&)
@@ -6643,7 +6792,10 @@ void DomainMapper_Impl::handleIndex
     {
         sValue = sValue.replaceAll("\"", "");
         uno::Reference<text::XTextColumns> xTextColumns;
-        xTOC->getPropertyValue(getPropertyName( PROP_TEXT_COLUMNS )) >>= xTextColumns;
+        if (xTOC.is())
+        {
+            xTOC->getPropertyValue(getPropertyName( PROP_TEXT_COLUMNS )) >>= xTextColumns;
+        }
         if (xTextColumns.is())
         {
             xTextColumns->setColumnCount( sValue.toInt32() );
@@ -6730,6 +6882,11 @@ void DomainMapper_Impl::CloseFieldCommand()
     m_bSetUserFieldContent = false;
     m_bSetCitation = false;
     m_bSetDateValue = false;
+    // tdf#124472: If the normal command line is not empty, use it,
+    // otherwise, the last active row is evaluated.
+    if (!pContext->GetCommandIsEmpty(false))
+        pContext->SetCommandType(false);
+
     const FieldConversionMap_t& aFieldConversionMap = lcl_GetFieldConversion();
 
     try
@@ -7273,7 +7430,7 @@ void DomainMapper_Impl::CloseFieldCommand()
                     // command looks like: " SEQ Table \* ARABIC "
                     OUString sCmd(pContext->GetCommand());
                     // find the sequence name, e.g. "SEQ"
-                    std::u16string_view sSeqName = msfilter::util::findQuotedText(sCmd, "SEQ ", '\\');
+                    std::u16string_view sSeqName = msfilter::util::findQuotedText(sCmd, u"SEQ ", '\\');
                     sSeqName = o3tl::trim(sSeqName);
 
                     // create a sequence field master using the sequence name

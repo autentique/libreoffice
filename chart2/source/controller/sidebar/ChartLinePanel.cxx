@@ -55,10 +55,7 @@ OUString getCID(const rtl::Reference<::chart::ChartModel>& xModel)
 
     css::uno::Any aAny = xSelectionSupplier->getSelection();
     if (!aAny.hasValue())
-    {
-        xSelectionSupplier->select(css::uno::Any(OUString("CID/Page=")));
-        aAny = xSelectionSupplier->getSelection();
-    }
+        return OUString();
 
     OUString aCID;
     aAny >>= aCID;
@@ -284,7 +281,7 @@ void ChartLinePanel::updateLineWidth(bool bDisabled, bool bSetOrDefault, const S
     if (comphelper::LibreOfficeKit::isActive() && pViewShell)
     {
         pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                        (".uno:LineWidth=" + std::to_string(mnWidthCoreValue)).c_str());
+                        ".uno:LineWidth=" + OString::number(mnWidthCoreValue));
     }
 }
 

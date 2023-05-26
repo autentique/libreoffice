@@ -25,7 +25,7 @@
 #include <vcl/svapp.hxx>
 #include <controls/dialogcontrol.hxx>
 #include <controls/geometrycontrolmodel.hxx>
-#include <toolkit/helper/property.hxx>
+#include <helper/property.hxx>
 #include <helper/servicenames.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
 #include <com/sun/star/awt/WindowAttribute.hpp>
@@ -279,20 +279,20 @@ void UnoControlDialogModel::setFastPropertyValue_NoBroadcast( std::unique_lock<s
             uno::Reference<graphic::XGraphic> xGraphic;
             if (rValue >>= sImageURL)
             {
-                setPropertyValueImpl(rGuard,
-                    GetPropertyName(BASEPROPERTY_GRAPHIC),
+                setFastPropertyValueImpl(rGuard,
+                    BASEPROPERTY_GRAPHIC,
                     uno::Any(ImageHelper::getGraphicAndGraphicObjectFromURL_nothrow(
                         mxGrfObj, sImageURL)));
             }
             else if (rValue >>= xGraphic)
             {
-                setPropertyValueImpl(rGuard, "Graphic", uno::Any(xGraphic));
+                setFastPropertyValueImpl(rGuard, BASEPROPERTY_GRAPHIC, uno::Any(xGraphic));
             }
         }
     }
     catch( const css::uno::Exception& )
     {
-        OSL_ENSURE( false, "UnoControlDialogModel::setFastPropertyValue_NoBroadcast: caught an exception while setting ImageURL properties!" );
+        TOOLS_WARN_EXCEPTION( "toolkit", "caught an exception while setting ImageURL properties" );
     }
 }
 

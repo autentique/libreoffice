@@ -51,7 +51,6 @@ using ::com::sun::star::task::PasswordRequestMode;
 using ::com::sun::star::task::PasswordRequestMode_PASSWORD_ENTER;
 using ::com::sun::star::task::PasswordRequestMode_PASSWORD_REENTER;
 using ::com::sun::star::task::XInteractionHandler;
-using ::com::sun::star::task::XInteractionRequest;
 
 using namespace ::com::sun::star;
 
@@ -622,11 +621,10 @@ OUString DocPasswordHelper::GetOoxHashAsBase64(
 
     if (eResult == DocPasswordVerifierResult::OK && !aPassword.isEmpty())
     {
-        if (std::find_if(std::cbegin(aEncData), std::cend(aEncData),
+        if (std::none_of(std::cbegin(aEncData), std::cend(aEncData),
                          [](const css::beans::NamedValue& val) {
                              return val.Name == PACKAGE_ENCRYPTIONDATA_SHA256UTF8;
-                         })
-            == std::cend(aEncData))
+                         }))
         {
             // tdf#118639: We need ODF encryption data for autorecovery, where password
             // will already be unavailable, so generate and append it here

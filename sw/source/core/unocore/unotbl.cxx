@@ -710,8 +710,7 @@ void sw_setValue( SwXCell &rCell, double nVal )
     aSet.Put(aVal);
     pDoc->SetTableBoxFormulaAttrs( *rCell.m_pBox, aSet );
     // update table
-    SwTableFormulaUpdate aTableUpdate( SwTable::FindTable( rCell.GetFrameFormat() ));
-    pDoc->getIDocumentFieldsAccess().UpdateTableFields( &aTableUpdate );
+    pDoc->getIDocumentFieldsAccess().UpdateTableFields(SwTable::FindTable(rCell.GetFrameFormat()));
 }
 
 
@@ -786,12 +785,6 @@ const SwStartNode *SwXCell::GetStartNode() const
     return pSttNd;
 }
 
-uno::Reference< text::XTextCursor >
-SwXCell::CreateCursor()
-{
-    return createTextCursor();
-}
-
 bool SwXCell::IsValid() const
 {
     // FIXME: this is now a const method, to make SwXText::IsValid invisible
@@ -853,8 +846,7 @@ void SwXCell::setFormula(const OUString& rFormula)
     aSet.Put(aFormula);
     GetDoc()->SetTableBoxFormulaAttrs( *m_pBox, aSet );
     // update table
-    SwTableFormulaUpdate aTableUpdate( SwTable::FindTable( GetFrameFormat() ));
-    pMyDoc->getIDocumentFieldsAccess().UpdateTableFields( &aTableUpdate );
+    pMyDoc->getIDocumentFieldsAccess().UpdateTableFields(SwTable::FindTable(GetFrameFormat()));
 }
 
 double SwXCell::getValue()
@@ -903,9 +895,8 @@ sal_Int32 SwXCell::getError()
     return sal_Int32(sContent == SwViewShell::GetShellRes()->aCalc_Error);
 }
 
-uno::Reference<text::XTextCursor> SwXCell::createTextCursor()
+rtl::Reference< SwXTextCursor > SwXCell::createXTextCursor()
 {
-    SolarMutexGuard aGuard;
     if(!m_pStartNode && !IsValid())
         throw uno::RuntimeException();
     const SwStartNode* pSttNd = m_pStartNode ? m_pStartNode : m_pBox->GetSttNd();
@@ -914,12 +905,11 @@ uno::Reference<text::XTextCursor> SwXCell::createTextCursor()
         new SwXTextCursor(*GetDoc(), this, CursorType::TableText, aPos);
     auto& rUnoCursor(pXCursor->GetCursor());
     rUnoCursor.Move(fnMoveForward, GoInNode);
-    return static_cast<text::XWordCursor*>(pXCursor.get());
+    return pXCursor;
 }
 
-uno::Reference<text::XTextCursor> SwXCell::createTextCursorByRange(const uno::Reference< text::XTextRange > & xTextPosition)
+rtl::Reference<SwXTextCursor> SwXCell::createXTextCursorByRange(const uno::Reference< text::XTextRange > & xTextPosition)
 {
-    SolarMutexGuard aGuard;
     SwUnoInternalPaM aPam(*GetDoc());
     if((!m_pStartNode && !IsValid()) || !::sw::XTextRangeToSwPaM(aPam, xTextPosition))
         throw uno::RuntimeException();
@@ -930,9 +920,8 @@ uno::Reference<text::XTextCursor> SwXCell::createTextCursorByRange(const uno::Re
         p1 = p1->StartOfSectionNode();
     if( p1 != pSttNd )
         return nullptr;
-    return static_cast<text::XWordCursor*>(
-        new SwXTextCursor(*GetDoc(), this, CursorType::TableText,
-        *aPam.GetPoint(), aPam.GetMark()));
+    return new SwXTextCursor(*GetDoc(), this, CursorType::TableText,
+                *aPam.GetPoint(), aPam.GetMark());
 }
 
 uno::Reference< beans::XPropertySetInfo >  SwXCell::getPropertySetInfo()
@@ -2083,11 +2072,28 @@ SwXTextTable::attach(const uno::Reference<text::XTextRange> & xTextRange)
             pDoc->getIDocumentContentOperations().DeleteAndJoin(aPam);
             aPam.DeleteMark();
         }
+
+        OUString tableName;
+        if (const::uno::Any* pName;
+            m_pImpl->m_pTableProps->GetProperty(FN_UNO_TABLE_NAME, 0, pName))
+        {
+            tableName = pName->get<OUString>();
+        }
+        else if (!m_pImpl->m_sTableName.isEmpty())
+        {
+            sal_uInt16 nIndex = 1;
+            tableName = m_pImpl->m_sTableName;
+            while (pDoc->FindTableFormatByName(tableName, true) && nIndex < USHRT_MAX)
+                tableName = m_pImpl->m_sTableName + OUString::number(nIndex++);
+        }
+
         pTable = pDoc->InsertTable(SwInsertTableOptions( SwInsertTableFlags::Headline | SwInsertTableFlags::DefaultBorder | SwInsertTableFlags::SplitLayout, 0 ),
                 *aPam.GetPoint(),
                 m_pImpl->m_nRows,
                 m_pImpl->m_nColumns,
-                text::HoriOrientation::FULL);
+                text::HoriOrientation::FULL,
+                nullptr, nullptr, false, true,
+                tableName);
         if(pTable)
         {
             // here, the properties of the descriptor need to be analyzed
@@ -2097,20 +2103,6 @@ SwXTextTable::attach(const uno::Reference<text::XTextRange> & xTextRange)
 
             m_pImpl->SetFrameFormat(*pTableFormat);
 
-            if (!m_pImpl->m_sTableName.isEmpty())
-            {
-                sal_uInt16 nIndex = 1;
-                OUString sTmpNameIndex(m_pImpl->m_sTableName);
-                while(pDoc->FindTableFormatByName(sTmpNameIndex, true) && nIndex < USHRT_MAX)
-                {
-                    sTmpNameIndex = m_pImpl->m_sTableName + OUString::number(nIndex++);
-                }
-                pDoc->SetTableName( *pTableFormat, sTmpNameIndex);
-            }
-
-            const::uno::Any* pName;
-            if (m_pImpl->m_pTableProps->GetProperty(FN_UNO_TABLE_NAME, 0, pName))
-                setName(pName->get<OUString>());
             m_pImpl->m_pTableProps.reset();
         }
         pDoc->GetIDocumentUndoRedo().EndUndo( SwUndoId::END, nullptr );
@@ -2971,10 +2963,10 @@ void SwXTextTable::setName(const OUString& rName)
     if(pFormat)
     {
         const OUString aOldName( pFormat->GetName() );
-        const SwFrameFormats* pFrameFormats = pFormat->GetDoc()->GetTableFrameFormats();
+        const sw::TableFrameFormats* pFrameFormats = pFormat->GetDoc()->GetTableFrameFormats();
         for (size_t i = pFrameFormats->size(); i;)
         {
-            const SwFrameFormat* pTmpFormat = (*pFrameFormats)[--i];
+            const SwTableFormat* pTmpFormat = (*pFrameFormats)[--i];
             if( !pTmpFormat->IsDefault() &&
                 pTmpFormat->GetName() == rName &&
                             pFormat->GetDoc()->IsUsed( *pTmpFormat ))

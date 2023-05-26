@@ -25,6 +25,7 @@
 #include <tools/datetimeutils.hxx>
 #include <hintids.hxx>
 #include <svl/itemiter.hxx>
+#include <editeng/prntitem.hxx>
 #include <comphelper/lok.hxx>
 #include <comphelper/string.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
@@ -407,7 +408,7 @@ void SwRedlineTable::LOKRedlineNotification(RedlineNotification nType, SwRangeRe
     while (pViewShell)
     {
         if (pView && pView->GetDocId() == pViewShell->GetDocId())
-            pViewShell->libreOfficeKitViewCallback(nType == RedlineNotification::Modify ? LOK_CALLBACK_REDLINE_TABLE_ENTRY_MODIFIED : LOK_CALLBACK_REDLINE_TABLE_SIZE_CHANGED, aPayload.c_str());
+            pViewShell->libreOfficeKitViewCallback(nType == RedlineNotification::Modify ? LOK_CALLBACK_REDLINE_TABLE_ENTRY_MODIFIED : LOK_CALLBACK_REDLINE_TABLE_SIZE_CHANGED, OString(aPayload));
         pViewShell = SfxViewShell::GetNext(*pViewShell);
     }
 }
@@ -529,6 +530,16 @@ std::vector<std::unique_ptr<SwRangeRedline>> GetAllValidRanges(std::unique_ptr<S
             } while( pTab ); // If there is another table we have to repeat our step backwards
         }
 
+        // insert dummy character to the empty table rows to keep their changes
+        SwNode& rBoxNode = pNew->GetMark()->GetNode();
+        if ( rBoxNode.GetDoc().GetIDocumentUndoRedo().DoesUndo() && rBoxNode.GetTableBox() &&
+             rBoxNode.GetTableBox()->GetUpper()->IsEmpty() && rBoxNode.GetTextNode() )
+        {
+            ::sw::UndoGuard const undoGuard(rBoxNode.GetDoc().GetIDocumentUndoRedo());
+            rBoxNode.GetTextNode()->InsertDummy();
+            pNew->GetMark()->SetContent( 1 );
+        }
+
         if( *pNew->GetPoint() > *pEnd )
         {
             pC = nullptr;
@@ -581,11 +592,32 @@ std::vector<std::unique_ptr<SwRangeRedline>> GetAllValidRanges(std::unique_ptr<S
 
 } // namespace sw
 
+static void lcl_setRowNotTracked(SwNode& rNode)
+{
+    SwDoc& rDoc = rNode.GetDoc();
+    if ( rDoc.GetIDocumentUndoRedo().DoesUndo() && rNode.GetTableBox() )
+    {
+        SvxPrintItem aSetTracking(RES_PRINT, false);
+        SwNodeIndex aInsPos( *(rNode.GetTableBox()->GetSttNd()), 1);
+        SwCursor aCursor( SwPosition(aInsPos), nullptr );
+        ::sw::UndoGuard const undoGuard(rNode.GetDoc().GetIDocumentUndoRedo());
+        rDoc.SetRowNotTracked( aCursor, aSetTracking );
+    }
+}
+
 bool SwRedlineTable::InsertWithValidRanges(SwRangeRedline*& p, size_type* pInsPos)
 {
     bool bAnyIns = false;
+    bool bInsert = RedlineType::Insert == p->GetType();
+    SwNode* pSttNode = &p->Start()->GetNode();
+
     std::vector<std::unique_ptr<SwRangeRedline>> redlines(
             GetAllValidRanges(std::unique_ptr<SwRangeRedline>(p)));
+
+    // tdf#147180 set table change tracking in the empty row with text insertion
+    if ( bInsert )
+        lcl_setRowNotTracked(*pSttNode);
+
     for (std::unique_ptr<SwRangeRedline> & pRedline : redlines)
     {
         assert(pRedline->HasValidRange());
@@ -593,6 +625,9 @@ bool SwRedlineTable::InsertWithValidRanges(SwRangeRedline*& p, size_type* pInsPo
         auto pTmpRedline = pRedline.release();
         if (Insert(pTmpRedline, nInsPos))
         {
+            // tdf#147180 set table tracking to the table row
+            lcl_setRowNotTracked(pTmpRedline->GetPointNode());
+
             pTmpRedline->CallDisplayFunc(nInsPos);
             bAnyIns = true;
             if (pInsPos && *pInsPos < nInsPos)

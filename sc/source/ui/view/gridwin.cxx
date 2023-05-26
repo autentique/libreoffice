@@ -63,6 +63,7 @@
 #include <com/sun/star/sheet/TableValidationVisibility.hpp>
 #include <com/sun/star/awt/KeyModifier.hpp>
 #include <com/sun/star/awt/MouseButton.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/script/vba/VBAEventId.hpp>
 #include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <com/sun/star/text/textfield/Type.hpp>
@@ -642,11 +643,75 @@ public:
     }
 };
 
+class AutoFilterSortColorAction : public AutoFilterSubMenuAction
+{
+private:
+    Color m_aColor;
+    ScViewData& m_rViewData;
+
+public:
+    AutoFilterSortColorAction(ScGridWindow* p, ScListSubMenuControl* pSubMenu, ScGridWindow::AutoFilterMode eMode, const Color& rColor, ScViewData& rViewData)
+        : AutoFilterSubMenuAction(p, pSubMenu, eMode)
+        , m_aColor(rColor)
+        , m_rViewData(rViewData)
+    {
+    }
+
+    virtual bool execute() override
+    {
+        const AutoFilterData* pData =
+            static_cast<const AutoFilterData*>(m_pSubMenu->getExtendedData());
+
+        if (!pData)
+            return false;
+
+        ScDBData* pDBData = pData->mpData;
+        if (!pDBData)
+            return false;
+
+        const ScAddress& rPos = pData->maPos;
+        SCCOL nCol = rPos.Col();
+        ScSortParam aSortParam;
+        pDBData->GetSortParam(aSortParam);
+        if (nCol < aSortParam.nCol1 || nCol > aSortParam.nCol2)
+            // out of bound
+            return false;
+
+        bool bHasHeader = pDBData->HasHeader();
+
+        aSortParam.bHasHeader = bHasHeader;
+        aSortParam.bByRow = true;
+        aSortParam.bCaseSens = false;
+        aSortParam.bNaturalSort = false;
+        aSortParam.aDataAreaExtras.mbCellNotes = false;
+        aSortParam.aDataAreaExtras.mbCellDrawObjects = true;
+        aSortParam.aDataAreaExtras.mbCellFormats = true;
+        aSortParam.bInplace = true;
+        aSortParam.maKeyState[0].bDoSort = true;
+        aSortParam.maKeyState[0].nField = nCol;
+        aSortParam.maKeyState[0].bAscending = true;
+        aSortParam.maKeyState[0].aColorSortMode = meMode == ScGridWindow::AutoFilterMode::TextColor
+                                                      ? ScColorSortMode::TextColor
+                                                      : ScColorSortMode::BackgroundColor;
+        aSortParam.maKeyState[0].aColorSortColor = m_aColor;
+
+        for (size_t i = 1; i < aSortParam.GetSortKeyCount(); ++i)
+            aSortParam.maKeyState[i].bDoSort = false;
+
+        m_rViewData.GetViewShell()->UISort(aSortParam);
+
+        return true;
+    }
+};
+
 class AutoFilterColorPopupStartAction : public AutoFilterSubMenuAction
 {
+private:
+    bool mbIsFilter;
 public:
-    AutoFilterColorPopupStartAction(ScGridWindow* p, ScListSubMenuControl* pSubMenu)
-        : AutoFilterSubMenuAction(p, pSubMenu, ScGridWindow::AutoFilterMode::Normal)
+    AutoFilterColorPopupStartAction(ScGridWindow* p, ScListSubMenuControl* pSubMenu, bool bIsFilter)
+        : AutoFilterSubMenuAction(p, pSubMenu, ScGridWindow::AutoFilterMode::Normal),
+        mbIsFilter(bIsFilter)
     {
     }
 
@@ -747,8 +812,18 @@ public:
                     OUString sText = eMode == ScGridWindow::AutoFilterMode::TextColor
                                          ? ScResId(SCSTR_FILTER_AUTOMATIC_COLOR)
                                          : ScResId(SCSTR_FILTER_NO_FILL);
-                    m_pSubMenu->addMenuColorItem(sText, bActive, *xDev, nMenu,
-                                                 new AutoFilterColorAction(mpWindow, m_pSubMenu, eMode, rColor));
+                    if (mbIsFilter)
+                    {
+                        m_pSubMenu->addMenuColorItem(
+                            sText, bActive, *xDev, nMenu,
+                            new AutoFilterColorAction(mpWindow, m_pSubMenu, eMode, rColor));
+                    }
+                    else
+                    {
+                        m_pSubMenu->addMenuColorItem(
+                            sText, bActive, *xDev, nMenu,
+                            new AutoFilterSortColorAction(mpWindow, m_pSubMenu, eMode, rColor, rViewData));
+                    }
                 }
                 else
                 {
@@ -768,8 +843,19 @@ public:
                     if (!bFoundColorName)
                         sName = "#" + rColor.AsRGBHexString().toAsciiUpperCase();
 
-                    m_pSubMenu->addMenuColorItem(sName, bActive, *xDev, nMenu,
-                                                 new AutoFilterColorAction(mpWindow, m_pSubMenu, eMode, rColor));
+                    if (mbIsFilter)
+                    {
+                        m_pSubMenu->addMenuColorItem(
+                            sName, bActive, *xDev, nMenu,
+                            new AutoFilterColorAction(mpWindow, m_pSubMenu, eMode, rColor));
+                    }
+                    else
+                    {
+                        m_pSubMenu->addMenuColorItem(
+                            sName, bActive, *xDev, nMenu,
+                            new AutoFilterSortColorAction(mpWindow, m_pSubMenu, eMode, rColor,
+                                                          rViewData));
+                    }
                 }
             }
 
@@ -992,8 +1078,10 @@ void ScGridWindow::LaunchAutoFilterMenu(SCCOL nCol, SCROW nRow)
         ScResId(STR_MENU_SORT_DESC),
         new AutoFilterAction(this, AutoFilterMode::SortDescending));
     mpAutoFilterPopup->addSeparator();
+    if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_SORT_COLOR), true, true))
+        pSubMenu->setPopupStartAction(new AutoFilterColorPopupStartAction(this, pSubMenu, false));
     if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_FILTER_COLOR), true, true))
-        pSubMenu->setPopupStartAction(new AutoFilterColorPopupStartAction(this, pSubMenu));
+        pSubMenu->setPopupStartAction(new AutoFilterColorPopupStartAction(this, pSubMenu, true));
     if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_FILTER_CONDITION), true, false))
     {
         pSubMenu->addMenuItem(
@@ -1085,6 +1173,7 @@ void ScGridWindow::UpdateAutoFilterFromMenu(AutoFilterMode eMode)
             aSortParam.maKeyState[0].bDoSort = true;
             aSortParam.maKeyState[0].nField = nCol;
             aSortParam.maKeyState[0].bAscending = (eMode == AutoFilterMode::SortAscending);
+            aSortParam.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
             for (size_t i = 1; i < aSortParam.GetSortKeyCount(); ++i)
                 aSortParam.maKeyState[i].bDoSort = false;
@@ -1962,11 +2051,18 @@ void ScGridWindow::HandleMouseButtonDown( const MouseEvent& rMEvt, MouseEventSta
             }
         }
 
-        if (pAttr->HasPivotButton() || pAttr->HasPivotPopupButton())
+        if (pAttr->HasPivotButton() || pAttr->HasPivotPopupButton() || pAttr->HasPivotMultiFieldPopupButton())
         {
-            DoPushPivotButton(nPosX, nPosY, rMEvt, pAttr->HasPivotButton(), pAttr->HasPivotPopupButton());
+            DoPushPivotButton(nPosX, nPosY, rMEvt, pAttr->HasPivotButton(),
+                pAttr->HasPivotPopupButton(), pAttr->HasPivotMultiFieldPopupButton());
             rState.mbActivatePart = false;
             return;
+        }
+
+        if (pAttr->HasPivotToggle())
+        {
+            DoPushPivotToggle(nPosX, nPosY, rMEvt);
+            rState.mbActivatePart = false;
         }
 
         //  List Validity drop-down button
@@ -2432,7 +2528,7 @@ void ScGridWindow::MouseButtonUp( const MouseEvent& rMEvt )
                     double fPPTX = pViewShell->GetViewData().GetPPTX();
                     int mouseX = aPos.X() / fPPTX;
                     OString aMsg(aUrl.toUtf8() + " coordinates: " + aCursor + ", " + OString::number(mouseX));
-                    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_HYPERLINK_CLICKED, aMsg.getStr());
+                    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_HYPERLINK_CLICKED, aMsg);
                 } else
                     ScGlobal::OpenURL(aUrl, aTarget);
             }
@@ -2457,19 +2553,15 @@ void ScGridWindow::MouseButtonUp( const MouseEvent& rMEvt )
                     if (pStr)
                         aBuf.append(*pStr);
 
-                    aBuf.append('#');
-                    aBuf.append(aExtInfo.maTabName);
-                    aBuf.append('.');
                     OUString aRefCalcA1(aTempAddr.Format(ScRefFlags::ADDR_ABS, nullptr, formula::FormulaGrammar::CONV_OOO));
-                    aBuf.append(aRefCalcA1);
+                    aBuf.append("#" + aExtInfo.maTabName + "." + aRefCalcA1);
                     ScGlobal::OpenURL(aBuf.makeStringAndClear(), aTarget);
                 }
                 else
                 {
                     // Internal reference.
-                    aBuf.append('#');
                     OUString aUrlCalcA1(aTempAddr.Format(ScRefFlags::ADDR_ABS_3D, &rDoc, formula::FormulaGrammar::CONV_OOO));
-                    aBuf.append(aUrlCalcA1);
+                    aBuf.append("#" + aUrlCalcA1);
                     ScGlobal::OpenURL(aBuf.makeStringAndClear(), aTarget, isTiledRendering);
                 }
             }
@@ -5010,7 +5102,7 @@ void ScGridWindow::updateLOKInputHelp(const OUString& title, const OUString& con
 
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aTree);
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_VALIDITY_INPUT_HELP, aStream.str().c_str());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_VALIDITY_INPUT_HELP, OString(aStream.str()));
 }
 
 void ScGridWindow::updateLOKValListButton( bool bVisible, const ScAddress& rPos ) const
@@ -5020,14 +5112,14 @@ void ScGridWindow::updateLOKValListButton( bool bVisible, const ScAddress& rPos 
     std::stringstream ss;
     ss << nX << ", " << nY << ", " << static_cast<unsigned int>(bVisible);
     ScTabViewShell* pViewShell = mrViewData.GetViewShell();
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_VALIDITY_LIST_BUTTON, ss.str().c_str());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_VALIDITY_LIST_BUTTON, OString(ss.str()));
 }
 
 void ScGridWindow::notifyKitCellFollowJump( ) const
 {
     ScTabViewShell* pViewShell = mrViewData.GetViewShell();
 
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_SC_FOLLOW_JUMP, getCellCursor().getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_SC_FOLLOW_JUMP, getCellCursor());
 }
 
 void ScGridWindow::UpdateListValPos( bool bVisible, const ScAddress& rPos )
@@ -5830,7 +5922,7 @@ void ScGridWindow::notifyKitCellCursor() const
 {
     ScTabViewShell* pViewShell = mrViewData.GetViewShell();
 
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_CURSOR, getCellCursor().getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_CURSOR, getCellCursor());
     if (bListValButton && aListValPos == mrViewData.GetCurPos())
         updateLOKValListButton(true, aListValPos);
     std::vector<tools::Rectangle> aRects;
@@ -6122,8 +6214,8 @@ void ScGridWindow::UpdateKitSelection(const std::vector<tools::Rectangle>& rRect
     if (!aBoundingBox.IsEmpty())
         sBoundingBoxString = aBoundingBox.toString();
     OString aRectListString = rectanglesToString(rLogicRects);
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString.getStr());
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectListString.getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString);
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectListString);
 
     if (bInPrintTwips)
     {
@@ -6150,7 +6242,7 @@ void ScGridWindow::UpdateKitSelection(const std::vector<tools::Rectangle>& rRect
         pGrid->GetPixelRectsFor(mrViewData.GetMarkData() /* ours */, aPixelRects);
         auto aOtherLogicRects = convertPixelToLogical(pOther->GetViewData(), aPixelRects, aDummyBBox);
         SfxLokHelper::notifyOtherView(pViewShell, pOther, LOK_CALLBACK_TEXT_VIEW_SELECTION,
-                                      "selection", rectanglesToString(aOtherLogicRects).getStr());
+                                      "selection", rectanglesToString(aOtherLogicRects));
     }
 }
 
@@ -6192,8 +6284,8 @@ void ScGridWindow::updateOtherKitSelections() const
             if (!aBoundingBox.IsEmpty())
                 sBoundingBoxString = aBoundingBox.toString();
 
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString.getStr());
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectsString.getStr());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString);
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectsString);
         }
         else
             SfxLokHelper::notifyOtherView(it, pViewShell, LOK_CALLBACK_TEXT_VIEW_SELECTION,
@@ -6223,7 +6315,7 @@ void updateLibreOfficeKitAutoFill(const ScViewData& rViewData, tools::Rectangle 
     }
 
     ScTabViewShell* pViewShell = rViewData.GetViewShell();
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_AUTO_FILL_AREA, sRectangleString.getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_AUTO_FILL_AREA, sRectangleString);
 }
 
 } //end anonymous namespace
@@ -6362,7 +6454,7 @@ void ScGridWindow::UpdateCursorOverlay()
 
             if (xOverlayManager.is())
             {
-                Color aCursorColor = GetSettings().GetStyleSettings().GetHighlightColor();
+                Color aCursorColor = GetSettings().GetStyleSettings().GetAccentColor();
                 if (mrViewData.GetActivePart() != eWhich)
                     // non-active pane uses a different color.
                     aCursorColor = SC_MOD()->GetColorConfig().GetColorValue(svtools::CALCPAGEBREAKAUTOMATIC).nColor;
@@ -6755,8 +6847,8 @@ void ScGridWindow::UpdateDragRectOverlay()
             if (!aBoundingBox.IsEmpty())
                 sBoundingBoxString = aBoundingBox.toString();
 
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString.getStr());
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectsString.getStr());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, sBoundingBoxString);
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aRectsString);
         }
     }
 

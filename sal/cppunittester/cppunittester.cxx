@@ -91,8 +91,7 @@ std::string convertLazy(std::u16string_view s16) {
     OString s8(OUStringToOString(s16, osl_getThreadTextEncoding()));
     static_assert(sizeof (sal_Int32) <= sizeof (std::string::size_type), "must be at least the same size");
         // ensure following cast is legitimate
-    return std::string(
-        s8.getStr(), static_cast< std::string::size_type >(s8.getLength()));
+    return std::string(s8);
 }
 
 //Output how long each test took
@@ -503,6 +502,10 @@ static void printStack( PCONTEXT ctx )
     stack.AddrPC.Offset    = ctx->Rip;
     stack.AddrStack.Offset = ctx->Rsp;
     stack.AddrFrame.Offset = ctx->Rsp;
+#elif defined _M_ARM64
+    stack.AddrPC.Offset    = ctx->Pc;
+    stack.AddrStack.Offset = ctx->Sp;
+    stack.AddrFrame.Offset = ctx->Fp;
 #else
     stack.AddrPC.Offset    = ctx->Eip;
     stack.AddrStack.Offset = ctx->Esp;
@@ -529,6 +532,8 @@ static void printStack( PCONTEXT ctx )
         (
 #ifdef _M_AMD64
             IMAGE_FILE_MACHINE_AMD64,
+#elif defined _M_ARM64
+            IMAGE_FILE_MACHINE_ARM64,
 #else
             IMAGE_FILE_MACHINE_I386,
 #endif

@@ -446,17 +446,13 @@ static void lcl_TabGetMaxLineWidth(const SvxBorderLine* pBorderLine, SvxBorderLi
     rBorderLine.SetColor(pBorderLine->GetColor());
 }
 
-static bool lcl_BoxesInDeletedRows(SwWrtShell &rSh, const SwSelBoxes& rBoxes)
+static bool lcl_BoxesInTrackedRows(SwWrtShell &rSh, const SwSelBoxes& rBoxes)
 {
-    // cursor and selection are there only in deleted rows in Show Changes mode
-    if ( rSh.GetLayout()->IsHideRedlines() )
-        return false;
-
-    // not selected or all selected rows are deleted
+    // cursor and selection are there only in tracked rows
     bool bRet = true;
     SwRedlineTable::size_type nRedlinePos = 0;
     if ( rBoxes.empty() )
-        bRet = rSh.GetCursor()->GetPointNode().GetTableBox()->GetUpper()->IsDeleted(nRedlinePos);
+        bRet = rSh.GetCursor()->GetPointNode().GetTableBox()->GetUpper()->IsTracked(nRedlinePos);
     else
     {
         tools::Long nBoxes = rBoxes.size();
@@ -465,7 +461,7 @@ static bool lcl_BoxesInDeletedRows(SwWrtShell &rSh, const SwSelBoxes& rBoxes)
         {
             SwTableLine* pLine = rBoxes[i]->GetUpper();
             if ( pLine != pPrevLine )
-                bRet &= pLine->IsDeleted(nRedlinePos);
+                bRet &= pLine->IsTracked(nRedlinePos);
             pPrevLine = pLine;
         }
     }
@@ -629,7 +625,7 @@ void SwTableShell::Execute(SfxRequest &rReq)
             if (pDlg)
             {
                 if (pItem)
-                    pDlg->SetCurPageId(OUStringToOString(static_cast<const SfxStringItem *>(pItem)->GetValue(), RTL_TEXTENCODING_UTF8));
+                    pDlg->SetCurPageId(static_cast<const SfxStringItem *>(pItem)->GetValue());
 
                 auto pRequest = std::make_shared<SfxRequest>(rReq);
                 rReq.Ignore(); // the 'old' request is not relevant any more
@@ -999,7 +995,7 @@ void SwTableShell::Execute(SfxRequest &rReq)
                                                                                         nSlot == FN_TABLE_INSERT_COL_DLG, pSlot->GetCommand()));
                 if( pDlg->Execute() == 1 )
                 {
-                    const sal_uInt16 nDispatchSlot = (nSlot == FN_TABLE_INSERT_COL_DLG)
+                    const TypedWhichId<SfxUInt16Item> nDispatchSlot = (nSlot == FN_TABLE_INSERT_COL_DLG)
                         ? FN_TABLE_INSERT_COL_AFTER : FN_TABLE_INSERT_ROW_AFTER;
                     SfxUInt16Item aCountItem( nDispatchSlot, pDlg->getInsertCount() );
                     SfxBoolItem  aAfter( FN_PARAM_INSERT_AFTER, !pDlg->isInsertBefore() );
@@ -1450,7 +1446,7 @@ void SwTableShell::GetState(SfxItemSet &rSet)
                 {
                     SwSelBoxes aBoxes;
                     ::GetTableSel( rSh, aBoxes, SwTableSearchType::Row );
-                    if( ::HasProtectedCells( aBoxes ) || lcl_BoxesInDeletedRows( rSh, aBoxes ) )
+                    if( ::HasProtectedCells( aBoxes ) || lcl_BoxesInTrackedRows( rSh, aBoxes ) )
                         rSet.DisableItem( nSlot );
                 }
                 break;
@@ -1521,7 +1517,7 @@ void SwTableShell::GetState(SfxItemSet &rSet)
                         OUString sPayload = ".uno:TableRowHeight=" + sHeight;
 
                         GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                            OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US).getStr());
+                            OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US));
                     }
                 }
                 break;
@@ -1545,7 +1541,7 @@ void SwTableShell::GetState(SfxItemSet &rSet)
                     OUString sPayload = ".uno:TableColumWidth=" + sWidth;
 
                     GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                        OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US).getStr());
+                        OUStringToOString(sPayload, RTL_TEXTENCODING_ASCII_US));
                 }
 
                 break;

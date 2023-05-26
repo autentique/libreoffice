@@ -82,16 +82,14 @@ static OUString lcl_getName(const uno::Reference< beans::XPropertySet>& _xElemen
     uno::Reference< report::XReportControlModel> xReportModel(_xElement,uno::UNO_QUERY);
     if ( xFixedText.is() )
     {
-        sName.append(" : ");
-        sName.append(xFixedText->getLabel());
+        sName.append(" : " + xFixedText->getLabel());
     }
     else if ( xReportModel.is() && _xElement->getPropertySetInfo()->hasPropertyByName(PROPERTY_DATAFIELD) )
     {
         ReportFormula aFormula( xReportModel->getDataField() );
         if ( aFormula.isValid() )
         {
-            sName.append(" : ");
-            sName.append( aFormula.getUndecoratedContent() );
+            sName.append(" : " + aFormula.getUndecoratedContent() );
         }
     }
     return sName.makeStringAndClear();
@@ -240,19 +238,19 @@ NavigatorTree::~NavigatorTree()
 
 namespace
 {
-    sal_uInt16 mapIdent(std::string_view rIdent)
+    sal_uInt16 mapIdent(std::u16string_view rIdent)
     {
-        if (rIdent == "sorting")
+        if (rIdent == u"sorting")
             return SID_SORTINGANDGROUPING;
-        else if (rIdent == "page")
+        else if (rIdent == u"page")
             return SID_PAGEHEADERFOOTER;
-        else if (rIdent == "report")
+        else if (rIdent == u"report")
             return SID_REPORTHEADERFOOTER;
-        else if (rIdent == "function")
+        else if (rIdent == u"function")
             return SID_RPT_NEW_FUNCTION;
-        else if (rIdent == "properties")
+        else if (rIdent == u"properties")
             return SID_SHOW_PROPERTYBROWSER;
-        else if (rIdent == "delete")
+        else if (rIdent == u"delete")
             return SID_DELETE;
         return 0;
     }
@@ -278,7 +276,7 @@ IMPL_LINK(NavigatorTree, CommandHdl, const CommandEvent&, rEvt, bool)
             std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(m_xTreeView.get(), "modules/dbreport/ui/navigatormenu.ui"));
             std::unique_ptr<weld::Menu> xContextMenu(xBuilder->weld_menu("menu"));
 
-            const OString aIds[] = { "sorting", "page", "report", "function", "properties", "delete" };
+            const OUString aIds[] = { "sorting", "page", "report", "function", "properties", "delete" };
             for (size_t i = 0; i < SAL_N_ELEMENTS(aIds); ++i)
             {
                 sal_uInt16 nSId = mapIdent(aIds[i]);
@@ -297,7 +295,7 @@ IMPL_LINK(NavigatorTree, CommandHdl, const CommandEvent&, rEvt, bool)
 
             // the point that was clicked on
             ::Point aWhere(rEvt.GetMousePosPixel());
-            OString sCurItemIdent = xContextMenu->popup_at_rect(m_xTreeView.get(), tools::Rectangle(aWhere, Size(1,1)));
+            OUString sCurItemIdent = xContextMenu->popup_at_rect(m_xTreeView.get(), tools::Rectangle(aWhere, Size(1,1)));
             if (!sCurItemIdent.isEmpty())
             {
                 sal_uInt16 nId = mapIdent(sCurItemIdent);

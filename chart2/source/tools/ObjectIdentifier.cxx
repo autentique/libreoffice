@@ -27,6 +27,7 @@
 #include <ChartModel.hxx>
 #include <ChartModelHelper.hxx>
 #include <ChartType.hxx>
+#include <GridProperties.hxx>
 #include <Axis.hxx>
 #include <AxisHelper.hxx>
 #include <servicenames_charttypes.hxx>
@@ -131,7 +132,7 @@ OUString lcl_getTitleParentParticle( TitleHelper::eTitleType aTitleType )
 
 rtl::Reference<ChartType> lcl_getFirstStockChartType( const rtl::Reference<::chart::ChartModel>& xChartModel )
 {
-    rtl::Reference< Diagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
+    rtl::Reference< Diagram > xDiagram( xChartModel->getFirstChartDiagram() );
     if(!xDiagram.is())
         return nullptr;
 
@@ -211,7 +212,7 @@ void lcl_getDiagramAndCooSys( std::u16string_view rObjectCID
     sal_Int32 nDiagramIndex = -1;
     sal_Int32 nCooSysIndex = -1;
     lcl_parseCooSysIndices( nDiagramIndex, nCooSysIndex, rObjectCID );
-    xDiagram = ChartModelHelper::findDiagram( xChartModel );//todo use nDiagramIndex when more than one diagram is possible in future
+    xDiagram = xChartModel->getFirstChartDiagram();//todo use nDiagramIndex when more than one diagram is possible in future
     if( !xDiagram.is() )
         return;
 
@@ -329,10 +330,11 @@ OUString ObjectIdentifier::createClassifiedIdentifierForObject(
         }
 
         //axis
-        Reference< XAxis > xAxis( xObject, uno::UNO_QUERY );
+        rtl::Reference< Axis > xAxis = dynamic_cast<Axis*>( xObject.get() );
         if( xAxis.is() )
         {
-            rtl::Reference< BaseCoordinateSystem > xCooSys( AxisHelper::getCoordinateSystemOfAxis( xAxis, ChartModelHelper::findDiagram( xChartModel ) ) );
+            rtl::Reference<Diagram> xDiagram = xChartModel->getFirstChartDiagram();
+            rtl::Reference< BaseCoordinateSystem > xCooSys( AxisHelper::getCoordinateSystemOfAxis( xAxis, xDiagram ) );
             OUString aCooSysParticle( createParticleForCoordinateSystem( xCooSys, xChartModel ) );
             sal_Int32 nDimensionIndex=-1;
             sal_Int32 nAxisIndex=-1;
@@ -410,7 +412,8 @@ OUString ObjectIdentifier::createClassifiedIdentifierForObject(
         //axis
         if( xAxis.is() )
         {
-            rtl::Reference< BaseCoordinateSystem > xCooSys( AxisHelper::getCoordinateSystemOfAxis( xAxis, ChartModelHelper::findDiagram( xChartModel ) ) );
+            rtl::Reference<Diagram> xDiagram = xChartModel->getFirstChartDiagram();
+            rtl::Reference< BaseCoordinateSystem > xCooSys( AxisHelper::getCoordinateSystemOfAxis( xAxis, xDiagram ) );
             OUString aCooSysParticle( createParticleForCoordinateSystem( xCooSys, xChartModel ) );
             sal_Int32 nDimensionIndex=-1;
             sal_Int32 nAxisIndex=-1;
@@ -445,8 +448,8 @@ OUString ObjectIdentifier::createClassifiedIdentifierForParticles(
     if( eObjectType == OBJECTTYPE_UNKNOWN )
         eObjectType = ObjectIdentifier::getObjectType( rParentParticle );
 
-    OUStringBuffer aRet( m_aProtocol );
-    aRet.append( lcl_createClassificationStringForType( eObjectType, rDragMethodServiceName, rDragParameterString ));
+    OUStringBuffer aRet( m_aProtocol +
+        lcl_createClassificationStringForType( eObjectType, rDragMethodServiceName, rDragParameterString ));
     if(aRet.getLength() > m_aProtocol.getLength())
         aRet.append("/");
 
@@ -473,7 +476,7 @@ OUString ObjectIdentifier::createParticleForCoordinateSystem(
 {
     OUString aRet;
 
-    rtl::Reference< Diagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
+    rtl::Reference< Diagram > xDiagram( xChartModel->getFirstChartDiagram() );
     if( xDiagram.is() )
     {
         std::size_t nCooSysIndex = 0;
@@ -574,8 +577,8 @@ OUString ObjectIdentifier::createClassifiedIdentifierWithParent(
 {
     //e.g. "MultiClick/Series=2:Point=34"
 
-    OUStringBuffer aRet( m_aProtocol );
-    aRet.append( lcl_createClassificationStringForType( eObjectType, rDragMethodServiceName, rDragParameterString ));
+    OUStringBuffer aRet( m_aProtocol +
+        lcl_createClassificationStringForType( eObjectType, rDragMethodServiceName, rDragParameterString ));
     if(aRet.getLength() > m_aProtocol.getLength())
         aRet.append("/");
     aRet.append(rParentPartical);
@@ -1168,7 +1171,7 @@ Reference< beans::XPropertySet > ObjectIdentifier::getObjectPropertySet(
                     sal_Int32 nSubGridIndex = -1;
                     lcl_parseGridIndices( nSubGridIndex, rObjectCID );
 
-                    xObjectProperties.set( AxisHelper::getGridProperties( xCooSys , nDimensionIndex, nAxisIndex, nSubGridIndex ) );
+                    xObjectProperties = AxisHelper::getGridProperties( xCooSys , nDimensionIndex, nAxisIndex, nSubGridIndex );
                 }
                 break;
             case OBJECTTYPE_DATA_LABELS:

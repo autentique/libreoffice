@@ -65,8 +65,6 @@
 namespace com::sun::star::uno { class XComponentContext; }
 namespace com::sun::star::beans { struct NamedValue; }
 
-using ::osl::Mutex;
-using ::osl::Guard;
 using ::comphelper::OInterfaceContainerHelper4;
 using ::comphelper::OInterfaceIteratorHelper4;
 using ::com::sun::star::uno::Any;
@@ -74,7 +72,6 @@ using ::com::sun::star::uno::UNO_QUERY;
 using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::WeakReference;
 using ::com::sun::star::uno::XComponentContext;
 using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::XWeak;
@@ -2079,14 +2076,16 @@ void SAL_CALL AnimationNode::removeChangesListener( const Reference< XChangesLis
 
 void AnimationNode::fireChangeListener(std::unique_lock<std::mutex>& l)
 {
-    OInterfaceIteratorHelper4 aIterator( l, maChangeListener );
-    if( aIterator.hasMoreElements() )
+    if( maChangeListener.getLength(l) != 0 )
     {
         Reference< XInterface > xSource( static_cast<OWeakObject*>(this), UNO_QUERY );
         Sequence< ElementChange > aChanges;
         const ChangesEvent aEvent( xSource, Any( css::uno::Reference<XInterface>(static_cast<cppu::OWeakObject*>(mxParent.get().get())) ), aChanges );
+        OInterfaceIteratorHelper4 aIterator( l, maChangeListener );
+        l.unlock();
         while( aIterator.hasMoreElements() )
             aIterator.next()->changesOccurred( aEvent );
+        l.lock();
     }
 
     //fdo#69645 use WeakReference of mxParent to test if mpParent is still valid

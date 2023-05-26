@@ -131,6 +131,7 @@
 #include <tools/json_writer.hxx>
 #include <tools/UnitConversion.hxx>
 #include <svx/ColorSets.hxx>
+#include <docmodel/theme/Theme.hxx>
 
 #include <app.hrc>
 
@@ -1283,8 +1284,8 @@ void SAL_CALL SdXImpressDocument::setPropertyValue( const OUString& aPropertyNam
         case WID_MODEL_THEME:
             {
                 SdrModel& rModel = getSdrModelFromUnoModel();
-                std::unique_ptr<model::Theme> pTheme = model::Theme::FromAny(aValue);
-                rModel.setTheme(std::move(pTheme));
+                std::shared_ptr<model::Theme> pTheme = model::Theme::FromAny(aValue);
+                rModel.setTheme(pTheme);
             }
             break;
         default:
@@ -1659,7 +1660,8 @@ static void ImplPDFExportShapeInteraction( const uno::Reference< drawing::XShape
                 if (!aMediaURL.isEmpty())
                 {
                     SdrObject const*const pSdrObj(SdrObject::getSdrObjectFromXShape(xShape));
-                    sal_Int32 nScreenId = rPDFExtOutDevData.CreateScreen(aLinkRect, altText, rPDFExtOutDevData.GetCurrentPageNumber(), pSdrObj);
+                    OUString const mimeType(xShapePropSet->getPropertyValue("MediaMimeType").get<OUString>());
+                    sal_Int32 nScreenId = rPDFExtOutDevData.CreateScreen(aLinkRect, altText, mimeType, rPDFExtOutDevData.GetCurrentPageNumber(), pSdrObj);
                     if (aMediaURL.startsWith("vnd.sun.star.Package:"))
                     {
                         OUString aTempFileURL;
@@ -2231,6 +2233,7 @@ void SdXImpressDocument::paintTile( VirtualDevice& rDevice,
     {
         if(SdrPageView* pSdrPageView = pDrawView->GetSdrPageView())
         {
+            pSdrPageView->SetApplicationDocumentColor(pViewSh->GetViewOptions().mnDocBackgroundColor);
             patchedPageWindow = pSdrPageView->FindPageWindow(*getDocWindow()->GetOutDev());
             temporaryPaintWindow.reset(new SdrPaintWindow(*pDrawView, rDevice));
             if (patchedPageWindow)
@@ -2297,6 +2300,21 @@ void SdXImpressDocument::paintTile( VirtualDevice& rDevice,
     LokControlHandler::paintControlTile(pPage, pDrawView, *pActiveWin, rDevice, aOutputSize, aTileRect);
 
     comphelper::LibreOfficeKit::setTiledPainting(false);
+}
+
+OString SdXImpressDocument::getViewRenderState()
+{
+    OStringBuffer aState;
+    DrawViewShell* pView = GetViewShell();
+    if (pView)
+    {
+        const SdViewOptions& pVOpt = pView->GetViewOptions();
+        aState.append(';');
+
+        OString aThemeName = OUStringToOString(pVOpt.msColorSchemeName, RTL_TEXTENCODING_UTF8);
+        aState.append(aThemeName);
+    }
+    return aState.makeStringAndClear();
 }
 
 void SdXImpressDocument::selectPart(int nPart, int nSelect)
@@ -2503,7 +2521,7 @@ void SdXImpressDocument::getPostIts(::tools::JsonWriter& rJsonWriter)
         {
             sal_uInt32 nID = sd::getAnnotationId(xAnnotation);
             OString nodeName = "comment" + OString::number(nID);
-            auto commentNode = rJsonWriter.startNode(nodeName.getStr());
+            auto commentNode = rJsonWriter.startNode(nodeName);
             rJsonWriter.put("id", nID);
             rJsonWriter.put("author", xAnnotation->getAuthor());
             rJsonWriter.put("dateTime", utl::toISO8601(xAnnotation->getDateTime()));
@@ -2605,6 +2623,11 @@ void SdXImpressDocument::postMouseEvent(int nType, int nX, int nY, int nCount, i
     SdrPageView* pPageView = pDrawView->GetSdrPageView();
     SdrPage* pPage = pPageView->GetPage();
     ::sd::Window* pActiveWin = pViewShell->GetActiveWindow();
+    if (!pActiveWin)
+    {
+        return;
+    }
+
     if (LokControlHandler::postMouseEvent(pPage, pDrawView, *pActiveWin, nType, aPointHMM, nCount, nButtons, nModifier))
             return;
 

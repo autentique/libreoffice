@@ -1334,8 +1334,7 @@ SvNumberformat::SvNumberformat(OUString& rString,
                 {
                     NumFor[nIndex].Enlarge(nCnt);
                     pSc->CopyInfo( &(NumFor[nIndex].Info()), nCnt );
-                    sBuff.append(";");
-                    sBuff.append(aAdd);
+                    sBuff.append(";" + aAdd);
                 }
             }
         }
@@ -1352,8 +1351,7 @@ SvNumberformat::SvNumberformat(OUString& rString,
                 {
                     NumFor[nIndex].Enlarge(nCnt);
                     pSc->CopyInfo( &(NumFor[nIndex].Info()), nCnt );
-                    sBuff.append(";");
-                    sBuff.append(aAdd);
+                    sBuff.append(";" + aAdd);
                 }
             }
         }
@@ -2832,9 +2830,10 @@ void SvNumberformat::ImpGetFractionElements ( double& fNumber, sal_uInt16 nIx,
     fIntPart = floor(fNumber); // Integral part
     fNumber -= fIntPart;         // Fractional part
     const ImpSvNumberformatInfo& rInfo = NumFor[nIx].Info();
-    nDiv = lcl_GetDenominatorString( rInfo, NumFor[nIx].GetCount() ).toInt32();
-    if( nDiv > 0 )
+    sal_Int64 nForcedDiv = lcl_GetDenominatorString( rInfo, NumFor[nIx].GetCount() ).toInt32();
+    if( nForcedDiv > 0 )
     {   // Forced Denominator
+        nDiv = nForcedDiv;
         nFrac = static_cast<sal_Int64>(floor ( fNumber * nDiv ));
         double fFracNew = static_cast<double>(nFrac) / static_cast<double>(nDiv);
         double fFracNew1 = static_cast<double>(nFrac + 1) / static_cast<double>(nDiv);
@@ -2888,7 +2887,8 @@ void SvNumberformat::ImpGetFractionElements ( double& fNumber, sal_uInt16 nIx,
     if (nFrac >= nDiv)
     {
         ++fIntPart;
-        nFrac = nDiv = 0;
+        nFrac = 0;
+        nDiv = ( nForcedDiv > 0 ) ? nForcedDiv : 1;
     }
 }
 
@@ -5435,9 +5435,7 @@ OUString SvNumberformat::GetMappedFormatstring( const NfKeywordTable& rKeywords,
                         }
                         else
                         {
-                            aStr.append( '"' );
-                            aStr.append( rStrArray[j] );
-                            aStr.append( '"' );
+                            aStr.append( "\"" + rStrArray[j] + "\"" );
                         }
                         break;
                     case NF_SYMBOLTYPE_CALDEL :
@@ -5768,13 +5766,11 @@ OUString SvNumberformat::GetNatNumModifierString( sal_uInt16 nNumFor ) const
     const SvNumberNatNum& rNum = NumFor[nNumFor].GetNatNum();
     if ( !rNum.IsSet() )
         return "";
-    OUStringBuffer sNatNumModifier = "[NatNum";
     const sal_Int32 nNum = rNum.GetNatNum();
-    sNatNumModifier.append( nNum );
+    OUStringBuffer sNatNumModifier = "[NatNum" + OUString::number( nNum );
     if ( NatNumTakesParameters( nNum ) )
     {
-        sNatNumModifier.append( " " );
-        sNatNumModifier.append( rNum.GetParams() );
+        sNatNumModifier.append( " " + rNum.GetParams() );
     }
     sNatNumModifier.append( "]" );
 

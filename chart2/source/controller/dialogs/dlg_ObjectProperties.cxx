@@ -122,7 +122,7 @@ ObjectPropertiesDialogParameter::~ObjectPropertiesDialogParameter()
 void ObjectPropertiesDialogParameter::init( const rtl::Reference<::chart::ChartModel>& xChartModel )
 {
     m_xChartDocument = xChartModel;
-    rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xChartModel );
+    rtl::Reference< Diagram > xDiagram = xChartModel->getFirstChartDiagram();
     rtl::Reference< DataSeries > xSeries = ObjectIdentifier::getDataSeriesForCID( m_aObjectCID, xChartModel );
     rtl::Reference< ChartType > xChartType = ChartModelHelper::getChartTypeOfSeries( xChartModel, xSeries );
     sal_Int32 nDimensionCount = 0;
@@ -497,7 +497,7 @@ SchAttribTabDlg::~SchAttribTabDlg()
 {
 }
 
-void SchAttribTabDlg::PageCreated(const OString& rId, SfxTabPage &rPage)
+void SchAttribTabDlg::PageCreated(const OUString& rId, SfxTabPage &rPage)
 {
     SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
     if (rId == "border")

@@ -1138,7 +1138,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf131420)
 {
     loadAndSave("tdf131420.docx");
     xmlDocUniquePtr pXmlDocument = parseExport("word/document.xml");
-    assertXPath(pXmlDocument, "/w:document/w:body/w:p/w:pPr/w:pBdr[2]");
+    assertXPath(pXmlDocument, "/w:document/w:body/w:p/w:pPr/w:pBdr/w:top");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTdf80526_word_wrap, "tdf80526_word_wrap.docx")
@@ -1308,6 +1308,26 @@ DECLARE_OOXMLEXPORT_TEST(testTdf143510_within_table2, "TC-table-rowDND-front.doc
         assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[1]/w:trPr/w:ins", 1);
         assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[4]/w:trPr/w:del", 1);
     }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf150824, "tdf150824.fodt")
+{
+    // check tracked table row insertion (stored in a single redline)
+    if (isExported())
+    {
+        xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
+        // This was 0 (missing tracked table row deletion/insertion)
+        assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[1]/w:trPr/w:ins", 1);
+        assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[2]/w:trPr/w:ins", 1);
+        assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[3]/w:trPr/w:ins", 1);
+    }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf150824_regression, "ooo30436-1-minimized.sxw")
+{
+    // There should be no crash during loading of the document
+    // so, let's check just how much pages we have
+    CPPUNIT_ASSERT_EQUAL(2, getPages());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTdf113608_runAwayNumbering, "tdf113608_runAwayNumbering.docx")
@@ -1509,7 +1529,6 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf149388)
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf132271)
 {
-    SwModelTestBase::FlySplitGuard aGuard;
     // see also testTdf149388
     loadAndSave("tdf149388.docx");
     xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
@@ -1712,14 +1731,13 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf95374)
     assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:ind", "start", "1136");
 }
 
-CPPUNIT_TEST_FIXTURE(Test, testTdf108493)
+DECLARE_OOXMLEXPORT_TEST(testTdf108493, "tdf108493.docx")
 {
-    loadAndSave("tdf108493.docx");
-    xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
-    // set in the paragraph
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p[7]/w:pPr/w:ind", "start", "709");
+    uno::Reference<beans::XPropertySet> xPara7(getParagraph(7), uno::UNO_QUERY);
+    // set in the paragraph (709 twips)
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1251), getProperty<sal_Int32>(xPara7, "ParaLeftMargin"));
     // set in the numbering style (this was 0)
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p[7]/w:pPr/w:ind", "hanging", "709");
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-1251), getProperty<sal_Int32>(xPara7, "ParaFirstLineIndent"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTdf118691, "tdf118691.docx")

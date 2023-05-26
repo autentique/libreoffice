@@ -340,7 +340,8 @@ const SwTable* SwDoc::InsertTable( const SwInsertTableOptions& rInsTableOpts,
                                    const SwTableAutoFormat* pTAFormat,
                                    const std::vector<sal_uInt16> *pColArr,
                                    bool bCalledFromShell,
-                                   bool bNewModel )
+                                   bool bNewModel,
+                                   const OUString& rTableName )
 {
     assert(nRows && "Table without line?");
     assert(nCols && "Table without rows?");
@@ -357,7 +358,9 @@ const SwTable* SwDoc::InsertTable( const SwInsertTableOptions& rInsTableOpts,
             pColArr = nullptr;
     }
 
-    OUString aTableName = GetUniqueTableName();
+    OUString aTableName = rTableName;
+    if (aTableName.isEmpty() || FindTableFormatByName(aTableName) != nullptr)
+        aTableName = GetUniqueTableName();
 
     if( GetIDocumentUndoRedo().DoesUndo() )
     {
@@ -1659,8 +1662,7 @@ bool SwNodes::TableToText( const SwNodeRange& rRange, sal_Unicode cCh,
 
     // #i28006# Fly frames have to be restored even if the table was
     // #alone in the section
-    const SwFrameFormats& rFlyArr = *GetDoc().GetSpzFrameFormats();
-    for( auto pFly : rFlyArr )
+    for(sw::SpzFrameFormat* pFly: *GetDoc().GetSpzFrameFormats())
     {
         SwFrameFormat *const pFormat = pFly;
         const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
@@ -2888,8 +2890,7 @@ void SwDoc::SetRowsToRepeat( SwTable &rTable, sal_uInt16 nSet )
     }
 
     rTable.SetRowsToRepeat(nSet);
-    const SwMsgPoolItem aChg(RES_TBLHEADLINECHG);
-    rTable.GetFrameFormat()->CallSwClientNotify(sw::LegacyModifyHint(&aChg, &aChg));
+    rTable.GetFrameFormat()->CallSwClientNotify(sw::TableHeadingChange());
     getIDocumentState().SetModified();
 }
 
@@ -3090,33 +3091,22 @@ void SwDoc::SplitTable( const SwPosition& rPos, SplitTable_HeadlineOption eHdlnM
     SwTable& rTable = pTNd->GetTable();
     rTable.SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout>()); // Delete HTML Layout
 
-    SwTableFormulaUpdate aMsgHint( &rTable );
-
     SwHistory aHistory;
-    if (GetIDocumentUndoRedo().DoesUndo())
-    {
-        aMsgHint.m_pHistory = &aHistory;
-    }
-
     {
         SwNodeOffset nSttIdx = pNd->FindTableBoxStartNode()->GetIndex();
-
         // Find top-level Line
-        SwTableBox* pBox = rTable.GetTableBox( nSttIdx );
-        if( pBox )
+        SwTableBox* pBox = rTable.GetTableBox(nSttIdx);
+        sal_uInt16 nSplitLine = 0;
+        if(pBox)
         {
             SwTableLine* pLine = pBox->GetUpper();
-            while( pLine->GetUpper() )
+            while(pLine->GetUpper())
                 pLine = pLine->GetUpper()->GetUpper();
 
             // pLine contains the top-level Line now
-            aMsgHint.m_nSplitLine = rTable.GetTabLines().GetPos( pLine );
+            nSplitLine = rTable.GetTabLines().GetPos(pLine);
         }
-
-        OUString sNewTableNm( GetUniqueTableName() );
-        aMsgHint.m_aData.pNewTableNm = &sNewTableNm;
-        aMsgHint.m_eFlags = TBL_SPLITTBL;
-        getIDocumentFieldsAccess().UpdateTableFields( &aMsgHint );
+        rTable.Split(GetUniqueTableName(), nSplitLine, GetIDocumentUndoRedo().DoesUndo() ? &aHistory : nullptr);
     }
 
     // Find Lines for the Layout update
@@ -3471,11 +3461,7 @@ bool SwDoc::MergeTable( const SwPosition& rPos, bool bWithPrev )
     }
 
     // Adapt all "TableFormulas"
-    SwTableFormulaUpdate aMsgHint( &pTableNd->GetTable() );
-    aMsgHint.m_aData.pDelTable = &pDelTableNd->GetTable();
-    aMsgHint.m_eFlags = TBL_MERGETBL;
-    aMsgHint.m_pHistory = pHistory.get();
-    getIDocumentFieldsAccess().UpdateTableFields( &aMsgHint );
+    pTableNd->GetTable().Merge(pDelTableNd->GetTable(), pHistory.get());
 
     // The actual merge
     bool bRet = rNds.MergeTable( bWithPrev ? *pTableNd : *pDelTableNd, !bWithPrev );
@@ -3888,8 +3874,8 @@ OUString SwDoc::GetUniqueTableName() const
 
     for( size_t n = 0; n < mpTableFrameFormatTable->size(); ++n )
     {
-        const SwFrameFormat* pFormat = (*mpTableFrameFormatTable)[ n ];
-        if( !pFormat->IsDefault() && IsUsed( *pFormat )  &&
+        const SwTableFormat* pFormat = (*mpTableFrameFormatTable)[ n ];
+        if( !pFormat->IsDefault() && IsUsed( *pFormat ) &&
             pFormat->GetName().startsWith( aName ) )
         {
             // Get number and set the Flag
@@ -4131,8 +4117,7 @@ void SwDoc::ChkBoxNumFormat( SwTableBox& rBox, bool bCallUpdate )
     const SwTableNode* pTableNd = rBox.GetSttNd()->FindTableNode();
     if( bCallUpdate )
     {
-        SwTableFormulaUpdate aTableUpdate( &pTableNd->GetTable() );
-        getIDocumentFieldsAccess().UpdateTableFields( &aTableUpdate );
+        getIDocumentFieldsAccess().UpdateTableFields(&pTableNd->GetTable());
 
         // TL_CHART2: update charts (when cursor leaves cell and
         // automatic update is enabled)
@@ -4465,11 +4450,11 @@ void SwDoc::UnProtectTables( const SwPaM& rPam )
 
     bool bChgd = false, bHasSel = rPam.HasMark() ||
                                     rPam.GetNext() != &rPam;
-    SwFrameFormats& rFormats = *GetTableFrameFormats();
+    sw::TableFrameFormats& rFormats = *GetTableFrameFormats();
     SwTable* pTable;
     const SwTableNode* pTableNd;
     for( auto n = rFormats.size(); n ; )
-        if( nullptr != (pTable = SwTable::FindTable( rFormats[ --n ] )) &&
+        if( nullptr != (pTable = SwTable::FindTable( rFormats[ --n ])) &&
             nullptr != (pTableNd = pTable->GetTableNode() ) &&
             pTableNd->GetNodes().IsDocNodes() )
         {

@@ -26,6 +26,7 @@
 #include <txatbase.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <IDocumentRedlineAccess.hxx>
+#include <IDocumentLayoutAccess.hxx>
 #include <UndoManager.hxx>
 #include <unotools/syslocaleoptions.hxx>
 
@@ -929,6 +930,109 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf147181_TrackedMovingOfMultipleTable
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xTable2b->getRows()->getCount());
 }
 
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf154599_MovingColumn)
+{
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    CPPUNIT_ASSERT(pDoc);
+    SwWrtShell* pWrtShell = pDoc->GetDocShell()->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell);
+
+    // Create a table with less columns than rows
+    SwInsertTableOptions TableOpt(SwInsertTableFlags::DefaultBorder, 0);
+    (void)&pWrtShell->InsertTable(TableOpt, 4, 3);
+
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xTableNames = xTablesSupplier->getTextTables();
+    CPPUNIT_ASSERT(xTableNames->hasByName("Table1"));
+    uno::Reference<text::XTextTable> xTable1(xTableNames->getByName("Table1"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable1->getRows()->getCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xTable1->getColumns()->getCount());
+
+    // without redlining
+    CPPUNIT_ASSERT_MESSAGE("redlining should be off",
+                           !pDoc->getIDocumentRedlineAccess().IsRedlineOn());
+
+    // Move first column of the table before the third column by drag & drop
+
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    SwFrame* pPage = pLayout->Lower();
+    SwFrame* pBody = pPage->GetLower();
+    SwFrame* pTable = pBody->GetLower();
+    SwFrame* pRow1 = pTable->GetLower();
+    SwFrame* pCellA1 = pRow1->GetLower();
+    SwFrame* pCellC1 = pCellA1->GetNext()->GetNext();
+    const SwRect& rCellA1Rect = pCellA1->getFrameArea();
+    const SwRect& rCellC1Rect = pCellC1->getFrameArea();
+    Point ptTo(rCellC1Rect.Left() + rCellC1Rect.Width() / 2,
+               rCellC1Rect.Top() + rCellC1Rect.Height() / 2);
+    // select first table column by using the middle point of the top border of column A
+    Point ptColumn(rCellA1Rect.Left() + rCellA1Rect.Width() / 2, rCellA1Rect.Top() - 5);
+    pWrtShell->SelectTableRowCol(ptColumn);
+
+    // This crashed here before the fix.
+    rtl::Reference<SwTransferable> xTransfer = new SwTransferable(*pWrtShell);
+
+    xTransfer->PrivateDrop(*pWrtShell, ptTo, /*bMove=*/true, /*bXSelection=*/true);
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable1->getRows()->getCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3), xTable1->getColumns()->getCount());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf154771_MovingMultipleColumns)
+{
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    CPPUNIT_ASSERT(pDoc);
+    SwWrtShell* pWrtShell = pDoc->GetDocShell()->GetWrtShell();
+    CPPUNIT_ASSERT(pWrtShell);
+
+    // Create a table with less columns than rows
+    SwInsertTableOptions TableOpt(SwInsertTableFlags::DefaultBorder, 0);
+    (void)&pWrtShell->InsertTable(TableOpt, 5, 4);
+
+    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xTableNames = xTablesSupplier->getTextTables();
+    CPPUNIT_ASSERT(xTableNames->hasByName("Table1"));
+    uno::Reference<text::XTextTable> xTable1(xTableNames->getByName("Table1"), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), xTable1->getRows()->getCount());
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable1->getColumns()->getCount());
+
+    // without redlining
+    CPPUNIT_ASSERT_MESSAGE("redlining should be off",
+                           !pDoc->getIDocumentRedlineAccess().IsRedlineOn());
+
+    // Move first two columns of the table before column D by drag & drop
+
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    SwFrame* pPage = pLayout->Lower();
+    SwFrame* pBody = pPage->GetLower();
+    SwFrame* pTable = pBody->GetLower();
+    SwFrame* pRow1 = pTable->GetLower();
+    SwFrame* pCellA1 = pRow1->GetLower();
+    SwFrame* pCellB1 = pCellA1->GetNext();
+    SwFrame* pCellD1 = pCellB1->GetNext()->GetNext();
+    const SwRect& rCellA1Rect = pCellA1->getFrameArea();
+    const SwRect& rCellB1Rect = pCellB1->getFrameArea();
+    const SwRect& rCellD1Rect = pCellD1->getFrameArea();
+    Point ptTo(rCellD1Rect.Left() + rCellD1Rect.Width() / 2,
+               rCellD1Rect.Top() + rCellD1Rect.Height() / 2);
+    // select first two table columns by using
+    // the middle point of the top border of column A
+    // and middle point of the top border of column B
+    Point ptColumnA(rCellA1Rect.Left() + rCellA1Rect.Width() / 2, rCellA1Rect.Top() - 5);
+    const Point ptColumnB(rCellB1Rect.Left() + rCellB1Rect.Width() / 2, rCellB1Rect.Top() - 5);
+    pWrtShell->SelectTableRowCol(ptColumnA, &ptColumnB);
+
+    rtl::Reference<SwTransferable> xTransfer = new SwTransferable(*pWrtShell);
+    xTransfer->PrivateDrop(*pWrtShell, ptTo, /*bMove=*/true, /*bXSelection=*/true);
+
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(5), xTable1->getRows()->getCount());
+    // This was 5 before the fix (only the first selected column was moved, the
+    // other ones were copied instead of moving)
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(4), xTable1->getColumns()->getCount());
+}
+
 CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf115132)
 {
     createSwDoc();
@@ -1481,16 +1585,15 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf65535)
 
     tools::JsonWriter aJsonWriter;
     pTextDoc->getPostIts(aJsonWriter);
-    char* pChar = aJsonWriter.extractData();
-    std::stringstream aStream(pChar);
-    free(pChar);
+    OString pChar = aJsonWriter.finishAndGetAsOString();
+    std::stringstream aStream((std::string(pChar)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     OString sCommentText;
     for (const boost::property_tree::ptree::value_type& rValue : aTree.get_child("comments"))
     {
         const boost::property_tree::ptree& rComment = rValue.second;
-        sCommentText = OString(rComment.get<std::string>("text").c_str());
+        sCommentText = OString(rComment.get<std::string>("text"));
     }
     // This was false (lost comment with spelling replacement)
     CPPUNIT_ASSERT_EQUAL(OString("with comment"), sCommentText);
@@ -2420,6 +2523,30 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf146178)
     dispatchCommand(mxComponent, ".uno:ScrollToNext", {});
     // Before the fix the position would be 1, navigation did not wrap to start of document
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0), pCursor->GetPoint()->GetContentIndex());
+}
+
+CPPUNIT_TEST_FIXTURE(SwUiWriterTest6, testTdf155407)
+{
+    createSwDoc();
+    SwXTextDocument& rTextDoc = dynamic_cast<SwXTextDocument&>(*mxComponent);
+
+    {
+        emulateTyping(rTextDoc, u"Foo - 11’--’22 ");
+        // Without the fix in place, this would fail with
+        // - Expected: Foo – 11’—’22
+        // - Actual  : Foo – 11’--’22
+        CPPUNIT_ASSERT_EQUAL(OUString(u"Foo – 11’—’22 "), getParagraph(1)->getString());
+    }
+
+    dispatchCommand(mxComponent, ".uno:SelectAll", {}); // start again
+
+    {
+        emulateTyping(rTextDoc, u"Bar -- 111--222 ");
+        // Without the fix in place, this would fail with
+        // - Expected: Bar – 111–222
+        // - Actual  : Bar – 111-–22
+        CPPUNIT_ASSERT_EQUAL(OUString(u"Bar – 111–222 "), getParagraph(1)->getString());
+    }
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

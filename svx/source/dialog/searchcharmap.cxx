@@ -63,9 +63,11 @@ bool SvxSearchCharSet::KeyInput(const KeyEvent& rKEvt)
 
     switch (aCode.GetCode())
     {
+        case KEY_RETURN:
+            return SvxShowCharSet::KeyInput(rKEvt);
         case KEY_SPACE:
-            aSelectHdl.Call( this );
-            break;
+            aDoubleClkHdl.Call(this);
+            return true;
         case KEY_LEFT:
             --tmpSelected;
             break;
@@ -92,7 +94,6 @@ bool SvxSearchCharSet::KeyInput(const KeyEvent& rKEvt)
             break;
         case KEY_TAB:   // some fonts have a character at these unicode control codes
         case KEY_ESCAPE:
-        case KEY_RETURN:
             bRet = false;
             tmpSelected = - 1;  // mark as invalid
             break;
@@ -411,6 +412,7 @@ void SvxSearchCharSet::SelectIndex(int nNewIndex, bool bFocus)
             pItem->m_xItem->fireEvent( AccessibleEventId::STATE_CHANGED, aOldAny, aNewAny );
         }
 #endif
+        aSelectHdl.Call(this);
     }
     aHighHdl.Call( this );
 }

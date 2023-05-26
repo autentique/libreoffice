@@ -237,6 +237,7 @@ void SwViewOption::PaintPostIts( OutputDevice *pOut, const SwRect &rRect, bool b
 }
 
 SwViewOption::SwViewOption() :
+    m_sThemeName( "Default" ),
     m_sSymbolFont( "symbol" ),
     m_aRetouchColor( COL_TRANSPARENT ),
     mnViewLayoutColumns( 0 ),
@@ -280,7 +281,7 @@ SwViewOption::SwViewOption() :
     }
     m_nDivisionX = m_nDivisionY = 1;
 
-    m_bSelectionInReadonly = !utl::ConfigManager::IsFuzzing() && SW_MOD()->GetAccessibilityOptions().IsSelectionInReadonly();
+    m_bSelectionInReadonly = utl::ConfigManager::IsFuzzing() || SW_MOD()->GetAccessibilityOptions().IsSelectionInReadonly();
 
     m_bIdle = true;
 
@@ -601,6 +602,8 @@ rtl::Reference<comphelper::ConfigurationListener> const & getWCOptionListener()
 
 bool SwViewOption::IsIgnoreProtectedArea()
 {
+    if (utl::ConfigManager::IsFuzzing())
+        return false;
     static comphelper::ConfigurationListenerProperty<bool> gIgnoreProtectedArea(getWCOptionListener(), "IgnoreProtectedArea");
     return gIgnoreProtectedArea.get();
 }

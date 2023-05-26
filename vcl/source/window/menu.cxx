@@ -416,7 +416,7 @@ void Menu::RemoveEventListener( const Link<VclMenuEvent&,void>& rEventListener )
 
 MenuItemData* Menu::NbcInsertItem(sal_uInt16 nId, MenuItemBits nBits,
                                   const OUString& rStr, Menu* pMenu,
-                                  size_t nPos, const OString &rIdent)
+                                  size_t nPos, const OUString &rIdent)
 {
     // put Item in MenuItemList
     MenuItemData* pData = pItemList->Insert(nId, MenuItemType::STRING,
@@ -430,7 +430,7 @@ MenuItemData* Menu::NbcInsertItem(sal_uInt16 nId, MenuItemBits nBits,
 }
 
 void Menu::InsertItem(sal_uInt16 nItemId, const OUString& rStr, MenuItemBits nItemBits,
-    const OString &rIdent, sal_uInt16 nPos)
+    const OUString &rIdent, sal_uInt16 nPos)
 {
     SAL_WARN_IF( !nItemId, "vcl", "Menu::InsertItem(): ItemId == 0" );
     SAL_WARN_IF( GetItemPos( nItemId ) != MENU_ITEM_NOTFOUND, "vcl",
@@ -455,7 +455,7 @@ void Menu::InsertItem(sal_uInt16 nItemId, const OUString& rStr, MenuItemBits nIt
 }
 
 void Menu::InsertItem(sal_uInt16 nItemId, const Image& rImage,
-    MenuItemBits nItemBits, const OString &rIdent, sal_uInt16 nPos)
+    MenuItemBits nItemBits, const OUString &rIdent, sal_uInt16 nPos)
 {
     InsertItem(nItemId, OUString(), nItemBits, rIdent, nPos);
     SetItemImage( nItemId, rImage );
@@ -463,13 +463,13 @@ void Menu::InsertItem(sal_uInt16 nItemId, const Image& rImage,
 
 void Menu::InsertItem(sal_uInt16 nItemId, const OUString& rStr,
     const Image& rImage, MenuItemBits nItemBits,
-    const OString &rIdent, sal_uInt16 nPos)
+    const OUString &rIdent, sal_uInt16 nPos)
 {
     InsertItem(nItemId, rStr, nItemBits, rIdent, nPos);
     SetItemImage( nItemId, rImage );
 }
 
-void Menu::InsertSeparator(const OString &rIdent, sal_uInt16 nPos)
+void Menu::InsertSeparator(const OUString &rIdent, sal_uInt16 nPos)
 {
     // do nothing if it's a menu bar
     if (IsMenuBar())
@@ -528,7 +528,7 @@ static void ImplCopyItem( Menu* pThis, const Menu& rMenu, sal_uInt16 nPos, sal_u
         return;
 
     if ( eType == MenuItemType::SEPARATOR )
-        pThis->InsertSeparator( OString(), nNewPos );
+        pThis->InsertSeparator( {}, nNewPos );
     else
     {
         sal_uInt16 nId = rMenu.GetItemId( nPos );
@@ -630,7 +630,7 @@ sal_uInt16 Menu::GetItemId(sal_uInt16 nPos) const
         return 0;
 }
 
-sal_uInt16 Menu::GetItemId(std::string_view rIdent) const
+sal_uInt16 Menu::GetItemId(std::u16string_view rIdent) const
 {
     for (size_t n = 0; n < pItemList->size(); ++n)
     {
@@ -662,10 +662,10 @@ MenuItemType Menu::GetItemType( sal_uInt16 nPos ) const
         return MenuItemType::DONTKNOW;
 }
 
-OString Menu::GetItemIdent(sal_uInt16 nId) const
+OUString Menu::GetItemIdent(sal_uInt16 nId) const
 {
     const MenuItemData* pData = pItemList->GetData(nId);
-    return pData ? pData->sIdent : OString();
+    return pData ? pData->sIdent : OUString();
 }
 
 void Menu::SetItemBits( sal_uInt16 nItemId, MenuItemBits nBits )
@@ -875,7 +875,7 @@ void Menu::CheckItem( sal_uInt16 nItemId, bool bCheck )
     ImplCallEventListeners( bCheck ? VclEventId::MenuItemChecked : VclEventId::MenuItemUnchecked, nPos );
 }
 
-void Menu::CheckItem( std::string_view rIdent , bool bCheck )
+void Menu::CheckItem( std::u16string_view rIdent , bool bCheck )
 {
     CheckItem( GetItemId( rIdent ), bCheck );
 }
@@ -1087,7 +1087,7 @@ OUString Menu::ImplGetHelpText( sal_uInt16 nItemId ) const
             if (!pData->aCommandStr.isEmpty())
                 pData->aHelpText = pHelp->GetHelpText( pData->aCommandStr, static_cast<weld::Widget*>(nullptr) );
             if (pData->aHelpText.isEmpty() && !pData->aHelpId.isEmpty())
-                pData->aHelpText = pHelp->GetHelpText( OStringToOUString( pData->aHelpId, RTL_TEXTENCODING_UTF8 ), static_cast<weld::Widget*>(nullptr) );
+                pData->aHelpText = pHelp->GetHelpText( pData->aHelpId, static_cast<weld::Widget*>(nullptr) );
         }
     }
 
@@ -1120,7 +1120,7 @@ OUString Menu::GetTipHelpText( sal_uInt16 nItemId ) const
     return OUString();
 }
 
-void Menu::SetHelpId( sal_uInt16 nItemId, const OString& rHelpId )
+void Menu::SetHelpId( sal_uInt16 nItemId, const OUString& rHelpId )
 {
     MenuItemData* pData = pItemList->GetData( nItemId );
 
@@ -1128,9 +1128,9 @@ void Menu::SetHelpId( sal_uInt16 nItemId, const OString& rHelpId )
         pData->aHelpId = rHelpId;
 }
 
-OString Menu::GetHelpId( sal_uInt16 nItemId ) const
+OUString Menu::GetHelpId( sal_uInt16 nItemId ) const
 {
-    OString aRet;
+    OUString aRet;
 
     MenuItemData* pData = pItemList->GetData( nItemId );
 
@@ -1139,7 +1139,7 @@ OString Menu::GetHelpId( sal_uInt16 nItemId ) const
         if ( !pData->aHelpId.isEmpty() )
             aRet = pData->aHelpId;
         else
-            aRet = OUStringToOString( pData->aCommandStr, RTL_TEXTENCODING_UTF8 );
+            aRet = pData->aCommandStr;
     }
 
     return aRet;
@@ -2210,11 +2210,6 @@ void Menu::ImplFillLayoutData() const
     }
 }
 
-SalMenu* Menu::GetNativeMenuBar()
-{
-    return mpSalMenu && mpSalMenu->HasNativeMenuBar() ? mpSalMenu.get() : nullptr;
-}
-
 tools::Rectangle Menu::GetCharacterBounds( sal_uInt16 nItemID, tools::Long nIndex ) const
 {
     tools::Long nItemIndex = -1;
@@ -2448,21 +2443,26 @@ void MenuBar::SetDisplayable( bool bDisplayable )
 
 VclPtr<vcl::Window> MenuBar::ImplCreate(vcl::Window* pParent, vcl::Window* pWindow, MenuBar* pMenu)
 {
-    // can't this be a static_cast? is there a real possibility, the pWindow is not the MenuBarWindow or nullptr?
     VclPtr<MenuBarWindow> pMenuBarWindow = dynamic_cast<MenuBarWindow*>(pWindow);
     if (!pMenuBarWindow)
-        pMenuBarWindow = VclPtr<MenuBarWindow>::Create(pParent);
-
-    pMenu->pStartedFrom = nullptr;
-    pMenu->pWindow = pMenuBarWindow;
-    pMenuBarWindow->SetMenu(pMenu);
-    if (pMenuBarWindow) {
-        // This is needed at least on macOS to make the JunitTest_toolkit_unoapi_1
-        // toolkit.AccessibleMenu test pass:
-        pMenu->ImplCalcSize(pMenuBarWindow);
+    {
+        pWindow = pMenuBarWindow = VclPtr<MenuBarWindow>::Create( pParent );
     }
 
-    return pMenuBarWindow;
+    pMenu->pStartedFrom = nullptr;
+    pMenu->pWindow = pWindow;
+    pMenuBarWindow->SetMenu(pMenu);
+    tools::Long nHeight = pWindow ? pMenu->ImplCalcSize(pWindow).Height() : 0;
+
+    // depending on the native implementation or the displayable flag
+    // the menubar windows is suppressed (ie, height=0)
+    if (!pMenu->IsDisplayable() || (pMenu->ImplGetSalMenu() && pMenu->ImplGetSalMenu()->VisibleMenuBar()))
+    {
+        nHeight = 0;
+    }
+
+    pMenuBarWindow->SetHeight(nHeight);
+    return pWindow;
 }
 
 void MenuBar::ImplDestroy( MenuBar* pMenu, bool bDelete )
@@ -2489,7 +2489,7 @@ bool MenuBar::ImplHandleKeyEvent( const KeyEvent& rKEvent )
 
     // No keyboard processing when system handles the menu.
     SalMenu *pNativeMenu = ImplGetSalMenu();
-    if (pNativeMenu && pNativeMenu->HasNativeMenuBar())
+    if (pNativeMenu && pNativeMenu->VisibleMenuBar())
     {
         // Except when the event is the F6 cycle pane event and we can put our
         // focus into it (i.e. the gtk3 menubar case but not the mac/unity case
@@ -2855,7 +2855,7 @@ bool PopupMenu::PrepareRun(const VclPtr<vcl::Window>& pParentWin, tools::Rectang
     {
         OUString aTmpEntryText(VclResId(SV_RESID_STRING_NOSELECTIONPOSSIBLE));
 
-        MenuItemData* pData = NbcInsertItem(0xFFFF, MenuItemBits::NONE, aTmpEntryText, nullptr, 0xFFFF, OString());
+        MenuItemData* pData = NbcInsertItem(0xFFFF, MenuItemBits::NONE, aTmpEntryText, nullptr, 0xFFFF, {});
         size_t nPos = 0;
         pData = pItemList->GetData( pData->nId, nPos );
         assert(pData);

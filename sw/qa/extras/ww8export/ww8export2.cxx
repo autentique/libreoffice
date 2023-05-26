@@ -26,13 +26,21 @@
 #include <com/sun/star/text/XEndnotesSupplier.hpp>
 
 #include <svx/svdpage.hxx>
+#include <o3tl/string_view.hxx>
 
 #include <ftninfo.hxx>
 #include <drawdoc.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <docsh.hxx>
 #include <unotxdoc.hxx>
-#include <o3tl/string_view.hxx>
+#include <IDocumentLayoutAccess.hxx>
+#include <rootfrm.hxx>
+#include <pagefrm.hxx>
+#include <sortedobjs.hxx>
+#include <cntfrm.hxx>
+#include <anchoredobject.hxx>
+#include <tabfrm.hxx>
+#include <flyfrms.hxx>
 
 class Test : public SwModelTestBase
 {
@@ -77,15 +85,22 @@ DECLARE_WW8EXPORT_TEST(testTdf55528_relativeTableWidth, "tdf55528_relativeTableW
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Table relative width percent", sal_Int16(98), getProperty<sal_Int16>(xTable, "RelativeWidth"));
  }
 
-DECLARE_WW8EXPORT_TEST(testTdf128700_relativeTableWidth, "tdf128700_relativeTableWidth.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf128700_relativeTableWidth)
 {
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+    auto verify = [this]() {
+        uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
+        uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
 
-    // Since the table has been converted into a floating frame, the relative width either needed to be transferred
-    // onto the frame, or else just thrown out. Otherwise it becomes relative to the size of the frame.
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("Floated table can't use relative width", sal_Int16(0), getProperty<sal_Int16>(xTable, "RelativeWidth"));
+        // Since the table has been converted into a floating frame, the relative width either needed to be transferred
+        // onto the frame, or else just thrown out. Otherwise it becomes relative to the size of the frame.
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Floated table can't use relative width", sal_Int16(0), getProperty<sal_Int16>(xTable, "RelativeWidth"));
+    };
+    // This also resulted in a layout loop when flys were allowed to split in footers.
+    createSwDoc("tdf128700_relativeTableWidth.doc");
+    verify();
+    reload(mpFilter, "tdf128700_relativeTableWidth.doc");
+    verify();
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf116436_tableBackground)
@@ -273,46 +288,64 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf116570_exportFootnote)
     CPPUNIT_ASSERT_EQUAL_MESSAGE( "Number of paragraphs in first footnote", 2, getParagraphs(xFootnoteText) );
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf80635_pageRightRTL, "tdf80635_pageRightRTL.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf80635_pageRightRTL)
 {
-    // tdf#80635 - transfer the float orientation to the table.
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("Horizontal Orientation", text::HoriOrientation::LEFT_AND_WIDTH, getProperty<sal_Int16>(xTable, "HoriOrient"));
-    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Table Indent", tools::Long(3500), getProperty<tools::Long>(xTable, "LeftMargin"), 100);
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("Did you fix me? Text probably should wrap here", 2, getPages() );
-    // If so, replace test with the table set to a greater preferred width so that the text shouldn't wrap
+    auto verify = [this]() {
+        // tdf#80635 - assert horizontal position of the table.
+        uno::Reference<drawing::XShape> xFly = getShape(1);
+        CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_FRAME, getProperty<sal_Int16>(xFly, "HoriOrientRelation"));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Horizontal Orientation", text::HoriOrientation::RIGHT, getProperty<sal_Int16>(xFly, "HoriOrient"));
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("text probably does not wrap here", 1, getPages());
+    };
+    createSwDoc("tdf80635_pageRightRTL.doc");
+    verify();
+    reload(mpFilter, "tdf80635_pageRightRTL.doc");
+    verify();
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf80635_marginRTL, "tdf80635_marginRightRTL.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf80635_marginRTL)
 {
-    // tdf#80635 - transfer the float orientation to the table.
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
-    if ( !isExported() )
-        CPPUNIT_ASSERT_EQUAL_MESSAGE("Horizontal Orientation", text::HoriOrientation::RIGHT, getProperty<sal_Int16>(xTable, "HoriOrient"));
+    auto verify = [this]() {
+        // tdf#80635 - assert the horizontal orientation of the table.
+        uno::Reference<drawing::XShape> xFly = getShape(1);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("Horizontal Orientation", text::HoriOrientation::RIGHT, getProperty<sal_Int16>(xFly, "HoriOrient"));
+    };
+    createSwDoc("tdf80635_marginRightRTL.doc");
+    verify();
+    reload(mpFilter, "tdf80635_marginRightRTL.doc");
+    verify();
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf80635_marginLeft, "tdf80635_marginLeft.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf80635_marginLeft)
 {
-    // tdf#80635 - transfer the float orientation to the table.
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
-    // This was just the GetMinLeft of -199
-    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Table Indent", tools::Long(-2950), getProperty<tools::Long>(xTable, "LeftMargin"), 100);
+    auto verify = [this]() {
+        // tdf#80635 - assert horizontal position of the table.
+        uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
+        uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
+        uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Table Indent", tools::Long(0), getProperty<tools::Long>(xTable, "LeftMargin"), 100);
+        uno::Reference<drawing::XShape> xFly = getShape(1);
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(-2958), getProperty<sal_Int32>(xFly, "HoriOrientPosition"));
+    };
+    createSwDoc("tdf80635_marginLeft.doc");
+    verify();
+    reload(mpFilter, "tdf80635_marginLeft.doc");
+    verify();
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf80635_pageLeft, "tdf80635_pageLeft.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf80635_pageLeft)
 {
-    // tdf#80635 - transfer the float orientation to the table.
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
-    // This was just the GetMinLeft of -199
-    CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Table Indent", tools::Long(-2750), getProperty<tools::Long>(xTable, "LeftMargin"), 100);
+    auto verify = [this]() {
+        // tdf#80635 - assert horizontal orient relation of the table.
+        uno::Reference<drawing::XShape> xFly = getShape(1);
+        CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_FRAME, getProperty<sal_Int16>(xFly, "HoriOrientRelation"));
+        CPPUNIT_ASSERT_EQUAL(text::HoriOrientation::NONE, getProperty<sal_Int16>(xFly, "HoriOrient"));
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(-189), getProperty<sal_Int32>(xFly, "HoriOrientPosition"));
+    };
+    createSwDoc("tdf80635_pageLeft.doc");
+    verify();
+    reload(mpFilter, "tdf80635_pageLeft.doc");
+    verify();
 }
 
 DECLARE_WW8EXPORT_TEST(testTdf99197_defaultLTR, "tdf99197_defaultLTR.doc")
@@ -324,16 +357,34 @@ DECLARE_WW8EXPORT_TEST(testTdf99197_defaultLTR, "tdf99197_defaultLTR.doc")
         text::WritingMode2::LR_TB, getProperty<sal_Int16>(getParagraph(2), "WritingMode") );
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf107773, "tdf107773.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf107773)
 {
-    // This was 1, multi-page table was imported as a floating one.
-    CPPUNIT_ASSERT_EQUAL(0, getShapes());
+    auto verify = [this]() {
+        // This failed, multi-page table was imported as a non-split frame.
+        SwDoc* pDoc = getSwDoc();
+        SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+        auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+        CPPUNIT_ASSERT(pPage1);
+        // pPage1 has no sorted (floating) objections.
+        CPPUNIT_ASSERT(pPage1->GetSortedObjs());
+        const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+        CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+        auto pPage1Fly = dynamic_cast<SwFlyAtContentFrame*>(rPage1Objs[0]);
+        CPPUNIT_ASSERT(pPage1Fly);
+        auto pTab1 = dynamic_cast<SwTabFrame*>(pPage1Fly->GetLower());
+        CPPUNIT_ASSERT(pTab1);
+        // This failed, the split fly containing a table was exported back to DOC as shape+table,
+        // which can't split.
+        CPPUNIT_ASSERT(pTab1->HasFollow());
 
-    // tdf#80635 - transfer the float orientation to the table.
-    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
-    uno::Reference<text::XTextTable> xTable(xTables->getByIndex(0), uno::UNO_QUERY);
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("Horizontal Orientation", text::HoriOrientation::CENTER, getProperty<sal_Int16>(xTable, "HoriOrient"));
+        // tdf#80635 - assert the horizontal orientation.
+        const SwFormatHoriOrient& rFormatHoriOrient = pPage1Fly->GetFormat()->GetHoriOrient();
+        CPPUNIT_ASSERT_EQUAL(css::text::HoriOrientation::CENTER, rFormatHoriOrient.GetHoriOrient());
+    };
+    createSwDoc("tdf107773.doc");
+    verify();
+    reload(mpFilter, "tdf107773.doc");
+    verify();
 }
 
 DECLARE_WW8EXPORT_TEST(testTdf112074_RTLtableJustification, "tdf112074_RTLtableJustification.doc")

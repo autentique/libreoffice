@@ -167,7 +167,7 @@ class SwSendQueryBox_Impl : public SwMessageAndEditDialog
     bool            m_bIsEmptyAllowed;
     DECL_LINK( ModifyHdl, weld::Entry&, void);
 public:
-    SwSendQueryBox_Impl(weld::Window* pParent, const OString& rID,
+    SwSendQueryBox_Impl(weld::Window* pParent, const OUString& rID,
         const OUString& rUIXMLDescription);
 
     void SetValue(const OUString& rSet)
@@ -209,7 +209,7 @@ IMPL_LINK( SwSaveWarningBox_Impl, ModifyHdl, weld::Entry&, rEdit, void)
     m_xOKPB->set_sensitive(!rEdit.get_text().isEmpty());
 }
 
-SwSendQueryBox_Impl::SwSendQueryBox_Impl(weld::Window* pParent, const OString& rID,
+SwSendQueryBox_Impl::SwSendQueryBox_Impl(weld::Window* pParent, const OUString& rID,
         const OUString& rUIXMLDescription)
     : SwMessageAndEditDialog(pParent, rID, rUIXMLDescription)
     , m_bIsEmptyAllowed(true)
@@ -893,6 +893,12 @@ IMPL_LINK(SwMMResultEmailDialog, SendTypeHdl_Impl, weld::ComboBox&, rBox, void)
 
 IMPL_LINK_NOARG(SwMMResultEmailDialog, SendAsHdl_Impl, weld::Button&, void)
 {
+    // work around crash when calling constructor with no active view
+    if (!GetActiveView())
+    {
+        SAL_WARN("sw", "ignoring SendAs button click, because no active view");
+        return;
+    }
     SwMailBodyDialog aDlg(m_xDialog.get());
     aDlg.SetBody(m_sBody);
     if (RET_OK == aDlg.run())
@@ -1209,8 +1215,7 @@ IMPL_LINK_NOARG(SwMMResultEmailDialog, SendDocumentsHdl_Impl, weld::Button&, voi
                 bool bDone = pInStream->ReadLine( sLine );
                 while ( bDone )
                 {
-                    sBody.append( OStringToOUString(sLine, eEncoding) );
-                    sBody.append("\n");
+                    sBody.append( OStringToOUString(sLine, eEncoding) + "\n");
                     bDone = pInStream->ReadLine( sLine );
                 }
             }

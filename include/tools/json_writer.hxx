@@ -42,44 +42,46 @@ class TOOLS_DLLPUBLIC JsonWriter
     int mSpaceAllocated;
     int mStartNodeCount;
     bool mbFirstFieldInNode;
+    bool mbClosed; // cannot add to it anymore
 
 public:
     JsonWriter();
     ~JsonWriter();
 
-    [[nodiscard]] ScopedJsonWriterNode startNode(const char*);
-    [[nodiscard]] ScopedJsonWriterArray startArray(const char*);
+    [[nodiscard]] ScopedJsonWriterNode startNode(std::string_view);
+    [[nodiscard]] ScopedJsonWriterArray startArray(std::string_view);
     [[nodiscard]] ScopedJsonWriterStruct startStruct();
 
-    void put(const char* pPropName, const OUString& rPropValue);
+    void put(std::string_view pPropName, const OUString& rPropValue);
     // Assumes utf-8 property value encoding
-    void put(const char* pPropName, std::string_view rPropValue);
-    void put(const char* pPropName, const char* pPropVal)
+    void put(std::string_view pPropName, std::string_view rPropValue);
+    void put(std::string_view pPropName, const char* pPropVal)
     {
         put(pPropName, std::string_view(pPropVal));
     }
+    template <size_t N> void put(std::string_view pPropName, const char (&pPropVal)[N])
+    {
+        put(pPropName, std::string_view(pPropVal, N));
+    }
 
-    void put(const char* pPropName, sal_uInt16 nPropVal) { put(pPropName, sal_Int64(nPropVal)); }
-    void put(const char* pPropName, sal_Int16 nPropVal) { put(pPropName, sal_Int64(nPropVal)); }
-    void put(const char* pPropName, sal_Int32 nPropVal) { put(pPropName, sal_Int64(nPropVal)); }
-    void put(const char* pPropName, sal_uInt32 nPropVal) { put(pPropName, sal_Int64(nPropVal)); }
-    void put(const char* pPropName, sal_Int64);
-    void put(const char* pPropName, bool);
-    void put(const char* pPropName, double);
+    template <typename N, std::enable_if_t<std::is_arithmetic_v<N>, int> = 0>
+    void put(std::string_view pPropName, N n)
+    {
+        putLiteral(pPropName, OString::number(n));
+    }
+    void put(std::string_view pPropName, bool);
 
     void putSimpleValue(const OUString& rPropValue);
 
     /// This assumes that this data belongs at this point in the stream, and is valid, and properly encoded
     void putRaw(std::string_view);
 
-    /** Hands ownership of the underlying storage buffer to the caller,
-     * after this no more document modifications may be written. */
-    char* extractData() { return extractDataImpl().first; }
-    OString extractAsOString();
-    std::string extractAsStdString();
+    /** Closes the tags, and returns data.
+     * After this no more document modifications may be written. */
+    OString finishAndGetAsOString();
 
     /** returns true if the current JSON data matches the string */
-    bool isDataEquals(const std::string&) const;
+    bool isDataEquals(std::string_view) const;
 
 private:
     void endNode();
@@ -87,8 +89,10 @@ private:
     void endStruct();
     void addCommaBeforeField();
     void writeEscapedOUString(const OUString& rPropVal);
-    std::pair<char*, int> extractDataImpl();
+    void closeDocument();
     void ensureSpace(int noMoreBytesRequired);
+    void ensureSpaceAndWriteNameColon(std::string_view name, int valSize);
+    void putLiteral(std::string_view propName, std::string_view propValue);
 
     // overflow validation in debug mode
     static constexpr unsigned char JSON_WRITER_DEBUG_MARKER = 0xde;

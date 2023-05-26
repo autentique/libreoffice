@@ -463,8 +463,35 @@ MetaPolyLineAction::MetaPolyLineAction( tools::Polygon aPoly, LineInfo aLineInfo
     maPoly      (std::move( aPoly ))
 {}
 
+static bool AllowDim(tools::Long nDim)
+{
+    static bool bFuzzing = utl::ConfigManager::IsFuzzing();
+    if (bFuzzing)
+    {
+        if (nDim > 0x20000000 || nDim < -0x20000000)
+        {
+            SAL_WARN("vcl", "skipping huge dimension: " << nDim);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool AllowPoint(const Point& rPoint)
+{
+    return AllowDim(rPoint.X()) && AllowDim(rPoint.Y());
+}
+
+static bool AllowRect(const tools::Rectangle& rRect)
+{
+    return AllowPoint(rRect.TopLeft()) && AllowPoint(rRect.BottomRight());
+}
+
 void MetaPolyLineAction::Execute( OutputDevice* pOut )
 {
+    if (!AllowRect(pOut->LogicToPixel(maPoly.GetBoundRect())))
+        return;
+
     if( maLineInfo.IsDefault() )
         pOut->DrawPolyLine( maPoly );
     else
@@ -569,30 +596,6 @@ MetaTextAction::MetaTextAction( const Point& rPt, OUString aStr,
     mnIndex     ( nIndex ),
     mnLen       ( nLen )
 {}
-
-static bool AllowDim(tools::Long nDim)
-{
-    static bool bFuzzing = utl::ConfigManager::IsFuzzing();
-    if (bFuzzing)
-    {
-        if (nDim > 0x20000000 || nDim < -0x20000000)
-        {
-            SAL_WARN("vcl", "skipping huge dimension: " << nDim);
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool AllowPoint(const Point& rPoint)
-{
-    return AllowDim(rPoint.X()) && AllowDim(rPoint.Y());
-}
-
-static bool AllowRect(const tools::Rectangle& rRect)
-{
-    return AllowPoint(rRect.TopLeft()) && AllowPoint(rRect.BottomRight());
-}
 
 void MetaTextAction::Execute( OutputDevice* pOut )
 {
@@ -886,17 +889,17 @@ static bool AllowScale(const Size& rSource, const Size& rDest)
     static bool bFuzzing = utl::ConfigManager::IsFuzzing();
     if (bFuzzing)
     {
-        constexpr int nMaxScaleWhenFuzzing = 256;
+        constexpr int nMaxScaleWhenFuzzing = 128;
 
         auto nSourceHeight = rSource.Height();
         auto nDestHeight = rDest.Height();
-        if (nSourceHeight && nDestHeight > nSourceHeight && nDestHeight / nSourceHeight > nMaxScaleWhenFuzzing)
+        if (nSourceHeight && std::abs(nDestHeight / nSourceHeight) > nMaxScaleWhenFuzzing)
         {
             SAL_WARN("vcl", "skipping large vertical scaling: " << nSourceHeight << " to " << nDestHeight);
             return false;
         }
 
-        if (nDestHeight && nSourceHeight > nDestHeight && nSourceHeight / nDestHeight > nMaxScaleWhenFuzzing)
+        if (nDestHeight && std::abs(nSourceHeight / nDestHeight) > nMaxScaleWhenFuzzing)
         {
             SAL_WARN("vcl", "skipping large vertical scaling: " << nSourceHeight << " to " << nDestHeight);
             return false;
@@ -904,13 +907,13 @@ static bool AllowScale(const Size& rSource, const Size& rDest)
 
         auto nSourceWidth = rSource.Width();
         auto nDestWidth = rDest.Width();
-        if (nSourceWidth && nDestWidth > nSourceWidth && nDestWidth / nSourceWidth > nMaxScaleWhenFuzzing)
+        if (nSourceWidth && std::abs(nDestWidth / nSourceWidth) > nMaxScaleWhenFuzzing)
         {
             SAL_WARN("vcl", "skipping large horizontal scaling: " << nSourceWidth << " to " << nDestWidth);
             return false;
         }
 
-        if (nDestWidth && nSourceWidth > nDestWidth && nSourceWidth / nDestWidth > nMaxScaleWhenFuzzing)
+        if (nDestWidth && std::abs(nSourceWidth / nDestWidth) > nMaxScaleWhenFuzzing)
         {
             SAL_WARN("vcl", "skipping large horizontal scaling: " << nSourceWidth << " to " << nDestWidth);
             return false;
@@ -922,8 +925,12 @@ static bool AllowScale(const Size& rSource, const Size& rDest)
 
 void MetaBmpScaleAction::Execute( OutputDevice* pOut )
 {
-    if (!AllowScale(maBmp.GetSizePixel(), pOut->LogicToPixel(maSz)))
+    Size aPixelSize(pOut->LogicToPixel(maSz));
+    if (!AllowRect(tools::Rectangle(pOut->LogicToPixel(maPt), aPixelSize)) ||
+        !AllowScale(maBmp.GetSizePixel(), aPixelSize))
+    {
         return;
+    }
 
     pOut->DrawBitmap( maPt, maSz, maBmp );
 }
@@ -966,6 +973,9 @@ MetaBmpScalePartAction::MetaBmpScalePartAction( const Point& rDstPt, const Size&
 
 void MetaBmpScalePartAction::Execute( OutputDevice* pOut )
 {
+    if (!AllowRect(pOut->LogicToPixel(tools::Rectangle(maDstPt, maDstSz))))
+        return;
+
     pOut->DrawBitmap( maDstPt, maDstSz, maSrcPt, maSrcSz, maBmp );
 }
 
@@ -1313,6 +1323,11 @@ MetaHatchAction::MetaHatchAction( tools::PolyPolygon aPolyPoly, const Hatch& rHa
 
 void MetaHatchAction::Execute( OutputDevice* pOut )
 {
+    if (!AllowRect(pOut->LogicToPixel(maPolyPoly.GetBoundRect())))
+        return;
+    if (!AllowDim(pOut->LogicToPixel(Point(maHatch.GetDistance(), 0)).X()))
+        return;
+
     pOut->DrawHatch( maPolyPoly, maHatch );
 }
 

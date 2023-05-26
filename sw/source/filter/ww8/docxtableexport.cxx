@@ -263,7 +263,7 @@ void DocxAttributeOutput::TableDefinition(
     m_pSerializer->singleElementNS(XML_w, XML_tblLayout, FSNS(XML_w, XML_type), "fixed");
 
     // Look for the table style property in the table grab bag
-    std::map<OUString, css::uno::Any> aGrabBag
+    const std::map<OUString, css::uno::Any>& rGrabBag
         = pTableFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
 
     // We should clear the TableStyle map. In case of Table inside multiple tables it contains the
@@ -284,7 +284,7 @@ void DocxAttributeOutput::TableDefinition(
     }
 
     // Extract properties from grab bag
-    for (const auto& rGrabBagElement : aGrabBag)
+    for (const auto& rGrabBagElement : rGrabBag)
     {
         if (rGrabBagElement.first == "TableStyleName")
         {
@@ -422,7 +422,6 @@ void DocxAttributeOutput::TableDefinition(
             {
                 m_pSerializer->singleElementNS(XML_w, XML_tblpPr, attrListTablePos);
             }
-            attrListTablePos = nullptr;
         }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::TableDefinition: unhandled property: "
@@ -564,14 +563,14 @@ void DocxAttributeOutput::TableBackgrounds(
 
     const OString sColor = msfilter::util::ConvertColor(aColor);
 
-    std::map<OUString, css::uno::Any> aGrabBag
+    const std::map<OUString, css::uno::Any>& rGrabBag
         = pFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
 
     OString sOriginalColor;
-    std::map<OUString, css::uno::Any>::iterator aGrabBagElement = aGrabBag.find("originalColor");
-    if (aGrabBagElement != aGrabBag.end())
+    auto aGrabBagIt = rGrabBag.find("originalColor");
+    if (aGrabBagIt != rGrabBag.end())
         sOriginalColor
-            = OUStringToOString(aGrabBagElement->second.get<OUString>(), RTL_TEXTENCODING_UTF8);
+            = OUStringToOString(aGrabBagIt->second.get<OUString>(), RTL_TEXTENCODING_UTF8);
 
     if (sOriginalColor != sColor)
     {
@@ -586,33 +585,31 @@ void DocxAttributeOutput::TableBackgrounds(
     {
         rtl::Reference<sax_fastparser::FastAttributeList> pAttrList;
 
-        for (const auto& rGrabBagElement : aGrabBag)
+        for (const auto & [ name, val ] : rGrabBag)
         {
-            if (!rGrabBagElement.second.has<OUString>())
+            if (!val.has<OUString>())
                 continue;
 
-            OString sValue
-                = OUStringToOString(rGrabBagElement.second.get<OUString>(), RTL_TEXTENCODING_UTF8);
-            if (rGrabBagElement.first == "themeFill")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFill), sValue.getStr());
-            else if (rGrabBagElement.first == "themeFillTint")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFillTint), sValue.getStr());
-            else if (rGrabBagElement.first == "themeFillShade")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFillShade), sValue.getStr());
-            else if (rGrabBagElement.first == "fill")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_fill), sValue.getStr());
-            else if (rGrabBagElement.first == "themeColor")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeColor), sValue.getStr());
-            else if (rGrabBagElement.first == "themeTint")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeTint), sValue.getStr());
-            else if (rGrabBagElement.first == "themeShade")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeShade), sValue.getStr());
-            else if (rGrabBagElement.first == "color")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_color), sValue.getStr());
-            else if (rGrabBagElement.first == "val")
-                AddToAttrList(pAttrList, FSNS(XML_w, XML_val), sValue.getStr());
+            if (name == "themeFill")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFill), val.get<OUString>());
+            else if (name == "themeFillTint")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFillTint), val.get<OUString>());
+            else if (name == "themeFillShade")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeFillShade), val.get<OUString>());
+            else if (name == "fill")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_fill), val.get<OUString>());
+            else if (name == "themeColor")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeColor), val.get<OUString>());
+            else if (name == "themeTint")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeTint), val.get<OUString>());
+            else if (name == "themeShade")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_themeShade), val.get<OUString>());
+            else if (name == "color")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_color), val.get<OUString>());
+            else if (name == "val")
+                AddToAttrList(pAttrList, FSNS(XML_w, XML_val), val.get<OUString>());
         }
-        m_pSerializer->singleElementNS(XML_w, XML_shd, pAttrList.get());
+        m_pSerializer->singleElementNS(XML_w, XML_shd, pAttrList);
     }
 }
 
@@ -628,6 +625,10 @@ void DocxAttributeOutput::TableRowRedline(
     // check table row property "HasTextChangesOnly"
     SwRedlineTable::size_type nPos(0);
     SwRedlineTable::size_type nChange = pTabLine->UpdateTextChangesOnly(nPos);
+    // tdf#150824 if no tracked table row, is the table in a single redline?
+    // if yes, convert the row to a tracked table row instead of losing its tracking
+    if (nChange == SwRedlineTable::npos)
+        nChange = pTabLine->GetTableRedline();
     if (nChange != SwRedlineTable::npos)
     {
         const SwRedlineTable& aRedlineTable
@@ -696,52 +697,64 @@ void DocxAttributeOutput::TableCellRedline(
     bool bRemovePersonalInfo
         = SvtSecurityOptions::IsOptionSet(SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo);
 
-    // search next Redline
-    const SwExtraRedlineTable& aExtraRedlineTable
-        = m_rExport.m_rDoc.getIDocumentRedlineAccess().GetExtraRedlineTable();
-    for (sal_uInt16 nCurRedlinePos = 0; nCurRedlinePos < aExtraRedlineTable.GetSize();
-         ++nCurRedlinePos)
+    // check table row property "HasTextChangesOnly"
+    SwRedlineTable::size_type nChange = pTabBox->GetRedline();
+    if (nChange != SwRedlineTable::npos)
     {
-        SwExtraRedline* pExtraRedline = aExtraRedlineTable.GetRedline(nCurRedlinePos);
-        const SwTableCellRedline* pTableCellRedline
-            = dynamic_cast<const SwTableCellRedline*>(pExtraRedline);
-        if (pTableCellRedline && &pTableCellRedline->GetTableBox() == pTabBox)
-        {
-            // Redline for this table cell
-            const SwRedlineData& aRedlineData = pTableCellRedline->GetRedlineData();
-            RedlineType nRedlineType = aRedlineData.GetType();
-            switch (nRedlineType)
-            {
-                case RedlineType::TableCellInsert:
-                case RedlineType::TableCellDelete:
-                {
-                    OString aId(OString::number(m_nRedlineId++));
-                    const OUString& rAuthor(SW_MOD()->GetRedlineAuthor(aRedlineData.GetAuthor()));
-                    OString aAuthor(OUStringToOString(
-                        bRemovePersonalInfo
-                            ? "Author" + OUString::number(GetExport().GetInfoID(rAuthor))
-                            : rAuthor,
-                        RTL_TEXTENCODING_UTF8));
+        const SwRedlineTable& aRedlineTable
+            = m_rExport.m_rDoc.getIDocumentRedlineAccess().GetRedlineTable();
+        const SwRangeRedline* pRedline = aRedlineTable[nChange];
+        SwTableCellRedline* pTableCellRedline = nullptr;
+        bool bIsInExtra = false;
 
-                    sal_Int32 nElement
-                        = nRedlineType == RedlineType::TableCellInsert ? XML_cellIns : XML_cellDel;
-                    const DateTime aDateTime = aRedlineData.GetTimeStamp();
-                    bool bNoDate = bRemovePersonalInfo
-                                   || (aDateTime.GetYear() == 1970 && aDateTime.GetMonth() == 1
-                                       && aDateTime.GetDay() == 1);
-                    if (bNoDate)
-                        m_pSerializer->singleElementNS(XML_w, nElement, FSNS(XML_w, XML_id), aId,
-                                                       FSNS(XML_w, XML_author), aAuthor);
-                    else
-                        m_pSerializer->singleElementNS(
-                            XML_w, nElement, FSNS(XML_w, XML_id), aId, FSNS(XML_w, XML_author),
-                            aAuthor, FSNS(XML_w, XML_date), DateTimeToOString(aDateTime));
-                }
+        // use the original DOCX redline data stored in ExtraRedlineTable,
+        // if it exists and its type wasn't changed
+        const SwExtraRedlineTable& aExtraRedlineTable
+            = m_rExport.m_rDoc.getIDocumentRedlineAccess().GetExtraRedlineTable();
+        for (sal_uInt16 nCurRedlinePos = 0; nCurRedlinePos < aExtraRedlineTable.GetSize();
+             ++nCurRedlinePos)
+        {
+            SwExtraRedline* pExtraRedline = aExtraRedlineTable.GetRedline(nCurRedlinePos);
+            pTableCellRedline = dynamic_cast<SwTableCellRedline*>(pExtraRedline);
+            if (pTableCellRedline && &pTableCellRedline->GetTableBox() == pTabBox)
+            {
+                bIsInExtra = true;
                 break;
-                default:
-                    break;
             }
         }
+
+        const SwRedlineData& aRedlineData
+            = bIsInExtra &&
+                      // still the same type (an inserted cell could become a tracked deleted one)
+                      pRedline->GetRedlineData().GetType() == pRedline->GetRedlineData().GetType()
+                  ? pTableCellRedline->GetRedlineData()
+                  : pRedline->GetRedlineData();
+
+        // Note: all redline ranges and table row redline (with the same author and timestamp)
+        // use the same redline id in OOXML exported by MSO, but it seems, the recent solution
+        // (different IDs for different ranges, also row changes) is also portable.
+        OString aId(OString::number(m_nRedlineId++));
+        const OUString& rAuthor(SW_MOD()->GetRedlineAuthor(aRedlineData.GetAuthor()));
+        OString aAuthor(OUStringToOString(
+            bRemovePersonalInfo ? "Author" + OUString::number(GetExport().GetInfoID(rAuthor))
+                                : rAuthor,
+            RTL_TEXTENCODING_UTF8));
+
+        const DateTime aDateTime = aRedlineData.GetTimeStamp();
+        bool bNoDate = bRemovePersonalInfo
+                       || (aDateTime.GetYear() == 1970 && aDateTime.GetMonth() == 1
+                           && aDateTime.GetDay() == 1);
+
+        if (bNoDate)
+            m_pSerializer->singleElementNS(
+                XML_w, RedlineType::Delete == pRedline->GetType() ? XML_cellDel : XML_cellIns,
+                FSNS(XML_w, XML_id), aId, FSNS(XML_w, XML_author), aAuthor);
+        else
+            m_pSerializer->singleElementNS(
+                XML_w, RedlineType::Delete == pRedline->GetType() ? XML_cellDel : XML_cellIns,
+                FSNS(XML_w, XML_id), aId, FSNS(XML_w, XML_author), aAuthor, FSNS(XML_w, XML_date),
+                DateTimeToOString(aDateTime));
+        return;
     }
 }
 

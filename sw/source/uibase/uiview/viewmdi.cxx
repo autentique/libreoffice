@@ -89,7 +89,7 @@ void SwView::SetZoom_( const Size &rEditSize, SvxZoomType eZoomType,
 {
     bool bUnLockView = !m_pWrtShell->IsViewLocked();
     m_pWrtShell->LockView( true );
-    m_pWrtShell->LockPaint();
+    m_pWrtShell->LockPaint(LockPaintReason::SetZoom);
 
     { // start of SwActContext scope
     SwActContext aActContext(m_pWrtShell.get());
@@ -225,7 +225,7 @@ void SwView::SetViewLayout( sal_uInt16 nColumns, bool bBookMode, bool bViewOnly 
 {
     const bool bUnLockView = !m_pWrtShell->IsViewLocked();
     m_pWrtShell->LockView( true );
-    m_pWrtShell->LockPaint();
+    m_pWrtShell->LockPaint(LockPaintReason::ViewLayout);
 
     {
 
@@ -704,7 +704,7 @@ void SwView::KillVRuler()
 IMPL_LINK( SwView, ExecRulerClick, Ruler *, pRuler, void )
 {
     OUString sDefPage;
-    sal_uInt16 nDefDlg = SID_PARA_DLG;
+    TypedWhichId<SfxStringItem> nDefDlg = SID_PARA_DLG;
     switch( pRuler->GetClickType() )
     {
         case RulerType::DontKnow:

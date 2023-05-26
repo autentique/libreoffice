@@ -74,9 +74,9 @@ ConditionColorWrapper::ConditionColorWrapper(Condition* pControl, sal_uInt16 nSl
 }
 
 void ConditionColorWrapper::operator()(
-    [[maybe_unused]] const OUString& /*rCommand*/, const svx::NamedThemedColor& rNamedColor)
+    [[maybe_unused]] const OUString& /*rCommand*/, const NamedColor& rNamedColor)
 {
-    mpControl->ApplyCommand(mnSlotId, rNamedColor.ToNamedColor());
+    mpControl->ApplyCommand(mnSlotId, rNamedColor);
 }
 
 // = Condition
@@ -128,19 +128,19 @@ Condition::Condition(weld::Container* pParent, weld::Window* pDialog, ICondition
     ConditionalExpressionFactory::getKnownConditionalExpressions( m_aConditionalExpressions );
 }
 
-sal_uInt16 Condition::mapToolbarItemToSlotId(std::string_view rItemId)
+sal_uInt16 Condition::mapToolbarItemToSlotId(std::u16string_view rItemId)
 {
-    if (rItemId == "bold")
+    if (rItemId == u"bold")
         return SID_ATTR_CHAR_WEIGHT;
-    if (rItemId == "italic")
+    if (rItemId == u"italic")
         return SID_ATTR_CHAR_POSTURE;
-    if (rItemId == "underline")
+    if (rItemId == u"underline")
         return SID_ATTR_CHAR_UNDERLINE;
-    if (rItemId == "background")
+    if (rItemId == u"background")
         return SID_BACKGROUND_COLOR;
-    if (rItemId == "foreground")
+    if (rItemId == u"foreground")
         return SID_ATTR_CHAR_COLOR2;
-    if (rItemId == "fontdialog")
+    if (rItemId == u"fontdialog")
         return SID_CHAR_DLG;
     return 0;
 }
@@ -180,7 +180,7 @@ void Condition::SetForegroundDropdownClick()
 }
 
 
-IMPL_LINK(Condition, OnFormatAction, const OString&, rIdent, void)
+IMPL_LINK(Condition, OnFormatAction, const OUString&, rIdent, void)
 {
     ApplyCommand(mapToolbarItemToSlotId(rIdent),
                  NamedColor(COL_AUTO, "#" + COL_AUTO.AsRGBHexString()));
@@ -200,7 +200,7 @@ IMPL_LINK(Condition, OnConditionAction, weld::Button&, rClickedButton, void)
 
 void Condition::ApplyCommand( sal_uInt16 _nCommandId, const NamedColor& rNamedColor )
 {
-    m_rAction.applyCommand( m_nCondIndex, _nCommandId, rNamedColor.first );
+    m_rAction.applyCommand(m_nCondIndex, _nCommandId, rNamedColor.m_aColor);
 }
 
 IMPL_LINK_NOARG( Condition, OnTypeSelected, weld::ComboBox&, void )
@@ -304,7 +304,7 @@ void Condition::setCondition( const uno::Reference< report::XFormatCondition >& 
 
 void Condition::updateToolbar(const uno::Reference< report::XReportControlFormat >& _xReportControlFormat)
 {
-    OString aItems[] = { "bold", "italic", "underline", "fontdialog" };
+    OUString aItems[] = { "bold", "italic", "underline", "fontdialog" };
 
     OSL_ENSURE(_xReportControlFormat.is(),"XReportControlFormat is NULL!");
     if ( !_xReportControlFormat.is() )

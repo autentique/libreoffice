@@ -197,10 +197,17 @@ namespace
 
     bool lcl_Lower( const SwPosition& rPos, const SwNode& rNdIdx, std::optional<sal_Int32> oContentIdx )
     {
-        return rPos.GetNode() < rNdIdx
-               || ( oContentIdx.has_value()
-                    && rPos.GetNode() == rNdIdx
-                    && rPos.GetContentIndex() < *oContentIdx );
+        if (rPos.GetNode() < rNdIdx)
+            return true;
+
+        if (rPos.GetNode() != rNdIdx || !oContentIdx)
+            return false;
+
+        if (rPos.GetContentIndex() < *oContentIdx)
+            return true;
+
+        // paragraph end selected?
+        return rNdIdx.IsTextNode() && *oContentIdx == rNdIdx.GetTextNode()->Len();
     }
 
     bool lcl_MarkOrderingByStart(const ::sw::mark::MarkBase *const pFirst,
@@ -217,6 +224,12 @@ namespace
         if (nFirstContent != 0 || nSecondContent != 0)
         {
             return nFirstContent < nSecondContent;
+        }
+        SwContentNode const*const pFirstNode(rFirstStart.nContent.GetContentNode());
+        SwContentNode const*const pSecondNode(rSecondStart.nContent.GetContentNode());
+        if ((pFirstNode != nullptr) != (pSecondNode != nullptr))
+        {   // consistency with SwPosition::operator<
+            return pSecondNode != nullptr;
         }
         auto *const pCRFirst (dynamic_cast<::sw::mark::CrossRefBookmark const*>(pFirst));
         auto *const pCRSecond(dynamic_cast<::sw::mark::CrossRefBookmark const*>(pSecond));
@@ -2050,7 +2063,7 @@ void DelBookmarks(
         if( lcl_Greater( *pREnd, rStt, oStartContentIdx ) && lcl_Lower( *pREnd, rEnd, oEndContentIdx ))
         {
             pREnd->Assign( rStt );
-            if( oStartContentIdx )
+            if (oStartContentIdx && rStt.IsContentNode())
                 pREnd->SetContent( *oStartContentIdx );
             else
             {

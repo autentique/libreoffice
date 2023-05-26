@@ -256,7 +256,6 @@
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:DrawText"/>
       <menu:menuitem menu:id=".uno:InsertAnnotation"/>
-      <menu:menuitem menu:id=".uno:InsertObjectFloatingFrame" menu:style="text"/>
       <menu:menuitem menu:id=".uno:FontworkGalleryFloater"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:HyperlinkDialog"/>
@@ -422,6 +421,7 @@
       <menu:menuitem menu:id=".uno:ConditionalFormatMenu"/>
       <menu:menuitem menu:id=".uno:AutoFormat"/>
       <menu:menuitem menu:id=".uno:ChooseDesign"/>
+      <menu:menuitem menu:id=".uno:ThemeDialog"/>
       <menu:menuseparator/>
       <menu:menu menu:id=".uno:FormatImageMenu">
         <menu:menupopup>

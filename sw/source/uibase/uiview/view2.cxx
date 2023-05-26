@@ -533,7 +533,7 @@ bool SwView::InsertGraphicDlg( SfxRequest& rReq )
 #endif
 
         SwWrtShell& rSh = GetWrtShell();
-        rSh.LockPaint();
+        rSh.LockPaint(LockPaintReason::InsertGraphic);
         rSh.StartAction();
 
         SwRewriter aRewriter;
@@ -681,7 +681,7 @@ void SwView::Execute(SfxRequest &rReq)
                     nPage++;
                 if (nPage != nOldPage)
                 {
-                    m_pWrtShell->LockPaint();
+                    m_pWrtShell->LockPaint(LockPaintReason::GotoPage);
                     if (IsDrawMode())
                         LeaveDrawCreate();
                     m_pWrtShell->EnterStdMode();
@@ -1017,10 +1017,9 @@ void SwView::Execute(SfxRequest &rReq)
             {
                 if (comphelper::LibreOfficeKit::isActive())
                 {
-                    OString aPayload(".uno:CurrentTrackedChangeId=");
                     sal_uInt32 nRedlineId = pNext->GetId();
-                    aPayload += OString::number(nRedlineId);
-                    libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, aPayload.getStr());
+                    OString aPayload(".uno:CurrentTrackedChangeId=" + OString::number(nRedlineId));
+                    libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, aPayload);
                 }
 
                 m_pWrtShell->SetInSelect();
@@ -1037,10 +1036,9 @@ void SwView::Execute(SfxRequest &rReq)
             {
                 if (comphelper::LibreOfficeKit::isActive())
                 {
-                    OString aPayload(".uno:CurrentTrackedChangeId=");
                     sal_uInt32 nRedlineId = pPrev->GetId();
-                    aPayload += OString::number(nRedlineId);
-                    libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, aPayload.getStr());
+                    OString aPayload(".uno:CurrentTrackedChangeId=" + OString::number(nRedlineId));
+                    libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, aPayload);
                 }
 
                 m_pWrtShell->SetInSelect();
@@ -1969,8 +1967,7 @@ void SwView::StateStatusLine(SfxItemSet &rSet)
                 if( rShell.IsCursorInTable() )
                 {
                     // table name + cell coordinate
-                    sStr = rShell.GetTableFormat()->GetName() + ":";
-                    sStr += rShell.GetBoxNms();
+                    sStr = rShell.GetTableFormat()->GetName() + ":" + rShell.GetBoxNms();
                     eCategory = StatusCategory::TableCell;
                 }
                 else

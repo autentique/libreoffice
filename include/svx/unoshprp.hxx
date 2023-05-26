@@ -230,13 +230,14 @@
     { UNO_NAME_SHADOWYDIST,       SDRATTR_SHADOWYDIST,        ::cppu::UnoType<sal_Int32>::get(),    0,      0, PropertyMoreFlags::METRIC_ITEM}, \
     { UNO_NAME_SHADOWSIZEX,       SDRATTR_SHADOWSIZEX,        ::cppu::UnoType<sal_Int32>::get(),    0,      0}, \
     { UNO_NAME_SHADOWSIZEY,       SDRATTR_SHADOWSIZEY,        ::cppu::UnoType<sal_Int32>::get(),    0,      0}, \
-    { UNO_NAME_SHADOWBLUR,        SDRATTR_SHADOWBLUR,         ::cppu::UnoType<sal_Int32>::get(),    0,      0, PropertyMoreFlags::METRIC_ITEM},
+    { UNO_NAME_SHADOWBLUR,        SDRATTR_SHADOWBLUR,         ::cppu::UnoType<sal_Int32>::get(),    0,      0, PropertyMoreFlags::METRIC_ITEM}, \
+    { UNO_NAME_SHADOWALIGNMENT,   SDRATTR_SHADOWALIGNMENT,    /*ENUM*/::cppu::UnoType<sal_Int32>::get(), 0, 0},
 
 
 #define LINE_PROPERTIES_DEFAULTS\
     { UNO_NAME_LINECAP,           XATTR_LINECAP,          ::cppu::UnoType<css::drawing::LineCap>::get(),     0,     0}, \
     { UNO_NAME_LINECOLOR,         XATTR_LINECOLOR,        ::cppu::UnoType<sal_Int32>::get() ,           0,     0}, \
-    { UNO_NAME_LINECOLOR_THEME_REFERENCE, XATTR_LINECOLOR, ::cppu::UnoType<css::uno::XInterface>::get() ,           0, MID_COLOR_THEME_REFERENCE}, \
+    { UNO_NAME_LINE_COMPLEX_COLOR, XATTR_LINECOLOR, ::cppu::UnoType<css::util::XComplexColor>::get() ,           0, MID_COMPLEX_COLOR}, \
     { UNO_NAME_LINEENDCENTER,     XATTR_LINEENDCENTER,    cppu::UnoType<bool>::get() ,           0,     0}, \
     { UNO_NAME_LINEENDWIDTH,      XATTR_LINEENDWIDTH,     ::cppu::UnoType<sal_Int32>::get() ,           0,     0, PropertyMoreFlags::METRIC_ITEM}, \
     { UNO_NAME_LINEJOINT,         XATTR_LINEJOINT,        ::cppu::UnoType<css::drawing::LineJoint>::get(),     0,     0}, \
@@ -293,7 +294,7 @@
     { UNO_NAME_FILLCOLOR_THEME,   XATTR_FILLCOLOR, ::cppu::UnoType<sal_Int16>::get(),          0,     MID_COLOR_THEME_INDEX}, \
     { UNO_NAME_FILLCOLOR_LUM_MOD, XATTR_FILLCOLOR, ::cppu::UnoType<sal_Int16>::get(),          0,     MID_COLOR_LUM_MOD}, \
     { UNO_NAME_FILLCOLOR_LUM_OFF, XATTR_FILLCOLOR, ::cppu::UnoType<sal_Int16>::get(),          0,     MID_COLOR_LUM_OFF}, \
-    { UNO_NAME_FILLCOLOR_THEME_REFERENCE,   XATTR_FILLCOLOR, ::cppu::UnoType<css::uno::XInterface>::get(),          0,     MID_COLOR_THEME_REFERENCE}, \
+    { UNO_NAME_FILL_COMPLEX_COLOR,   XATTR_FILLCOLOR, ::cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_COMPLEX_COLOR}, \
     { UNO_NAME_GRAPHIC_GRAPHICCROP, SDRATTR_GRAFCROP      , ::cppu::UnoType<css::text::GraphicCrop>::get(), 0, 0 }, \
     { UNO_NAME_FILLUSESLIDEBACKGROUND, XATTR_FILLUSESLIDEBACKGROUND, cppu::UnoType<bool>::get(), 0,   0},
 
@@ -327,6 +328,7 @@
     { UNO_NAME_TEXT_VERTADJUST,       SDRATTR_TEXT_VERTADJUST,        cppu::UnoType<css::drawing::TextVerticalAdjust>::get(),    0,      0},\
     { UNO_NAME_TEXT_WORDWRAP,         SDRATTR_TEXT_WORDWRAP,          cppu::UnoType<bool>::get(),        0,      0}, \
     { UNO_NAME_TEXT_CHAINNEXTNAME,    SDRATTR_TEXT_CHAINNEXTNAME,     ::cppu::UnoType<OUString>::get(),        0,      0}, \
+    { UNO_NAME_TEXT_CLIPVERTOVERFLOW, SDRATTR_TEXT_CLIPVERTOVERFLOW,  cppu::UnoType<bool>::get(),              0,      0}, \
     { u"TextColumns",                     OWN_ATTR_TEXTCOLUMNS,           cppu::UnoType<css::text::XTextColumns>::get(), 0, 0 }, \
     SVX_UNOEDIT_CHAR_PROPERTIES, \
     SVX_UNOEDIT_PARA_PROPERTIES,
@@ -363,7 +365,7 @@
     { UNO_NAME_MISC_OBJ_SIZEPROTECT,  SDRATTR_OBJSIZEPROTECT          , cppu::UnoType<bool>::get(),                      0,  0},\
     { u"UINameSingular",               OWN_ATTR_UINAME_SINGULAR        , ::cppu::UnoType<OUString>::get(),    css::beans::PropertyAttribute::READONLY,   0}, \
     { u"UINamePlural",                 OWN_ATTR_UINAME_PLURAL          , ::cppu::UnoType<OUString>::get(),    css::beans::PropertyAttribute::READONLY,   0}, \
-    { u"TextFitToSizeScale", OWN_ATTR_TEXTFITTOSIZESCALE, ::cppu::UnoType<sal_Int16>::get(), 0, 0}, \
+    { u"TextFitToSizeScale", OWN_ATTR_TEXTFITTOSIZESCALE, ::cppu::UnoType<double>::get(), 0, 0}, \
     /* #i68101# */ \
     { UNO_NAME_MISC_OBJ_TITLE,        OWN_ATTR_MISC_OBJ_TITLE         , ::cppu::UnoType<OUString>::get(),    0,  0}, \
     { UNO_NAME_MISC_OBJ_DESCRIPTION,  OWN_ATTR_MISC_OBJ_DESCRIPTION   , ::cppu::UnoType<OUString>::get(),    0,  0}, \

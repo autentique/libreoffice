@@ -232,11 +232,11 @@ SwDoc::SwDoc()
     mpDfltCharFormat( new SwCharFormat( GetAttrPool(), DEFAULT_CHAR_FORMAT_NAME, nullptr ) ),
     mpDfltTextFormatColl( new SwTextFormatColl( GetAttrPool(), "Paragraph style" ) ),
     mpDfltGrfFormatColl( new SwGrfFormatColl( GetAttrPool(), "Graphikformatvorlage" ) ),
-    mpFrameFormatTable( new SwFrameFormats() ),
+    mpFrameFormatTable( new sw::FrameFormats<SwFrameFormat*>() ),
     mpCharFormatTable( new SwCharFormats ),
-    mpSpzFrameFormatTable( new SwFrameFormats() ),
+    mpSpzFrameFormatTable( new sw::FrameFormats<sw::SpzFrameFormat*>() ),
     mpSectionFormatTable( new SwSectionFormats ),
-    mpTableFrameFormatTable( new SwFrameFormats() ),
+    mpTableFrameFormatTable( new sw::TableFrameFormats() ),
     mpTextFormatCollTable( new SwTextFormatColls() ),
     mpGrfFormatCollTable( new SwGrfFormatColls() ),
     mpTOXTypes( new SwTOXTypes ),
@@ -1291,7 +1291,7 @@ SwNodeIndex SwDoc::AppendDoc(const SwDoc& rSource, sal_uInt16 const nStartPageNu
         }
 
         // finally copy page bound frames
-        for ( auto pCpyFormat : *rSource.GetSpzFrameFormats() )
+        for(sw::SpzFrameFormat* pCpyFormat: *rSource.GetSpzFrameFormats())
         {
             const SwFrameFormat& rCpyFormat = *pCpyFormat;
             SwFormatAnchor aAnchor( rCpyFormat.GetAnchor() );

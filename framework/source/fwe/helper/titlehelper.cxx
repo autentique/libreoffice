@@ -434,8 +434,7 @@ void TitleHelper::impl_updateTitleForController (const css::uno::Reference< css:
         sTitle.append      (xModelTitle->getTitle ());
         if ( nLeasedNumber > 1 )
         {
-            sTitle.append(" : ");
-            sTitle.append(nLeasedNumber);
+            sTitle.append(" : " + OUString::number(nLeasedNumber));
         }
         if (xModel.is ())
         {
@@ -497,11 +496,14 @@ void TitleHelper::impl_updateTitleForFrame (const css::uno::Reference< css::fram
 
     impl_appendComponentTitle   (sTitle, xComponent);
 #ifndef MACOSX
-    // fdo#70376: We want the window title to contain just the
-    // document name (from the above "component title").
-    impl_appendProductName      (sTitle);
-    impl_appendModuleName       (sTitle);
-    impl_appendDebugVersion     (sTitle);
+    if (!utl::ConfigManager::IsFuzzing())
+    {
+        // fdo#70376: We want the window title to contain just the
+        // document name (from the above "component title").
+        impl_appendProductName      (sTitle);
+        impl_appendModuleName       (sTitle);
+        impl_appendDebugVersion     (sTitle);
+    }
 #endif
     impl_appendSafeMode         (sTitle);
 

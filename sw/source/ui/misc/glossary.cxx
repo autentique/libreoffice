@@ -85,8 +85,7 @@ static OUString lcl_GetValidShortCut( const OUString& rName )
     while( rName[nStart-1]==' ' && nStart < nSz )
         nStart++;
 
-    OUStringBuffer aBuf;
-    aBuf.append(rName[nStart-1]);
+    OUStringBuffer aBuf(OUString::number(rName[nStart-1]));
 
     for( ; nStart < nSz; ++nStart )
     {
@@ -545,7 +544,7 @@ IMPL_LINK_NOARG( SwGlossaryDlg, EnableHdl, weld::Toggleable&, void )
     m_xEditBtn->set_item_visible("import", bIsGroup && !m_bIsOld && !m_pGlossaryHdl->IsReadOnly() );
 }
 
-IMPL_LINK(SwGlossaryDlg, MenuHdl, const OString&, rItemIdent, void)
+IMPL_LINK(SwGlossaryDlg, MenuHdl, const OUString&, rItemIdent, void)
 {
     if (rItemIdent == "edit")
     {

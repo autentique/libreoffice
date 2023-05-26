@@ -59,7 +59,7 @@ QtMenu::QtMenu(bool bMenuBar)
 {
 }
 
-bool QtMenu::HasNativeMenuBar() { return true; }
+bool QtMenu::VisibleMenuBar() { return true; }
 
 void QtMenu::InsertMenuItem(QtMenuItem* pSalMenuItem, unsigned nPos)
 {
@@ -478,7 +478,8 @@ void QtMenu::DoFullMenuUpdate(Menu* pMenuBar)
         const bool bShowDisabled
             = bool(pMenuBar->GetMenuFlags() & MenuFlags::AlwaysShowDisabledEntries)
               || !bool(pMenuBar->GetMenuFlags() & MenuFlags::HideDisabledEntries);
-        const bool bVisible = bShowDisabled || mpVCLMenu->IsItemEnabled(pSalMenuItem->mnId);
+        const bool bVisible = pSalMenuItem->mbVisible
+                              && (bShowDisabled || mpVCLMenu->IsItemEnabled(pSalMenuItem->mnId));
         pSalMenuItem->getAction()->setVisible(bVisible);
 
         if (pSalMenuItem->mpSubMenu != nullptr)
@@ -849,7 +850,8 @@ int QtMenu::GetMenuBarHeight() const
 {
     if (!validateQMenuBar() || mpQMenuBar->isHidden())
         return 0;
-    return mpQMenuBar->height() * mpFrame->devicePixelRatioF();
+
+    return mpQMenuBar->height();
 }
 
 QtMenuItem::QtMenuItem(const SalItemParams* pItemData)

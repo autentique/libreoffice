@@ -1243,20 +1243,6 @@ public:
 
     ///@}
 
-    /** @name Event Testing Mode
-    */
-
-    /** Enables event testing mode.
-
-    */
-    static void                 EnableEventTestingMode();
-
-    /** Determines if event testing mode is enabled
-
-     @return True if event testing mode is enabled, false if not.
-    */
-    static bool                 IsEventTestingModeEnabled();
-
     /** Set safe mode to enabled */
     static void                 EnableSafeMode();
 
@@ -1328,14 +1314,6 @@ public:
     static css::uno::Reference< css::ui::dialogs::XFolderPicker2 >
         createFolderPicker( const css::uno::Reference< css::uno::XComponentContext >& rServiceManager );
 
-    /** Cancel all open dialogs
-    */
-    static void                 EndAllDialogs();
-
-    /** Cancel all open popups
-    */
-    static void                 EndAllPopups();
-
     /** Returns true, if the VCL plugin runs on the system event loop.
      *
      *  AKA the VCL plugin can't handle nested event loops, like WASM or mobile.
@@ -1364,7 +1342,7 @@ public:
     virtual void notifyWindow(vcl::LOKWindowId nLOKWindowId,
                               const OUString& rAction,
                               const std::vector<vcl::LOKPayloadItem>& rPayload = std::vector<vcl::LOKPayloadItem>()) const override;
-    virtual void libreOfficeKitViewCallback(int nType, const char* pPayload) const override;
+    virtual void libreOfficeKitViewCallback(int nType, const OString& pPayload) const override;
     virtual void notifyInvalidation(tools::Rectangle const *) const override;
 
 

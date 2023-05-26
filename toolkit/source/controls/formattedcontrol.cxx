@@ -18,7 +18,7 @@
  */
 
 #include <controls/formattedcontrol.hxx>
-#include <toolkit/helper/property.hxx>
+#include <helper/property.hxx>
 
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -201,7 +201,7 @@ namespace toolkit
                 }
             }
 
-            setPropertyValueImpl( rGuard, GetPropertyName( BASEPROPERTY_TEXT ), Any( sStringValue ) );
+            setFastPropertyValueImpl( rGuard, BASEPROPERTY_TEXT, Any( sStringValue ) );
         }
         catch( const Exception& )
         {

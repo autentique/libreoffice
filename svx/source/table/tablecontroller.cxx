@@ -1119,7 +1119,7 @@ void SvxTableController::SetTableStyle( const SfxItemSet* pArgs )
     if(!pArgs || (SfxItemState::SET != pArgs->GetItemState(SID_TABLE_STYLE, false)))
         return;
 
-    const SfxStringItem* pArg = dynamic_cast< const SfxStringItem* >( &pArgs->Get( SID_TABLE_STYLE ) );
+    const SfxStringItem* pArg = &pArgs->Get( SID_TABLE_STYLE );
     if( !(pArg && mxTable.is()) )
         return;
 
@@ -2380,8 +2380,8 @@ void SvxTableController::updateSelectionOverlay()
 
     if(SfxViewShell* pViewShell = SfxViewShell::Current())
     {
-        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, aSelection.toString().getStr());
-        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aSelection.toString().getStr());
+        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CELL_SELECTION_AREA, aSelection.toString());
+        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, aSelection.toString());
     }
 }
 

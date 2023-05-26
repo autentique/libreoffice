@@ -28,21 +28,21 @@ StringMap jsonToStringMap(const char* pJSON)
 
         for (const auto& rPair : aTree)
         {
-            aArgs[OUString::fromUtf8(rPair.first.c_str())]
-                = OUString::fromUtf8(rPair.second.get_value<std::string>(".").c_str());
+            aArgs[OUString::fromUtf8(rPair.first)]
+                = OUString::fromUtf8(rPair.second.get_value<std::string>("."));
         }
     }
     return aArgs;
 }
 
-void SendFullUpdate(const std::string& nWindowId, const OString& rWidget)
+void SendFullUpdate(const OUString& nWindowId, const OUString& rWidget)
 {
     weld::Widget* pWidget = JSInstanceBuilder::FindWeldWidgetsMap(nWindowId, rWidget);
     if (auto pJSWidget = dynamic_cast<BaseJSWidget*>(pWidget))
         pJSWidget->sendFullUpdate();
 }
 
-void SendAction(const std::string& nWindowId, const OString& rWidget,
+void SendAction(const OUString& nWindowId, const OUString& rWidget,
                 std::unique_ptr<ActionDataMap> pData)
 {
     weld::Widget* pWidget = JSInstanceBuilder::FindWeldWidgetsMap(nWindowId, rWidget);
@@ -50,7 +50,7 @@ void SendAction(const std::string& nWindowId, const OString& rWidget,
         pJSWidget->sendAction(std::move(pData));
 }
 
-bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringMap& rData)
+bool ExecuteAction(const OUString& nWindowId, const OUString& rWidget, StringMap& rData)
 {
     weld::Widget* pWidget = JSInstanceBuilder::FindWeldWidgetsMap(nWindowId, rWidget);
 
@@ -91,7 +91,7 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                 {
                     sal_Int32 page = o3tl::toInt32(rData["data"]);
 
-                    OString aCurrentPage = pNotebook->get_current_page_ident();
+                    OUString aCurrentPage = pNotebook->get_current_page_ident();
                     LOKTrigger::leave_page(*pNotebook, aCurrentPage);
                     pNotebook->set_current_page(page);
                     LOKTrigger::enter_page(*pNotebook, pNotebook->get_page_ident(page));
@@ -166,6 +166,11 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
 
                     return true;
                 }
+                else if (sAction == "select")
+                {
+                    LOKTrigger::trigger_selected(*pButton, rData["data"]);
+                    return true;
+                }
             }
         }
         else if (sControlType == "checkbox")
@@ -187,7 +192,8 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
             auto pArea = dynamic_cast<weld::DrawingArea*>(pWidget);
             if (pArea)
             {
-                if (sAction == "click" || sAction == "dblclick")
+                if (sAction == "click" || sAction == "dblclick" || sAction == "mousemove"
+                    || sAction == "mousedown" || sAction == "mouseup")
                 {
                     OUString sClickData = rData["data"];
                     int nSeparatorPos = sClickData.indexOf(';');
@@ -200,23 +206,28 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                         if (nClickPosX.empty() || nClickPosY.empty())
                             return true;
 
-                        double posX = o3tl::toDouble(nClickPosX);
-                        double posY = o3tl::toDouble(nClickPosY);
+                        double fPosX = o3tl::toDouble(nClickPosX);
+                        double fPosY = o3tl::toDouble(nClickPosY);
                         OutputDevice& rRefDevice = pArea->get_ref_device();
                         // We send OutPutSize for the drawing area bitmap
                         // get_size_request is not necessarily updated
                         // therefore it may be incorrect.
                         Size size = rRefDevice.GetOutputSizePixel();
-                        posX = posX * size.Width();
-                        posY = posY * size.Height();
+                        fPosX = fPosX * size.Width();
+                        fPosY = fPosY * size.Height();
+
                         if (sAction == "click")
-                            LOKTrigger::trigger_click(*pArea, Point(posX, posY));
-                        else
-                            LOKTrigger::trigger_dblclick(*pArea, Point(posX, posY));
-                        return true;
+                            LOKTrigger::trigger_click(*pArea, Point(fPosX, fPosY));
+                        else if (sAction == "dblclick")
+                            LOKTrigger::trigger_dblclick(*pArea, Point(fPosX, fPosY));
+                        else if (sAction == "mouseup")
+                            LOKTrigger::trigger_mouse_up(*pArea, Point(fPosX, fPosY));
+                        else if (sAction == "mousedown")
+                            LOKTrigger::trigger_mouse_down(*pArea, Point(fPosX, fPosY));
+                        else if (sAction == "mousemove")
+                            LOKTrigger::trigger_mouse_move(*pArea, Point(fPosX, fPosY));
                     }
 
-                    LOKTrigger::trigger_click(*pArea, Point(10, 10));
                     return true;
                 }
                 else if (sAction == "keypress")
@@ -299,6 +310,10 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                     if (rData["data"] == "undefined")
                         return true;
 
+                    // The Document will not scroll if that is in focus
+                    // maybe we could send a message with: sAction == "grab_focus"
+                    pWidget->grab_focus();
+
                     double nValue = o3tl::toDouble(rData["data"]);
                     pSpinField->set_value(nValue
                                           * weld::SpinButton::Power10(pSpinField->get_digits()));
@@ -326,27 +341,24 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
             {
                 if (sAction == "click")
                 {
-                    LOKTrigger::trigger_clicked(
-                        *pToolbar, OUStringToOString(rData["data"], RTL_TEXTENCODING_ASCII_US));
+                    LOKTrigger::trigger_clicked(*pToolbar, rData["data"]);
                     return true;
                 }
                 else if (sAction == "togglemenu")
                 {
-                    OString sId = OUStringToOString(rData["data"], RTL_TEXTENCODING_ASCII_US);
+                    const OUString& sId = rData["data"];
                     bool bIsActive = pToolbar->get_menu_item_active(sId);
                     pToolbar->set_menu_item_active(sId, !bIsActive);
                     return true;
                 }
                 else if (sAction == "closemenu")
                 {
-                    OString sId = OUStringToOString(rData["data"], RTL_TEXTENCODING_ASCII_US);
-                    pToolbar->set_menu_item_active(sId, false);
+                    pToolbar->set_menu_item_active(rData["data"], false);
                     return true;
                 }
                 else if (sAction == "openmenu")
                 {
-                    OString sId = OUStringToOString(rData["data"], RTL_TEXTENCODING_ASCII_US);
-                    pToolbar->set_menu_item_active(sId, true);
+                    pToolbar->set_menu_item_active(rData["data"], true);
                     return true;
                 }
             }
@@ -429,7 +441,8 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                     std::unique_ptr<weld::TreeIter> itEntry(pTreeView->make_iterator());
                     pTreeView->get_iter_abs_pos(*itEntry, nAbsPos);
                     pTreeView->select(*itEntry);
-                    pTreeView->set_cursor(*itEntry);
+                    pTreeView->set_cursor_without_notify(*itEntry);
+                    pTreeView->grab_focus();
                     LOKTrigger::trigger_changed(*pTreeView);
                     return true;
                 }
@@ -438,8 +451,11 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                     sal_Int32 nRow = o3tl::toInt32(rData["data"]);
 
                     pTreeView->unselect_all();
+                    std::unique_ptr<weld::TreeIter> itEntry(pTreeView->make_iterator());
+                    pTreeView->get_iter_abs_pos(*itEntry, nRow);
                     pTreeView->select(nRow);
-                    pTreeView->set_cursor(nRow);
+                    pTreeView->set_cursor_without_notify(*itEntry);
+                    pTreeView->grab_focus();
                     LOKTrigger::trigger_changed(*pTreeView);
                     LOKTrigger::trigger_row_activated(*pTreeView);
                     return true;
@@ -449,6 +465,8 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
                     sal_Int32 nAbsPos = o3tl::toInt32(rData["data"]);
                     std::unique_ptr<weld::TreeIter> itEntry(pTreeView->make_iterator());
                     pTreeView->get_iter_abs_pos(*itEntry, nAbsPos);
+                    pTreeView->set_cursor_without_notify(*itEntry);
+                    pTreeView->grab_focus();
                     pTreeView->expand_row(*itEntry);
                     return true;
                 }
@@ -552,20 +570,20 @@ bool ExecuteAction(const std::string& nWindowId, const OString& rWidget, StringM
         }
         else if (sControlType == "scrolledwindow")
         {
-            auto pScrolledWindow = dynamic_cast<weld::ScrolledWindow*>(pWidget);
+            auto pScrolledWindow = dynamic_cast<JSScrolledWindow*>(pWidget);
             if (pScrolledWindow)
             {
                 if (sAction == "scrollv")
                 {
                     sal_Int32 nValue = o3tl::toInt32(rData["data"]);
-                    pScrolledWindow->vadjustment_set_value(nValue);
+                    pScrolledWindow->vadjustment_set_value_no_notification(nValue);
                     LOKTrigger::trigger_scrollv(*pScrolledWindow);
                     return true;
                 }
                 else if (sAction == "scrollh")
                 {
                     sal_Int32 nValue = o3tl::toInt32(rData["data"]);
-                    pScrolledWindow->hadjustment_set_value(nValue);
+                    pScrolledWindow->hadjustment_set_value_no_notification(nValue);
                     LOKTrigger::trigger_scrollh(*pScrolledWindow);
                     return true;
                 }

@@ -1321,20 +1321,39 @@ void SfxDispatcher::FlushImpl()
         else
         {
             // Actually pop
-            SfxShell* pPopped = nullptr;
             bool bFound = false;
-            do
+            if (!i->bUntil)
+            {
+                // pop exactly the requested shell
+                if (auto it = std::find(xImp->aStack.begin(), xImp->aStack.end(), i->pCluster);
+                    it != xImp->aStack.end())
+                {
+                    xImp->aStack.erase(it);
+                    i->pCluster->SetDisableFlags(SfxDisableFlags::NONE);
+                    bFound = true;
+
+                    // Mark the moved Shell
+                    aToDoCopy.push_front(SfxToDo_Impl(false, i->bDelete, false, *i->pCluster));
+                }
+            }
+            while (!bFound)
             {
                 DBG_ASSERT( !xImp->aStack.empty(), "popping from empty stack" );
-                pPopped = xImp->aStack.back();
+                SfxShell* pPopped = xImp->aStack.back();
                 xImp->aStack.pop_back();
                 pPopped->SetDisableFlags( SfxDisableFlags::NONE );
                 bFound = (pPopped == i->pCluster);
 
                 // Mark the moved Shell
                 aToDoCopy.push_front(SfxToDo_Impl(false, i->bDelete, false, *pPopped));
+                if (!i->bUntil)
+                {
+                    // We get here only when the requested shell was not on the stack.
+                    // I don't know how correct to pop a single random other shell and exit
+                    // in this case, but I just make sure that the previous logic is kept.
+                    break;
+                }
             }
-            while(i->bUntil && !bFound);
             DBG_ASSERT( bFound, "wrong SfxShell popped" );
         }
     }
@@ -1749,7 +1768,7 @@ boost::property_tree::ptree fillPopupMenu(Menu* pMenu)
             {
                 const SfxSlot *pSlot = SFX_SLOTPOOL().GetSlot(nItemId);
                 if (pSlot)
-                    aCommandURL = pSlot->GetCommandString();
+                    aCommandURL = pSlot->GetCommand();
             }
 
             const OUString aItemText = pMenu->GetItemText(nItemId);
@@ -1852,7 +1871,7 @@ void SfxDispatcher::ExecutePopup( const OUString& rResName, vcl::Window* pWin, c
         std::stringstream aStream;
         boost::property_tree::write_json(aStream, aRoot, true);
         if (SfxViewShell* pViewShell = xImp->pFrame->GetViewShell())
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, aStream.str().c_str());
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CONTEXT_MENU, OString(aStream.str()));
     }
     else
     {

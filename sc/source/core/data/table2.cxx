@@ -529,7 +529,10 @@ void ScTable::CopyToClip(
         for (SCCOL i = nCol1; i <= nCol2; i++)
             pTable->aCol[i].RemoveProtected(nRow1, nRow2);
 
+    mpCondFormatList->startRendering();
+    mpCondFormatList->updateValues();
     pTable->mpCondFormatList.reset(new ScConditionalFormatList(pTable->rDocument, *mpCondFormatList));
+    mpCondFormatList->endRendering();
 }
 
 void ScTable::CopyToClip(
@@ -695,13 +698,8 @@ void ScTable::CopyConditionalFormat( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCRO
                     aStyleName = static_cast<const ScCondDateFormatEntry*>(pEntry)->GetStyleName();
 
                 if(!aStyleName.isEmpty())
-                {
-                    if(rDocument.GetStyleSheetPool()->Find(aStyleName, SfxStyleFamily::Para))
-                        continue;
-
                     rDocument.GetStyleSheetPool()->CopyStyleFrom(
-                            pTable->rDocument.GetStyleSheetPool(), aStyleName, SfxStyleFamily::Para );
-                }
+                            pTable->rDocument.GetStyleSheetPool(), aStyleName, SfxStyleFamily::Para, true );
             }
         }
 

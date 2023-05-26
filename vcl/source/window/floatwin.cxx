@@ -154,7 +154,7 @@ FloatingWindow::FloatingWindow(vcl::Window* pParent, WinBits nStyle) :
     ImplInitFloating(pParent, nStyle);
 }
 
-FloatingWindow::FloatingWindow(vcl::Window* pParent, const OString& rID, const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame> &rFrame)
+FloatingWindow::FloatingWindow(vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame> &rFrame)
     : SystemWindow(WindowType::FLOATINGWINDOW, "vcl::FloatingWindow maLayoutIdle")
     , mpNextFloat(nullptr)
     , mpFirstPopupModeWin(nullptr)
@@ -794,6 +794,21 @@ void FloatingWindow::StartPopupMode( const tools::Rectangle& rRect, FloatWinPopu
     mpImplData->maPos = ImplCalcPos(this, rRect, nFlags, nArrangeIndex, &mpImplData->maLOKTwipsPos);
     SetPosPixel( mpImplData->maPos );
     ImplGetFrame()->PositionByToolkit(rRect, nFlags);
+
+    /*
+    tdf#140762 tdf#152671 Make dock win visible before showing popup
+
+    Make them visible again *before* starting popup mode for the floating
+    window.  This e.g. makes NVDA announce popups in the toolbar or the Calc
+    autofilter dropdown.
+    */
+    if (nFlags & FloatWinPopupFlags::MakeClientWindowVisibleBeforePopup)
+    {
+        if (vcl::Window* pClientWindow = ImplGetClientWindow())
+        {
+            pClientWindow->Show(true, ShowFlags::NoFocusChange | ShowFlags::NoActivate);
+        }
+    }
 
     // set data and display window
     // convert maFloatRect to absolute device coordinates

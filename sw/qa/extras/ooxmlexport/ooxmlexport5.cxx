@@ -1357,6 +1357,14 @@ CPPUNIT_TEST_FIXTURE(Test, fdo60957)
     loadAndSave("fdo60957-2.docx");
     xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
     assertXPath(pXmlDoc, "//w:tbl", 2);
+
+    //tdf#154956
+    uno::Reference<text::XBookmarksSupplier> xBookmarksSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xBookmarksByIdx(xBookmarksSupplier->getBookmarks(), uno::UNO_QUERY);
+    uno::Reference<container::XNameAccess> xBookmarksByName = xBookmarksSupplier->getBookmarks();
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(1), xBookmarksByIdx->getCount());
+    CPPUNIT_ASSERT(xBookmarksByName->hasByName("_GoBack"));
 }
 
 //This has more cells than msword supports, we must balance the
@@ -1417,6 +1425,8 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf112287)
 
     assertXPath(pXmlDocument, "/w:document/w:body/w:p[1]/w:pPr/w:framePr","vAnchor","margin");
     assertXPath(pXmlDocument, "/w:document/w:body/w:p[1]/w:pPr/w:framePr","hAnchor","text");
+    assertXPath(pXmlDocument, "/w:document/w:body/w:p[1]/w:pPr/w:framePr","xAlign","center");
+    assertXPath(pXmlDocument, "/w:document/w:body/w:p[1]/w:pPr/w:framePr","yAlign","bottom");
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf112287B)

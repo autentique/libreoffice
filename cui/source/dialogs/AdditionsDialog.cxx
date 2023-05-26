@@ -60,14 +60,8 @@
 
 using namespace css;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::XComponentContext;
-using ::com::sun::star::uno::UNO_QUERY_THROW;
 using ::com::sun::star::uno::Exception;
-using ::com::sun::star::graphic::GraphicProvider;
-using ::com::sun::star::graphic::XGraphicProvider;
 using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::beans::PropertyValue;
-using ::com::sun::star::graphic::XGraphic;
 
 using namespace com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -848,7 +842,7 @@ void TmpRepositoryCommandEnv::update(uno::Any const& /*Status */) {}
 
 void TmpRepositoryCommandEnv::pop() {}
 
-IMPL_LINK(AdditionsDialog, GearHdl, const OString&, rIdent, void)
+IMPL_LINK(AdditionsDialog, GearHdl, const OUString&, rIdent, void)
 {
     if (rIdent == "gear_sort_voting")
     {

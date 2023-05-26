@@ -16,7 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-// MyEDITENG, due to exported EditEng
+
 #ifndef INCLUDED_EDITENG_EDITENG_HXX
 #define INCLUDED_EDITENG_EDITENG_HXX
 
@@ -40,6 +40,8 @@
 #include <tools/lineend.hxx>
 #include <tools/degree.hxx>
 #include <tools/long.hxx>
+#include <tools/fontenum.hxx>
+#include <basegfx/tuple/b2dtuple.hxx>
 
 #include <editeng/eedata.hxx>
 #include <o3tl/typed_flags_set.hxx>
@@ -414,8 +416,14 @@ public:
     void            QuickDelete( const ESelection& rSel );
     void            QuickMarkToBeRepainted( sal_Int32 nPara );
 
-    void            SetGlobalCharStretching(double nX, double nY);
-    void            GetGlobalCharStretching(double& rX, double& rY) const;
+    void setGlobalScale(double fFontScaleX, double fFontScaleY, double fSpacingScaleX, double fSpacingScaleY);
+
+    void getGlobalSpacingScale(double& rX, double& rY) const;
+    basegfx::B2DTuple getGlobalSpacingScale() const;
+    void getGlobalFontScale(double& rX, double& rY) const;
+    basegfx::B2DTuple getGlobalFontScale() const;
+
+    void setRoundFontSizeToPt(bool bRound) const;
 
     void            SetEditTextObjectPool( SfxItemPool* pPool );
     SfxItemPool*    GetEditTextObjectPool() const;
@@ -520,7 +528,7 @@ public:
     virtual bool    SpellNextDocument();
     /** @return true, when click was consumed. false otherwise. */
     virtual bool    FieldClicked( const SvxFieldItem& rField );
-    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rTxtColor, std::optional<Color>& rFldColor );
+    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rTxtColor, std::optional<Color>& rFldColor, std::optional<FontLineStyle>& rFldLineStyle );
 
     // override this if access to bullet information needs to be provided
     virtual const SvxNumberFormat * GetNumberFormat( sal_Int32 nPara ) const;

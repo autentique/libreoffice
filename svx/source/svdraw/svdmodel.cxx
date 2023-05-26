@@ -88,7 +88,7 @@ struct SdrModelImpl
     bool mbLegacySingleLineFontwork;   // tdf#148000 compatibility flag
     bool mbConnectorUseSnapRect;       // tdf#149756 compatibility flag
     bool mbIgnoreBreakAfterMultilineField; ///< tdf#148966 compatibility flag
-    std::unique_ptr<model::Theme> mpTheme;
+    std::shared_ptr<model::Theme> mpTheme;
 
     SdrModelImpl()
         : mpUndoManager(nullptr)
@@ -105,8 +105,8 @@ struct SdrModelImpl
         auto const* pColorSet = svx::ColorSets::get().getColorSet(u"LibreOffice");
         if (pColorSet)
         {
-            std::unique_ptr<model::ColorSet> pDefaultColorSet(new model::ColorSet(*pColorSet));
-            mpTheme->SetColorSet(std::move(pDefaultColorSet));
+            std::shared_ptr<model::ColorSet> pDefaultColorSet(new model::ColorSet(*pColorSet));
+            mpTheme->setColorSet(pDefaultColorSet);
         }
     }
 };
@@ -224,7 +224,6 @@ SdrModel::~SdrModel()
         for (const auto & pObj : maAllIncarnatedObjects)
             SAL_WARN("svx", "leaked instance of " << typeid(*pObj).name());
     }
-    assert(maAllIncarnatedObjects.empty());
 #endif
 
     m_pLayerAdmin.reset();
@@ -1002,8 +1001,7 @@ OUString SdrModel::GetMetricString(tools::Long nVal, bool bNoUnitChars, sal_Int3
         nDecimalMark = nNumDigits;
     }
 
-    OUStringBuffer aBuf;
-    aBuf.append(static_cast<sal_Int32>(fLocalValue + 0.5));
+    OUStringBuffer aBuf = OUString::number(static_cast<sal_Int32>(fLocalValue + 0.5));
 
     if(nDecimalMark < 0)
     {
@@ -1564,12 +1562,12 @@ void SdrModel::SetStarDrawPreviewMode(bool bPreview)
     }
 }
 
-void SdrModel::setTheme(std::unique_ptr<model::Theme> pTheme)
+void SdrModel::setTheme(std::shared_ptr<model::Theme> const& pTheme)
 {
-    mpImpl->mpTheme = std::move(pTheme);
+    mpImpl->mpTheme = pTheme;
 }
 
-std::unique_ptr<model::Theme> const& SdrModel::getTheme() const
+std::shared_ptr<model::Theme> const& SdrModel::getTheme() const
 {
     return mpImpl->mpTheme;
 }

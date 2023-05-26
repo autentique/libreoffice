@@ -417,8 +417,7 @@ void SvIdlDataBase::WriteError( SvTokenStream & rInStm )
         // error text
         if( !aError.GetText().isEmpty() )
         {
-            aErrorText.append("may be <");
-            aErrorText.append(aError.GetText());
+            aErrorText.append("may be <" + aError.GetText());
         }
         SvToken * pPrevTok = nullptr;
         while( &rTok != pPrevTok )
@@ -431,11 +430,11 @@ void SvIdlDataBase::WriteError( SvTokenStream & rInStm )
         }
 
         // error position
-        aErrorText.append("> at ( ");
-        aErrorText.append(static_cast<sal_Int64>(aError.nLine));
-        aErrorText.append(", ");
-        aErrorText.append(static_cast<sal_Int64>(aError.nColumn));
-        aErrorText.append(" )");
+        aErrorText.append("> at ( "
+            + OString::number(static_cast<sal_Int64>(aError.nLine))
+            + ", "
+            + OString::number(static_cast<sal_Int64>(aError.nColumn))
+            + " )");
 
         // reset error
         aError = SvIdlError();
@@ -520,7 +519,7 @@ struct WriteDep
     explicit WriteDep(SvFileStream & rStream) : m_rStream(rStream) { }
     void operator() (std::u16string_view rItem)
     {
-        m_rStream.WriteCharPtr( " \\\n " );
+        m_rStream.WriteOString( " \\\n " );
         m_rStream.WriteOString( OUStringToOString(rItem, RTL_TEXTENCODING_UTF8) );
     }
 };
@@ -534,7 +533,7 @@ struct WriteDummy
     void operator() (std::u16string_view rItem)
     {
         m_rStream.WriteOString( OUStringToOString(rItem, RTL_TEXTENCODING_UTF8) );
-        m_rStream.WriteCharPtr( " :\n\n" );
+        m_rStream.WriteOString( " :\n\n" );
     }
 };
 
@@ -544,9 +543,9 @@ void SvIdlDataBase::WriteDepFile(
         SvFileStream & rStream, std::u16string_view rTarget)
 {
     rStream.WriteOString( OUStringToOString(rTarget, RTL_TEXTENCODING_UTF8) );
-    rStream.WriteCharPtr( " :" );
+    rStream.WriteOString( " :" );
     ::std::for_each(m_DepFiles.begin(), m_DepFiles.end(), WriteDep(rStream));
-    rStream.WriteCharPtr( "\n\n" );
+    rStream.WriteOString( "\n\n" );
     ::std::for_each(m_DepFiles.begin(), m_DepFiles.end(), WriteDummy(rStream));
 }
 

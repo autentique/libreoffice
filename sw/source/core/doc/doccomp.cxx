@@ -1795,14 +1795,14 @@ namespace
                                   std::make_shared<CompareMainText>(rDestDoc, true));
 
         //if we have the same number of frames then try to compare within them
-        const SwFrameFormats *pSrcFrameFormats = rSrcDoc.GetSpzFrameFormats();
-        const SwFrameFormats *pDestFrameFormats = rDestDoc.GetSpzFrameFormats();
+        const sw::SpzFrameFormats* pSrcFrameFormats = rSrcDoc.GetSpzFrameFormats();
+        const sw::SpzFrameFormats* pDestFrameFormats = rDestDoc.GetSpzFrameFormats();
         if (pSrcFrameFormats->size() == pDestFrameFormats->size())
         {
-            for (size_t i = 0; i < pSrcFrameFormats->size(); ++i)
+            for(sw::FrameFormats<sw::SpzFrameFormat*>::size_type i = 0; i < pSrcFrameFormats->size(); ++i)
             {
-                const SwFrameFormat& rSrcFormat = *(*pSrcFrameFormats)[i];
-                const SwFrameFormat& rDestFormat = *(*pDestFrameFormats)[i];
+                const sw::SpzFrameFormat& rSrcFormat = *(*pSrcFrameFormats)[i];
+                const sw::SpzFrameFormat& rDestFormat = *(*pDestFrameFormats)[i];
                 const SwNodeIndex* pSrcIdx = rSrcFormat.GetContent().GetContentIdx();
                 const SwNodeIndex* pDestIdx = rDestFormat.GetContent().GetContentIdx();
                 if (!pSrcIdx && !pDestIdx)
@@ -2475,9 +2475,7 @@ void LgstCommonSubseq::FindL( int *pL, int nStt1, int nEnd1,
             else
                 currL[j] = std::max( currL[j - 1], prevL[j] );
         }
-        int *tmp = currL;
-        currL = prevL;
-        prevL = tmp;
+        std::swap( currL, prevL );
     }
     memcpy( pL, prevL, ( nLen2 + 1 ) * sizeof( *prevL ) );
 }

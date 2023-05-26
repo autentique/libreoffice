@@ -39,7 +39,7 @@ private:
     std::unique_ptr<Timer> mpMenuTimer;
     VclPtr<PopupMenu> mpMenu;
     VclPtr<Window>  mpFloatingWindow;
-    OString         msCurItemIdent;
+    OUString         msCurItemIdent;
     sal_uInt16      mnCurItemId;
     bool            mbDelayMenu;
     bool            mbStartingMenu;
@@ -84,7 +84,7 @@ public:
     void            SetPopover(Window* pWindow);
     Window*         GetPopover() { return mpFloatingWindow.get(); }
 
-    OString const & GetCurItemIdent() const { return msCurItemIdent; }
+    OUString const& GetCurItemIdent() const { return msCurItemIdent; }
 
     void            SetActivateHdl( const Link<MenuButton *, void>& rLink ) { maActivateHdl = rLink; }
     void            SetSelectHdl( const Link<MenuButton *, void>& rLink ) { maSelectHdl = rLink; }
@@ -92,6 +92,8 @@ public:
     virtual FactoryFunction GetUITestFactory() const override;
 
     void SetCurItemId();
+
+    virtual void DumpAsPropertyTree(tools::JsonWriter& rJsonWriter) override;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

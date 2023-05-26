@@ -24,7 +24,7 @@
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
-#include <toolkit/helper/property.hxx>
+#include <helper/property.hxx>
 #include <toolkit/helper/convert.hxx>
 #include <com/sun/star/awt/VisualEffect.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
@@ -2236,7 +2236,7 @@ void SAL_CALL VCLXDialog::setHelpId( const OUString& rId )
     SolarMutexGuard aGuard;
     VclPtr< vcl::Window > pWindow = GetWindow();
     if ( pWindow )
-        pWindow->SetHelpId( OUStringToOString( rId, RTL_TEXTENCODING_UTF8 ) );
+        pWindow->SetHelpId( rId );
 }
 
 void VCLXDialog::setTitle( const OUString& Title )

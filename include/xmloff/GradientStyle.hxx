@@ -23,6 +23,7 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <rtl/ustring.hxx>
+#include <xmloff/xmlictxt.hxx>
 
 class SvXMLImport;
 class SvXMLExport;
@@ -30,12 +31,13 @@ namespace com::sun::star {
     namespace uno { template<class A> class Reference; }
     namespace xml::sax { class XFastAttributeList; }
     namespace uno { class Any; }
+    namespace awt { struct ColorStop; }
 }
 
 
 class XMLOFF_DLLPUBLIC XMLGradientStyleImport
 {
-    SvXMLImport& rImport;
+    SvXMLImport& m_rImport;
 
 public:
     XMLGradientStyleImport( SvXMLImport& rImport );
@@ -46,10 +48,19 @@ public:
         OUString& rStrName );
 };
 
+class XMLOFF_DLLPUBLIC XMLGradientStopContext: public SvXMLImportContext
+{
+public:
+    XMLGradientStopContext(
+        SvXMLImport& rImport, sal_Int32 nElement,
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList,
+        std::vector<css::awt::ColorStop>& rColorStopVec);
+    virtual ~XMLGradientStopContext() override;
+};
 
 class XMLOFF_DLLPUBLIC XMLGradientStyleExport
 {
-    SvXMLExport& rExport;
+    SvXMLExport& m_rExport;
 
 public:
     XMLGradientStyleExport( SvXMLExport& rExport );

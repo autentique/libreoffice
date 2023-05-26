@@ -27,6 +27,7 @@
 
 #include <desktop/exithelper.h>
 
+#include <comphelper/accessibleeventnotifier.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/asyncnotification.hxx>
 #include <i18nlangtag/mslangid.hxx>
@@ -456,13 +457,13 @@ void DeInitVCL()
             nBadTopWindows--;
         else
         {
-            aBuf.append( "text = \"" );
-            aBuf.append( OUStringToOString( pWin->GetText(), osl_getThreadTextEncoding() ) );
-            aBuf.append( "\" type = \"" );
-            aBuf.append( typeid(*pWin).name() );
-            aBuf.append( "\", ptr = 0x" );
-            aBuf.append( reinterpret_cast<sal_Int64>( pWin ), 16 );
-            aBuf.append( "\n" );
+            aBuf.append( "text = \""
+                + OUStringToOString( pWin->GetText(), osl_getThreadTextEncoding() )
+                + "\" type = \""
+                + typeid(*pWin).name()
+                + "\", ptr = 0x"
+                + OString::number(reinterpret_cast<sal_Int64>( pWin ), 16 )
+                + "\n" );
         }
     }
     SAL_WARN_IF( nBadTopWindows!=0, "vcl", aBuf.getStr() );
@@ -595,6 +596,8 @@ void DeInitVCL()
 
     pSVData->maGDIData.maThemeDrawCommandsCache.clear();
     pSVData->maGDIData.maThemeImageCache.clear();
+
+    comphelper::AccessibleEventNotifier::shutdown();
 
     // Deinit Sal
     if (pSVData->mpDefInst)

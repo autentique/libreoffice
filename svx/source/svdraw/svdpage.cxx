@@ -51,9 +51,11 @@
 #include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
 #include <algorithm>
+#include <clonelist.hxx>
 #include <svl/hint.hxx>
 #include <rtl/strbuf.hxx>
 #include <libxml/xmlwriter.h>
+#include <docmodel/theme/Theme.hxx>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
@@ -111,14 +113,9 @@ void SdrObjList::ClearSdrObjList()
 
 SdrObjList::~SdrObjList()
 {
-    // clear SdrObjects without broadcasting
-    while(!maList.empty())
-    {
-        // remove last object from list
-        SdrObject& rObj = *maList.back();
-        rObj.setParentOfSdrObject(nullptr);
-        maList.pop_back();
-    }
+    // Clear SdrObjects without broadcasting.
+    for (auto& rxObj : maList)
+        rxObj->setParentOfSdrObject(nullptr);
 }
 
 SdrPage* SdrObjList::getSdrPageFromSdrObjList() const
@@ -135,12 +132,16 @@ SdrObject* SdrObjList::getSdrObjectFromSdrObjList() const
 
 void SdrObjList::CopyObjects(const SdrObjList& rSrcList)
 {
+    CloneList aCloneList;
+
     // clear SdrObjects with broadcasting
     ClearSdrObjList();
 
     mbObjOrdNumsDirty = false;
     mbRectsDirty = false;
+#ifdef DBG_UTIL
     size_t nCloneErrCnt(0);
+#endif
     const size_t nCount(rSrcList.GetObjCount());
 
     if(nullptr == getSdrObjectFromSdrObjList() && nullptr == getSdrPageFromSdrObjList())
@@ -161,60 +162,21 @@ void SdrObjList::CopyObjects(const SdrObjList& rSrcList)
         if(pDO)
         {
             NbcInsertObject(pDO.get(), SAL_MAX_SIZE);
+            aCloneList.AddPair(pSO, pDO.get());
         }
+#ifdef DBG_UTIL
         else
         {
             nCloneErrCnt++;
         }
+#endif
     }
 
-    // and now for the Connectors
-    // The new objects would be shown in the rSrcList
-    // and then the object connections are made.
-    // Similar implementation are setup as the following:
-    //    void SdrObjList::CopyObjects(const SdrObjList& rSrcList)
-    //    SdrModel* SdrExchangeView::CreateMarkedObjModel() const
-    //    BOOL SdrExchangeView::Paste(const SdrModel& rMod,...)
-    //    void SdrEditView::CopyMarked()
-    if (nCloneErrCnt==0) {
-        for (size_t no=0; no<nCount; ++no) {
-            const SdrObject* pSrcOb=rSrcList.GetObj(no);
-            const SdrEdgeObj* pSrcEdge=dynamic_cast<const SdrEdgeObj*>( pSrcOb );
-            if (pSrcEdge!=nullptr) {
-                SdrObject* pSrcNode1=pSrcEdge->GetConnectedNode(true);
-                SdrObject* pSrcNode2=pSrcEdge->GetConnectedNode(false);
-                if (pSrcNode1!=nullptr && pSrcNode1->getParentSdrObjListFromSdrObject()!=pSrcEdge->getParentSdrObjListFromSdrObject()) pSrcNode1=nullptr; // can't do this
-                if (pSrcNode2!=nullptr && pSrcNode2->getParentSdrObjListFromSdrObject()!=pSrcEdge->getParentSdrObjListFromSdrObject()) pSrcNode2=nullptr; // across all lists (yet)
-                if (pSrcNode1!=nullptr || pSrcNode2!=nullptr) {
-                    SdrObject* pEdgeObjTmp=GetObj(no);
-                    SdrEdgeObj* pDstEdge=dynamic_cast<SdrEdgeObj*>( pEdgeObjTmp );
-                    if (pDstEdge!=nullptr) {
-                        if (pSrcNode1!=nullptr) {
-                            sal_uInt32 nDstNode1=pSrcNode1->GetOrdNum();
-                            SdrObject* pDstNode1=GetObj(nDstNode1);
-                            if (pDstNode1!=nullptr) { // else we get an error!
-                                pDstEdge->ConnectToNode(true,pDstNode1);
-                            } else {
-                                OSL_FAIL("SdrObjList::operator=(): pDstNode1==NULL!");
-                            }
-                        }
-                        if (pSrcNode2!=nullptr) {
-                            sal_uInt32 nDstNode2=pSrcNode2->GetOrdNum();
-                            SdrObject* pDstNode2=GetObj(nDstNode2);
-                            if (pDstNode2!=nullptr) { // else the node was probably not selected
-                                pDstEdge->ConnectToNode(false,pDstNode2);
-                            } else {
-                                OSL_FAIL("SdrObjList::operator=(): pDstNode2==NULL!");
-                            }
-                        }
-                    } else {
-                        OSL_FAIL("SdrObjList::operator=(): pDstEdge==NULL!");
-                    }
-                }
-            }
-        }
-    } else {
+    // Wires up the connections
+    aCloneList.CopyConnections();
 #ifdef DBG_UTIL
+    if (nCloneErrCnt != 0)
+    {
         OStringBuffer aStr("SdrObjList::operator=(): Error when cloning ");
 
         if(nCloneErrCnt == 1)
@@ -223,15 +185,13 @@ void SdrObjList::CopyObjects(const SdrObjList& rSrcList)
         }
         else
         {
-            aStr.append(static_cast<sal_Int32>(nCloneErrCnt));
-            aStr.append(" drawing objects.");
+            aStr.append(OString::number(static_cast<sal_Int32>(nCloneErrCnt))
+                + " drawing objects.");
         }
 
-        aStr.append(" Not copying connectors.");
-
         OSL_FAIL(aStr.getStr());
-#endif
     }
+#endif
 }
 
 void SdrObjList::RecalcObjOrdNums()
@@ -1222,14 +1182,14 @@ SdrPageProperties::SdrPageProperties(SdrPage& rSdrPage)
         maProperties.Put(XFillStyleItem(drawing::FillStyle_NONE));
     }
 
-    if (rSdrPage.getSdrModelFromSdrPage().IsWriter())
+    //if (rSdrPage.getSdrModelFromSdrPage().IsWriter() || rSdrPage.IsMasterPage())
     {
-        mpTheme.reset(new model::Theme("Office"));
+        mpTheme.reset(new model::Theme("Office Theme"));
         auto const* pColorSet = svx::ColorSets::get().getColorSet(u"LibreOffice");
         if (pColorSet)
         {
-            std::unique_ptr<model::ColorSet> pDefaultColorSet(new model::ColorSet(*pColorSet));
-            mpTheme->SetColorSet(std::move(pDefaultColorSet));
+            std::shared_ptr<model::ColorSet> pDefaultColorSet(new model::ColorSet(*pColorSet));
+            mpTheme->setColorSet(pDefaultColorSet);
         }
     }
 }
@@ -1300,11 +1260,11 @@ void SdrPageProperties::SetStyleSheet(SfxStyleSheet* pStyleSheet)
     ImpPageChange(*mpSdrPage);
 }
 
-void SdrPageProperties::SetTheme(std::unique_ptr<model::Theme> pTheme)
+void SdrPageProperties::SetTheme(std::shared_ptr<model::Theme> const& pTheme)
 {
-    mpTheme = std::move(pTheme);
+    mpTheme = pTheme;
 
-    if (mpTheme && mpTheme->GetColorSet() && mpSdrPage->IsMasterPage())
+    if (mpTheme && mpTheme->getColorSet() && mpSdrPage->IsMasterPage())
     {
         SdrModel& rModel = mpSdrPage->getSdrModelFromSdrPage();
         sal_uInt16 nPageCount = rModel.GetPageCount();
@@ -1317,12 +1277,12 @@ void SdrPageProperties::SetTheme(std::unique_ptr<model::Theme> pTheme)
             }
 
             svx::ThemeColorChanger aChanger(pPage);
-            aChanger.apply(*mpTheme->GetColorSet());
+            aChanger.apply(*mpTheme->getColorSet());
         }
     }
 }
 
-std::unique_ptr<model::Theme> const& SdrPageProperties::GetTheme() const
+std::shared_ptr<model::Theme> const& SdrPageProperties::GetTheme() const
 {
     return mpTheme;
 }

@@ -28,6 +28,7 @@
 #include <ChartModel.hxx>
 #include <Diagram.hxx>
 #include <DataSeries.hxx>
+#include <GridProperties.hxx>
 #include <TitleHelper.hxx>
 #include <TitleItemConverter.hxx>
 #include <Axis.hxx>
@@ -49,7 +50,7 @@ AllAxisItemConverter::AllAxisItemConverter(
     const awt::Size* pRefSize )
         : MultipleItemConverter( rItemPool )
 {
-    rtl::Reference< Diagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
+    rtl::Reference< Diagram > xDiagram( xChartModel->getFirstChartDiagram() );
     const std::vector< rtl::Reference< Axis > > aElementList = AxisHelper::getAllAxesOfDiagram( xDiagram );
     for( rtl::Reference< Axis > const & axis : aElementList )
     {
@@ -78,9 +79,9 @@ AllGridItemConverter::AllGridItemConverter(
     const uno::Reference< lang::XMultiServiceFactory > & xNamedPropertyContainerFactory )
         : MultipleItemConverter( rItemPool )
 {
-    rtl::Reference< Diagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
-    const Sequence< Reference< beans::XPropertySet > > aElementList( AxisHelper::getAllGrids( xDiagram ) );
-    for( Reference< beans::XPropertySet > const & xObjectProperties : aElementList )
+    rtl::Reference< Diagram > xDiagram( xChartModel->getFirstChartDiagram() );
+    std::vector< rtl::Reference< GridProperties > > aElementList( AxisHelper::getAllGrids( xDiagram ) );
+    for( rtl::Reference< GridProperties > const & xObjectProperties : aElementList )
     {
         m_aConverters.emplace_back( new ::chart::wrapper::GraphicPropertyItemConverter(
                                         xObjectProperties, rItemPool, rDrawModel, xNamedPropertyContainerFactory,

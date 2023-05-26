@@ -22,6 +22,7 @@
 #include <basegfx/range/b2drange.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <com/sun/star/awt/Gradient2.hpp>
+#include <osl/endian.h>
 
 #include <algorithm>
 #include <cmath>
@@ -264,310 +265,209 @@ namespace basegfx
 
     namespace utils
     {
-        /* Tooling method to reverse ColorStops, including offsets.
-           When also mirroring offsets a valid sort keeps valid.
-        */
-        void reverseColorStops(ColorStops& rColorStops)
+        /* Tooling method to extract data from given BGradient
+           to ColorStops, doing some corrections, partially based
+           on given SingleColor */
+        void prepareColorStops(
+            const basegfx::BGradient& rGradient,
+            BColorStops& rColorStops,
+            BColor& rSingleColor)
         {
-            // can use std::reverse, but also need to adapt offset(s)
-            std::reverse(rColorStops.begin(), rColorStops.end());
-            for (auto& candidate : rColorStops)
-                candidate = ColorStop(1.0 - candidate.getStopOffset(), candidate.getStopColor());
-        }
-
-        /* Tooling method to convert UNO API data to ColorStops
-           This will try to extract ColorStop data from the given
-           Any, so if it's of type awt::Gradient2 that data will be
-           extracted, converted and copied into the given ColorStops.
-        */
-        void fillColorStopsFromAny(ColorStops& rColorStops, const css::uno::Any& rVal)
-        {
-            css::awt::Gradient2 aGradient2;
-            if (!(rVal >>= aGradient2))
-                return;
-
-            const sal_Int32 nLen(aGradient2.ColorStops.getLength());
-
-            if (0 == nLen)
-                return;
-
-            // we have ColorStops
-            rColorStops.clear();
-            rColorStops.reserve(nLen);
-            const css::awt::ColorStop* pSourceColorStop(aGradient2.ColorStops.getConstArray());
-
-            for (sal_Int32 a(0); a < nLen; a++, pSourceColorStop++)
+            if (rGradient.GetColorStops().isSingleColor(rSingleColor))
             {
-                rColorStops.emplace_back(
-                    pSourceColorStop->StopOffset,
-                    BColor(pSourceColorStop->StopColor.Red, pSourceColorStop->StopColor.Green, pSourceColorStop->StopColor.Blue));
-            }
-        }
-
-        /* Tooling method to fill a awt::ColorStopSequence with
-           the data from the given ColorStops. This is used in
-           UNO API implementations.
-        */
-        void fillColorStopSequenceFromColorStops(css::awt::ColorStopSequence& rColorStopSequence, const ColorStops& rColorStops)
-        {
-            // fill ColorStops to extended Gradient2
-            rColorStopSequence.realloc(rColorStops.size());
-            css::awt::ColorStop* pTargetColorStop(rColorStopSequence.getArray());
-
-            for (const auto& candidate : rColorStops)
-            {
-                pTargetColorStop->StopOffset = candidate.getStopOffset();
-                pTargetColorStop->StopColor = css::rendering::RGBColor(
-                    candidate.getStopColor().getRed(),
-                    candidate.getStopColor().getGreen(),
-                    candidate.getStopColor().getBlue());
-                pTargetColorStop++;
-            }
-        }
-
-        /* Tooling method that allows to replace the StartColor in a
-           vector of ColorStops. A vector in 'ordered state' is expected,
-           so you may use/have used sortAndCorrectColorStops, see below.
-           This method is for convenience & backwards compatibility, please
-           think about handling multi-colored gradients directly.
-        */
-        void replaceStartColor(ColorStops& rColorStops, const BColor& rStart)
-        {
-            ColorStops::iterator a1stNonStartColor(rColorStops.begin());
-
-            // search for highest existing non-StartColor
-            while (a1stNonStartColor != rColorStops.end() && basegfx::fTools::lessOrEqual(a1stNonStartColor->getStopOffset(), 0.0))
-                a1stNonStartColor++;
-
-            // create new ColorStops by 1st adding new one and then all
-            // non-StartColor entries
-            ColorStops aNewColorStops;
-
-            aNewColorStops.reserve(rColorStops.size() + 1);
-            aNewColorStops.emplace_back(0.0, rStart);
-            aNewColorStops.insert(aNewColorStops.end(), a1stNonStartColor, rColorStops.end());
-
-            // assign & done
-            rColorStops = aNewColorStops;
-        }
-
-        /* Tooling method that allows to replace the EndColor in a
-           vector of ColorStops. A vector in 'ordered state' is expected,
-           so you may use/have used sortAndCorrectColorStops, see below.
-           This method is for convenience & backwards compatibility, please
-           think about handling multi-colored gradients directly.
-        */
-        void replaceEndColor(ColorStops& rColorStops, const BColor& rEnd)
-        {
-            // erase all evtl. existing EndColor(s)
-            while (!rColorStops.empty() && basegfx::fTools::moreOrEqual(rColorStops.back().getStopOffset(), 1.0))
-                rColorStops.pop_back();
-
-            // add at the end of existing ColorStops
-            rColorStops.emplace_back(1.0, rEnd);
-        }
-
-        // Tooling method to quickly create a ColorStop vector for a given set of Start/EndColor
-        ColorStops createColorStopsFromStartEndColor(const BColor& rStart, const BColor& rEnd)
-        {
-            return ColorStops {
-                ColorStop(0.0, rStart),
-                ColorStop(1.0, rEnd) };
-        }
-
-        /* Tooling method to guarantee sort and correctness for
-           the given ColorStops vector.
-           A vector fulfilling these conditions is called to be
-           in 'ordered state'.
-
-           At return, the following conditions are guaranteed:
-           - contains no ColorStops with offset < 0.0 (will
-             be removed)
-           - contains no ColorStops with offset > 1.0 (will
-             be removed)
-           - ColorStops with identical offsets are now allowed
-           - will be sorted from lowest offset to highest
-
-           Some more notes:
-           - It can happen that the result is empty
-           - It is allowed to have consecutive entries with
-             the same color, this represents single-color
-             regions inside the gradient
-           - A entry with 0.0 is not required or forced, so
-             no 'StartColor' is technically required
-           - A entry with 1.0 is not required or forced, so
-             no 'EndColor' is technically required
-
-           All this is done in one run (sort + O(N)) without
-           creating a copy of the data in any form
-        */
-        void sortAndCorrectColorStops(ColorStops& rColorStops)
-        {
-            // no content, we are done
-            if (rColorStops.empty())
-                return;
-
-            if (1 == rColorStops.size())
-            {
-                // no gradient at all, but preserve given color
-                // evtl. correct offset to be in valid range [0.0 .. 1.0]
-                // NOTE: This does not move it to 0.0 or 1.0, it *can* still
-                //       be somewhere in-between what is allowed
-                rColorStops[0] = ColorStop(
-                    std::max(0.0, std::min(1.0, rColorStops[0].getStopOffset())),
-                    rColorStops[0].getStopColor());
-
-                // done
+                // when single color, preserve value in rSingleColor
+                // and clear the ColorStops, done.
+                rColorStops.clear();
                 return;
             }
 
-            // start with sorting the input data. Remember that
-            // this preserves the order of equal entries, where
-            // equal is defined here by offset (see use operator==)
-            std::sort(rColorStops.begin(), rColorStops.end());
+            const bool bAdaptStartEndIntensity(100 != rGradient.GetStartIntens() || 100 != rGradient.GetEndIntens());
+            const bool bAdaptBorder(0 != rGradient.GetBorder());
 
-            // prepare status values
-            size_t write(0);
-
-            // use the paradigm of a band machine with two heads, read
-            // and write with write <= read all the time. Step over the
-            // data using read and check for valid entry. If valid, decide
-            // how to keep it
-            for (size_t read(0); read < rColorStops.size(); read++)
+            if (!bAdaptStartEndIntensity && !bAdaptBorder)
             {
-                // get offset of entry at read position
-                const double rOff(rColorStops[read].getStopOffset());
+                // copy unchanged ColorStops & done
+                rColorStops = rGradient.GetColorStops();
+                return;
+            }
 
-                // step over < 0 values, these are outside and will be removed
-                if (basegfx::fTools::less(rOff, 0.0))
-                    continue;
+            // prepare a copy to work on
+            basegfx::BGradient aWorkCopy(rGradient);
 
-                // step over > 1 values; even break, since all following
-                // entries will also be bigger due to being sorted, so done
-                if (basegfx::fTools::more(rOff, 1.0))
-                    break;
+            if (bAdaptStartEndIntensity)
+            {
+                aWorkCopy.tryToApplyStartEndIntensity();
 
-                // entry is valid value at read position
-                // copy if write target is empty (write at start) or when
-                // write target is different to read in color or offset
-                if (0 == write || !(rColorStops[read] == rColorStops[write-1]))
+                // this can again lead to single color (e.g. both zero, so
+                // all black), so check again for it
+                if (aWorkCopy.GetColorStops().isSingleColor(rSingleColor))
                 {
-                    if (write != read)
-                    {
-                        // copy read to write backwards to close gaps
-                        rColorStops[write] = rColorStops[read];
-                    }
-
-                    // always forward write position
-                    write++;
+                    rColorStops.clear();
+                    return;
                 }
             }
 
-            // correct size when length is reduced. write is always at
-            // last used position + 1
-            if (rColorStops.size() > write)
+            if (bAdaptBorder)
             {
-                rColorStops.resize(write);
+                aWorkCopy.tryToApplyBorder();
             }
+
+            // extract ColorStops, that's all we need here
+            rColorStops = aWorkCopy.GetColorStops();
         }
 
-        BColor modifyBColor(
-            const ColorStops& rColorStops,
-            double fScaler,
-            sal_uInt32 nRequestedSteps)
+        /* Tooling method to synchronize the given ColorStops.
+           The intention is that a color GradientStops and an
+           alpha/transparence GradientStops gets synchronized
+           for export. */
+        void synchronizeColorStops(
+            BColorStops& rColorStops,
+            BColorStops& rAlphaStops,
+            const BColor& rSingleColor,
+            const BColor& rSingleAlpha)
         {
-            // no color at all, done
             if (rColorStops.empty())
-                return BColor();
-
-            // outside range -> at start
-            const double fMin(rColorStops.front().getStopOffset());
-            if (fScaler < fMin)
-                return rColorStops.front().getStopColor();
-
-            // outside range -> at end
-            const double fMax(rColorStops.back().getStopOffset());
-            if (fScaler > fMax)
-                return rColorStops.back().getStopColor();
-
-            // special case for the 'classic' case with just two colors:
-            // we can optimize that and keep the speed/resources low
-            // by avoiding some calculations and an O(log(N)) array access
-            if (2 == rColorStops.size())
             {
-                if (fTools::equal(fMin, fMax))
-                    return rColorStops.front().getStopColor();
+                if (rAlphaStops.empty())
+                {
+                    // no AlphaStops and no ColorStops
+                    // create two-stop fallbacks for both
+                    rColorStops = BColorStops {
+                        BColorStop(0.0, rSingleColor),
+                        BColorStop(1.0, rSingleColor) };
+                    rAlphaStops = BColorStops {
+                        BColorStop(0.0, rSingleAlpha),
+                        BColorStop(1.0, rSingleAlpha) };
+                }
+                else
+                {
+                    // AlphaStops but no ColorStops
+                    // create fallback synched with existing AlphaStops
+                    for (const auto& cand : rAlphaStops)
+                    {
+                        rColorStops.emplace_back(cand.getStopOffset(), rSingleColor);
+                    }
+                }
 
-                const basegfx::BColor aCStart(rColorStops.front().getStopColor());
-                const basegfx::BColor aCEnd(rColorStops.back().getStopColor());
-                const sal_uInt32 nSteps(
-                    calculateNumberOfSteps(
-                        nRequestedSteps,
-                        aCStart,
-                        aCEnd));
+                // preparations complete, we are done
+                return;
+            }
+            else if (rAlphaStops.empty())
+            {
+                // ColorStops but no AlphaStops
+                // create fallback AlphaStops synched with existing ColorStops using SingleAlpha
+                for (const auto& cand : rColorStops)
+                {
+                    rAlphaStops.emplace_back(cand.getStopOffset(), rSingleAlpha);
+                }
 
-                // we need to extend the interpolation to the local
-                // range of ColorStops. Despite having two ColorStops
-                // these are not necessarily at 0.0 and 1.0, so may be
-                // not the classical Start/EndColor (what is allowed)
-                fScaler = (fScaler - fMin) / (fMax - fMin);
-                return basegfx::interpolate(
-                    aCStart,
-                    aCEnd,
-                    nSteps > 1 ? floor(fScaler * nSteps) / double(nSteps - 1) : fScaler);
+                // preparations complete, we are done
+                return;
             }
 
-            // access needed spot in sorted array using binary search
-            // NOTE: This *seems* slow(er) when developing compared to just
-            //       looping/accessing, but that's just due to the extensive
-            //       debug test code created by the stl. In a pro version,
-            //       all is good/fast as expected
-            const auto upperBound(
-                std::upper_bound(
-                    rColorStops.begin(),
-                    rColorStops.end(),
-                    ColorStop(fScaler),
-                    [](const ColorStop& x, const ColorStop& y) { return x.getStopOffset() < y.getStopOffset(); }));
+            // here we have ColorStops and AlphaStops not empty. Check if we need to
+            // synchronize both or if they are already usable/in a synched state so
+            // that they have same count and same StopOffsets
+            bool bNeedToSyncronize(rColorStops.size() != rAlphaStops.size());
 
-            // no upper bound, done
-            if (rColorStops.end() == upperBound)
-                return rColorStops.back().getStopColor();
+            if (!bNeedToSyncronize)
+            {
+                // check for same StopOffsets
+                BColorStops::const_iterator aCurrColor(rColorStops.begin());
+                BColorStops::const_iterator aCurrAlpha(rAlphaStops.begin());
 
-            // lower bound is one entry back
-            const auto lowerBound(upperBound - 1);
+                while (!bNeedToSyncronize &&
+                    aCurrColor != rColorStops.end() &&
+                    aCurrAlpha != rAlphaStops.end())
+                {
+                    if (fTools::equal(aCurrColor->getStopOffset(), aCurrAlpha->getStopOffset()))
+                    {
+                        aCurrColor++;
+                        aCurrAlpha++;
+                    }
+                    else
+                    {
+                        bNeedToSyncronize = true;
+                    }
+                }
+            }
 
-            // no lower bound, done
-            if (rColorStops.end() == lowerBound)
-                return rColorStops.back().getStopColor();
+            if (bNeedToSyncronize)
+            {
+                // synchronize sizes & StopOffsets
+                BColorStops::const_iterator aCurrColor(rColorStops.begin());
+                BColorStops::const_iterator aCurrAlpha(rAlphaStops.begin());
+                BColorStops aNewColor;
+                BColorStops aNewAlpha;
+                BColorStops::BColorStopRange aColorStopRange;
+                BColorStops::BColorStopRange aAlphaStopRange;
+                bool bRealChange(false);
 
-            // we have lower and upper bound, get colors
-            const BColor aCStart(lowerBound->getStopColor());
-            const BColor aCEnd(upperBound->getStopColor());
+                do {
+                    const bool bColor(aCurrColor != rColorStops.end());
+                    const bool bAlpha(aCurrAlpha != rAlphaStops.end());
 
-            // when there are just two color steps this cannot happen, but when using
-            // a range of colors this *may* be used inside the range to represent
-            // single-colored regions inside a ColorRange. Use that color & done
-            if (aCStart == aCEnd)
-                return aCStart;
+                    if (bColor && bAlpha)
+                    {
+                        const double fColorOff(aCurrColor->getStopOffset());
+                        const double fAlphaOff(aCurrAlpha->getStopOffset());
 
-            // calculate number of steps
-            const sal_uInt32 nSteps(
-                calculateNumberOfSteps(
-                    nRequestedSteps,
-                    aCStart,
-                    aCEnd));
+                        if (fTools::less(fColorOff, fAlphaOff))
+                        {
+                            // copy color, create alpha
+                            aNewColor.emplace_back(fColorOff, aCurrColor->getStopColor());
+                            aNewAlpha.emplace_back(fColorOff, rAlphaStops.getInterpolatedBColor(fColorOff, 0, aAlphaStopRange));
+                            bRealChange = true;
+                            aCurrColor++;
+                        }
+                        else if (fTools::more(fColorOff, fAlphaOff))
+                        {
+                            // copy alpha, create color
+                            aNewColor.emplace_back(fAlphaOff, rColorStops.getInterpolatedBColor(fAlphaOff, 0, aColorStopRange));
+                            aNewAlpha.emplace_back(fAlphaOff, aCurrAlpha->getStopColor());
+                            bRealChange = true;
+                            aCurrAlpha++;
+                        }
+                        else
+                        {
+                            // equal: copy both, advance
+                            aNewColor.emplace_back(fColorOff, aCurrColor->getStopColor());
+                            aNewAlpha.emplace_back(fAlphaOff, aCurrAlpha->getStopColor());
+                            aCurrColor++;
+                            aCurrAlpha++;
+                        }
+                    }
+                    else if (bColor)
+                    {
+                        const double fColorOff(aCurrColor->getStopOffset());
+                        aNewAlpha.emplace_back(fColorOff, rAlphaStops.getInterpolatedBColor(fColorOff, 0, aAlphaStopRange));
+                        bRealChange = true;
+                        aCurrColor++;
+                    }
+                    else if (bAlpha)
+                    {
+                        const double fAlphaOff(aCurrAlpha->getStopOffset());
+                        aNewColor.emplace_back(fAlphaOff, rColorStops.getInterpolatedBColor(fAlphaOff, 0, aColorStopRange));
+                        bRealChange = true;
+                        aCurrAlpha++;
+                    }
+                    else
+                    {
+                        // no more input, break do..while loop
+                        break;
+                    }
+                }
+                while(true);
 
-            // get offsets and scale to new [0.0 .. 1.0] relative range for
-            // partial outer range
-            const double fOffsetStart(lowerBound->getStopOffset());
-            const double fOffsetEnd(upperBound->getStopOffset());
-            const double fAdaptedScaler((fScaler - fOffsetStart) / (fOffsetEnd - fOffsetStart));
-
-            // interpolate & evtl. apply steps
-            return interpolate(
-                aCStart,
-                aCEnd,
-                nSteps > 1 ? floor(fAdaptedScaler * nSteps) / double(nSteps - 1) : fAdaptedScaler);
+                if (bRealChange)
+                {
+                    // copy on 'real' change, that means data was added.
+                    // This should always be the cease and should have been
+                    // detected as such above, see bNeedToSyncronize
+                    rColorStops = aNewColor;
+                    rAlphaStops = aNewColor;
+                }
+            }
         }
 
         sal_uInt32 calculateNumberOfSteps(

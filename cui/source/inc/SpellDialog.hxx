@@ -61,7 +61,7 @@ private:
 
     bool GetErrorDescription(SpellErrorDescription& rSpellErrorDescription, sal_Int32 nPosition);
 
-    DECL_LINK(ToolbarHdl, const OString&, void);
+    DECL_LINK(ToolbarHdl, const OUString&, void);
 
 protected:
     virtual bool    KeyInput( const KeyEvent& rKEvt ) override;
@@ -165,6 +165,7 @@ private:
     std::unique_ptr<weld::Button> m_xClosePB;
     std::unique_ptr<weld::Toolbar> m_xToolbar;
     std::unique_ptr<weld::CustomWeld> m_xSentenceEDWeld;
+    std::shared_ptr<SfxSingleTabDialogController> m_xOptionsDlg;
 
     DECL_LINK(ChangeHdl, weld::Button&, void);
     DECL_LINK(DoubleClickChangeHdl, weld::TreeView&, bool);
@@ -176,14 +177,14 @@ private:
     DECL_LINK(CancelHdl, weld::Button&, void);
     DECL_LINK(ModifyHdl, LinkParamNone*, void);
     DECL_LINK(UndoHdl, weld::Button&, void);
-    DECL_LINK(AddToDictSelectHdl, const OString&, void);
+    DECL_LINK(AddToDictSelectHdl, const OUString&, void);
     DECL_LINK(AddToDictClickHdl, weld::Button&, void);
     DECL_LINK(LanguageSelectHdl, weld::ComboBox&, void);
     DECL_LINK(DialogUndoHdl, SpellUndoAction_Impl&, void);
 
     DECL_LINK(InitHdl, void*, void);
 
-    void            AddToDictionaryExecute(const OString& rItemId);
+    void            AddToDictionaryExecute(const OUString& rItemId);
     void            StartSpellOptDlg_Impl();
     int             InitUserDicts();
     void            UpdateBoxes_Impl(bool bCallFromSelectHdl = false);

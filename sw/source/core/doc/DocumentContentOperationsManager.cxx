@@ -101,11 +101,9 @@ namespace
     bool lcl_ChkFlyFly( SwDoc& rDoc, SwNodeOffset nSttNd, SwNodeOffset nEndNd,
                         SwNodeOffset nInsNd )
     {
-        const SwFrameFormats& rFrameFormatTable = *rDoc.GetSpzFrameFormats();
 
-        for( size_t n = 0; n < rFrameFormatTable.size(); ++n )
+        for(sw::SpzFrameFormat* pFormat: *rDoc.GetSpzFrameFormats())
         {
-            SwFrameFormat const*const  pFormat = rFrameFormatTable[n];
             SwFormatAnchor const*const pAnchor = &pFormat->GetAnchor();
             SwNode const*const pAnchorNode = pAnchor->GetAnchorNode();
             if (pAnchorNode &&
@@ -232,7 +230,7 @@ namespace
 namespace sw
 {
     // TODO: use SaveBookmark (from DelBookmarks)
-    void CopyBookmarks(const SwPaM& rPam, const SwPosition& rCpyPam)
+    void CopyBookmarks(const SwPaM& rPam, const SwPosition& rCpyPam, SwCopyFlags flags)
     {
         const SwDoc& rSrcDoc = rPam.GetDoc();
         SwDoc& rDestDoc =  rCpyPam.GetDoc();
@@ -295,9 +293,19 @@ namespace sw
                 lcl_SetCpyPos(pMark->GetOtherMarkPos(), rStt, *pCpyStt, *aTmpPam.GetMark(), nDelCount);
             }
 
+            OUString sRequestedName = pMark->GetName();
+            if (flags & SwCopyFlags::IsMoveToFly)
+            {
+                assert(&rSrcDoc == &rDestDoc);
+                // Ensure the name can be given to NewMark, since this is ultimately a move
+                auto pSoonToBeDeletedMark = const_cast<sw::mark::IMark*>(pMark);
+                rDestDoc.getIDocumentMarkAccess()->renameMark(pSoonToBeDeletedMark,
+                                                              sRequestedName + "COPY_IS_MOVE");
+            }
+
             ::sw::mark::IMark* const pNewMark = rDestDoc.getIDocumentMarkAccess()->makeMark(
                 aTmpPam,
-                pMark->GetName(),
+                sRequestedName,
                 IDocumentMarkAccess::GetType(*pMark),
                 ::sw::mark::InsertMode::CopyText);
             // Explicitly try to get exactly the same name as in the source
@@ -308,7 +316,7 @@ namespace sw
                     || IDocumentMarkAccess::GetType(*pMark) == IDocumentMarkAccess::MarkType::CROSSREF_HEADING_BOOKMARK);
                 continue; // can't insert duplicate cross reference mark
             }
-            rDestDoc.getIDocumentMarkAccess()->renameMark(pNewMark, pMark->GetName());
+            rDestDoc.getIDocumentMarkAccess()->renameMark(pNewMark, sRequestedName);
 
             // copying additional attributes for bookmarks or fieldmarks
             ::sw::mark::IBookmark* const pNewBookmark =
@@ -626,18 +634,21 @@ namespace sw
         }
         while (!startedFields.empty())
         {
-            SwPosition const& rStart(std::get<0>(startedFields.top())->GetMarkStart());
-            std::pair<SwNodeOffset, sal_Int32> const pos(
-                    rStart.GetNodeIndex(), rStart.GetContentIndex());
-            auto it = std::lower_bound(rBreaks.begin(), rBreaks.end(), pos);
-            assert(it == rBreaks.end() || *it != pos);
-            rBreaks.insert(it, pos);
+            if (const sw::mark::IFieldmark* pMark = std::get<0>(startedFields.top()))
+            {
+                SwPosition const& rStart(pMark->GetMarkStart());
+                std::pair<SwNodeOffset, sal_Int32> const pos(
+                        rStart.GetNodeIndex(), rStart.GetContentIndex());
+                auto it = std::lower_bound(rBreaks.begin(), rBreaks.end(), pos);
+                assert(it == rBreaks.end() || *it != pos);
+                rBreaks.insert(it, pos);
+            }
             if (std::get<1>(startedFields.top()))
             {
                 std::pair<SwNodeOffset, sal_Int32> const posSep(
                     std::get<2>(startedFields.top()),
                     std::get<3>(startedFields.top()));
-                it = std::lower_bound(rBreaks.begin(), rBreaks.end(), posSep);
+                auto it = std::lower_bound(rBreaks.begin(), rBreaks.end(), posSep);
                 assert(it == rBreaks.end() || *it != posSep);
                 rBreaks.insert(it, posSep);
             }
@@ -2297,7 +2308,7 @@ bool DocumentContentOperationsManager::DelFullPara( SwPaM& rPam )
             // If there are FlyFrames left, delete these too
             for( size_t n = 0; n < m_rDoc.GetSpzFrameFormats()->size(); ++n )
             {
-                SwFrameFormat* pFly = (*m_rDoc.GetSpzFrameFormats())[n];
+                sw::SpzFrameFormat* pFly = (*m_rDoc.GetSpzFrameFormats())[n];
                 const SwFormatAnchor* pAnchor = &pFly->GetAnchor();
                 SwNode const*const pAnchorNode = pAnchor->GetAnchorNode();
                 if (pAnchorNode &&
@@ -3664,7 +3675,7 @@ void DocumentContentOperationsManager::CopyWithFlyInFly(
             targetPos = pCopiedPaM->second;
         }
 
-        sw::CopyBookmarks(pCopiedPaM ? pCopiedPaM->first : aRgTmp, targetPos);
+        sw::CopyBookmarks(pCopiedPaM ? pCopiedPaM->first : aRgTmp, targetPos, flags);
     }
 
     if (rRg.aStart != rRg.aEnd)
@@ -4469,7 +4480,7 @@ bool DocumentContentOperationsManager::ReplaceRangeImpl( SwPaM& rPam, const OUSt
         // the other views out of the deletion range.
         // Except for itself!
         SwPaM aDelPam( *rPam.GetMark(), *rPam.GetPoint() );
-        ::PaMCorrAbs( aDelPam, *aDelPam.GetPoint() );
+        ::PaMCorrAbs( aDelPam, *aDelPam.End() );
 
         auto [pStt, pEnd] = aDelPam.StartEnd(); // SwPosition*
         bool bOneNode = pStt->GetNode() == pEnd->GetNode();

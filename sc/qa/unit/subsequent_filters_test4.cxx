@@ -45,6 +45,8 @@
 #include <sortparam.hxx>
 #include <undomanager.hxx>
 #include <tabprotection.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 #include <orcusfilters.hxx>
 #include <filter.hxx>
@@ -112,6 +114,26 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testControlImport)
                                                          UNO_QUERY_THROW);
     uno::Reference<drawing::XControlShape> xControlShape(xIA_DrawPage->getByIndex(0),
                                                          UNO_QUERY_THROW);
+}
+
+CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testLegacyOptionButtonGroupBox)
+{
+    createScDoc("xls/tdf79542_radioGroupBox.xls");
+    uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
+    uno::Reference<container::XIndexAccess> xIA(xDoc->getSheets(), UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(xIA->getByIndex(0),
+                                                                 UNO_QUERY_THROW);
+    uno::Reference<container::XIndexAccess> xIA_DrawPage(xDrawPageSupplier->getDrawPage(),
+                                                         UNO_QUERY_THROW);
+
+    OUString sGroupName;
+    uno::Reference<drawing::XControlShape> xControlShape(xIA_DrawPage->getByIndex(1),
+                                                         UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xPropertySet(xControlShape->getControl(),
+                                                     uno::UNO_QUERY_THROW);
+    // The radio buttons are grouped by GroupBoxes - so the name comes from the group shape name
+    xPropertySet->getPropertyValue("GroupName") >>= sGroupName;
+    CPPUNIT_ASSERT_EQUAL(OUString("Casella di gruppo 1"), sGroupName);
 }
 
 CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testActiveXOptionButtonGroup)
@@ -1317,6 +1339,21 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf153444)
     CPPUNIT_ASSERT_EQUAL(OUString(u"ß, µm/m"), pDoc->GetString(5, 0, 0));
 }
 
+CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf151958)
+{
+    // Without the fix in place, this test would have failed with
+    // sal_uInt64 ScCountIfCellIterator<accessType>::GetCount(): Assertion `false' failed.
+    createScDoc("ods/tdf151958.ods");
+
+    ScDocument* pDoc = getScDoc();
+
+    double aValues[13] = { 17.0, 6.0, 6.0, 6.0, 5.0, 5.0, 4.0, 4.0, 4.0, 3.0, 3.0, 3.0, 2.0 };
+    for (size_t i = 3; i < 15; ++i)
+    {
+        CPPUNIT_ASSERT_EQUAL(aValues[i - 3], pDoc->GetValue(6, i, 0));
+    }
+}
+
 CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf151046)
 {
     createScDoc("ods/tdf151046.ods");
@@ -1347,6 +1384,9 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testImportCrashes)
     testImportCrash("xlsx/tdf121887.xlsx"); // 'Maximum number of rows per sheet' warning
     testImportCrash("xlsm/tdf111974.xlsm");
     testImportCrash("ods/tdf149679.ods");
+#if !defined(_WIN32) //FIXME tdf#154587
+    testImportCrash("xlsx/tdf124525.xlsx");
+#endif
 }
 
 CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf129681)
@@ -1550,6 +1590,17 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testSheetNamesXLSX)
     CPPUNIT_ASSERT_EQUAL(OUString("C>D"), aTabNames[4]);
 }
 
+CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf155046)
+{
+    createScDoc("xlsx/tdf155046.xlsx");
+    ScDocument* pDoc = getScDoc();
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: TRUE
+    // - Actual  : FALSE
+    CPPUNIT_ASSERT_EQUAL(OUString("TRUE"), pDoc->GetString(ScAddress(2, 2, 0)));
+}
+
 CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testTdf150599)
 {
     createScDoc("dif/tdf150599.dif");
@@ -1577,6 +1628,10 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testCommentSize)
     SdrCaptionObj* pCaption = pNote->GetCaption();
     CPPUNIT_ASSERT(pCaption);
 
+    // The values below depend on particular font and char size.
+    // At least assert that the corresponding style was set:
+    CPPUNIT_ASSERT_EQUAL(ScResId(STR_STYLENAME_NOTE), pCaption->GetStyleSheet()->GetName());
+
     const tools::Rectangle& rOldRect = pCaption->GetLogicRect();
     CPPUNIT_ASSERT_EQUAL(tools::Long(2899), rOldRect.getOpenWidth());
     CPPUNIT_ASSERT_EQUAL(tools::Long(939), rOldRect.getOpenHeight());
@@ -1585,7 +1640,7 @@ CPPUNIT_TEST_FIXTURE(ScFiltersTest4, testCommentSize)
 
     const tools::Rectangle& rNewRect = pCaption->GetLogicRect();
     CPPUNIT_ASSERT_EQUAL(rOldRect.getOpenWidth(), rNewRect.getOpenWidth());
-    CPPUNIT_ASSERT_EQUAL(tools::Long(1605), rNewRect.getOpenHeight());
+    CPPUNIT_ASSERT_EQUAL(tools::Long(1386), rNewRect.getOpenHeight());
 
     pDoc->GetUndoManager()->Undo();
 

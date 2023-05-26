@@ -174,27 +174,6 @@ void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
 
     switch ( GetType(  ) )
     {
-    case SwFrameType::FtnCont:
-        name = "ftncont";
-        break;
-    case SwFrameType::Ftn:
-        name = "ftn";
-        break;
-    case SwFrameType::Body:
-        name = "body";
-        break;
-    case SwFrameType::Fly:
-        name = "fly";
-        break;
-    case SwFrameType::Section:
-        name = "section";
-        break;
-    case SwFrameType::Tab:
-        name = "tab";
-        break;
-    case SwFrameType::Row:
-        name = "row";
-        break;
     case SwFrameType::Cell:
         name = "cell";
         break;
@@ -307,11 +286,6 @@ void SwFrame::dumpAsXml( xmlTextWriterPtr writer ) const
         else
         {
             dumpChildrenAsXml( writer );
-            if (IsFlyFrame())
-            {
-                auto pFlyFrame = static_cast<const SwFlyFrame*>(this);
-                pFlyFrame->SwAnchoredObject::dumpAsXml(writer);
-            }
         }
         (void)xmlTextWriterEndElement( writer );
     }

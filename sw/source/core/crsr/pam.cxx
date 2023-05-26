@@ -22,6 +22,7 @@
 #include <tools/gen.hxx>
 #include <editeng/protitem.hxx>
 #include <officecfg/Office/Common.hxx>
+#include <unotools/configmgr.hxx>
 
 #include <cntfrm.hxx>
 #include <pagefrm.hxx>
@@ -652,18 +653,6 @@ void SwPaM::SetMark()
     (*m_pMark) = *m_pPoint;
 }
 
-#ifdef DBG_UTIL
-void SwPaM::Exchange()
-{
-    if (m_pPoint != m_pMark)
-    {
-        SwPosition *pTmp = m_pPoint;
-        m_pPoint = m_pMark;
-        m_pMark = pTmp;
-    }
-}
-#endif
-
 /// movement of cursor
 bool SwPaM::Move( SwMoveFnCollection const & fnMove, SwGoInDoc fnGo )
 {
@@ -886,7 +875,7 @@ bool SwPaM::HasReadonlySel(bool bFormView, bool const isReplace) const
     const bool bAtStartA = (pA != nullptr) && (pA->GetMarkStart() == *GetPoint());
     const bool bAtStartB = (pB != nullptr) && (pB->GetMarkStart() == *GetMark());
 
-    if (officecfg::Office::Common::Filter::Microsoft::Import::ForceImportWWFieldsAsGenericFields::get())
+    if (!utl::ConfigManager::IsFuzzing() && officecfg::Office::Common::Filter::Microsoft::Import::ForceImportWWFieldsAsGenericFields::get())
     {
         ; // allow editing all fields in generic mode
     }
@@ -1004,6 +993,40 @@ bool SwPaM::HasReadonlySel(bool bFormView, bool const isReplace) const
                             break;
                         default:
                             break;
+                    }
+                }
+            }
+        }
+    }
+
+    return bRet;
+}
+
+bool SwPaM::HasHiddenSections() const
+{
+    bool bRet = false;
+
+    if (HasMark() && GetPoint()->nNode != GetMark()->nNode)
+    {
+        // check for hidden section inside the selection
+        SwNodeOffset nSttIdx = Start()->GetNodeIndex(), nEndIdx = End()->GetNodeIndex();
+
+        if (nSttIdx + SwNodeOffset(3) < nEndIdx)
+        {
+            const SwSectionFormats& rFormats = GetDoc().GetSections();
+            for (SwSectionFormats::size_type n = rFormats.size(); n;)
+            {
+                const SwSectionFormat* pFormat = rFormats[--n];
+                if (pFormat->GetSection()->IsHidden())
+                {
+                    const SwFormatContent& rContent = pFormat->GetContent(false);
+                    OSL_ENSURE(rContent.GetContentIdx(), "where is the SectionNode?");
+                    SwNodeOffset nIdx = rContent.GetContentIdx()->GetIndex();
+                    if (nSttIdx <= nIdx && nEndIdx >= nIdx
+                        && rContent.GetContentIdx()->GetNode().GetNodes().IsDocNodes())
+                    {
+                        bRet = true;
+                        break;
                     }
                 }
             }

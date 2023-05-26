@@ -30,7 +30,6 @@ class SFX2_DLLPUBLIC SvxCharView final : public weld::CustomWidgetController
 private:
     VclPtr<VirtualDevice> mxVirDev;
     tools::Long            mnY;
-    Point           maPosition;
     vcl::Font       maFont;
     bool            maHasInsert;
     OUString        m_sText;
@@ -45,6 +44,7 @@ private:
     virtual void GetFocus() override;
     virtual void LoseFocus() override;
     virtual bool KeyInput(const KeyEvent&) override;
+    virtual bool Command(const CommandEvent&) override;
     virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
 public:
     SvxCharView(const VclPtr<VirtualDevice>& rVirDev);
@@ -56,7 +56,7 @@ public:
     void            SetHasInsert( bool bInsert );
     void            InsertCharToDoc();
 
-    void            createContextMenu();
+    void            createContextMenu(const Point& rPosition);
 
     Size            get_preferred_size() const { return GetDrawingArea()->get_preferred_size(); }
 
@@ -64,7 +64,7 @@ public:
     void setClearClickHdl(const Link<SvxCharView*,void> &rLink);
     void setClearAllClickHdl(const Link<SvxCharView*,void> &rLink);
 
-    void ContextMenuSelect(std::string_view rIdent);
+    void ContextMenuSelect(std::u16string_view rIdent);
 };
 
 #endif

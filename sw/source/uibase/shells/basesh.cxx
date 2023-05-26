@@ -629,7 +629,7 @@ void SwBaseShell::ExecUndo(SfxRequest &rReq)
             if (rUndoRedo.GetLastUndoInfo(nullptr, &nUndoId, &rWrtShell.GetView()))
             {
                 for (SwViewShell& rShell : rWrtShell.GetRingContainer())
-                    rShell.LockPaint();
+                    rShell.LockPaint(LockPaintReason::Undo);
 
                 sal_uInt16 nUndoOffset = 0;
                 if (comphelper::LibreOfficeKit::isActive() && !bRepair && nCnt == 1)
@@ -665,7 +665,7 @@ void SwBaseShell::ExecUndo(SfxRequest &rReq)
             if (rUndoRedo.GetFirstRedoInfo(nullptr, &nUndoId, &rWrtShell.GetView()))
             {
                 for (SwViewShell& rShell : rWrtShell.GetRingContainer())
-                    rShell.LockPaint();
+                    rShell.LockPaint(LockPaintReason::Redo);
                 rWrtShell.Do( SwWrtShell::REDO, nCnt );
                 for (SwViewShell& rShell : rWrtShell.GetRingContainer())
                     rShell.UnlockPaint();
@@ -802,7 +802,7 @@ bool UpdateFieldContents(SfxRequest& rReq, SwWrtShell& rWrtSh)
     pFields->GetValue() >>= aFields;
 
     SwDoc* pDoc = rWrtSh.GetDoc();
-    pDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::INSBOOKMARK, nullptr);
+    pDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_FIELDS, nullptr);
     rWrtSh.StartAction();
 
     std::vector<const SwFormatRefMark*> aRefMarks;
@@ -840,49 +840,11 @@ bool UpdateFieldContents(SfxRequest& rReq, SwWrtShell& rWrtSh)
 
         OUString aContent = aMap["Content"].get<OUString>();
         auto pTextRefMark = const_cast<SwTextRefMark*>(pRefMark->GetTextRefMark());
-        if (!pTextRefMark->End())
-        {
-            continue;
-        }
-
-        // Insert markers to remember where the paste positions are.
-        const SwTextNode& rTextNode = pTextRefMark->GetTextNode();
-        SwPaM aMarkers(SwPosition(rTextNode, *pTextRefMark->End()));
-        IDocumentContentOperations& rIDCO = pDoc->getIDocumentContentOperations();
-        pTextRefMark->SetDontExpand(false);
-        bool bSuccess = rIDCO.InsertString(aMarkers, "XY");
-        if (bSuccess)
-        {
-            SwPaM aPasteEnd(SwPosition(rTextNode, *pTextRefMark->End()));
-            aPasteEnd.Move(fnMoveBackward, GoInContent);
-
-            // Paste HTML content.
-            SwPaM* pCursorPos = rWrtSh.GetCursor();
-            *pCursorPos = aPasteEnd;
-            SwTranslateHelper::PasteHTMLToPaM(rWrtSh, pCursorPos, aContent.toUtf8(), true);
-
-            // Update the refmark to point to the new content.
-            sal_Int32 nOldStart = pTextRefMark->GetStart();
-            sal_Int32 nNewStart = *pTextRefMark->End();
-            // First grow it to include text till the end of the paste position.
-            pTextRefMark->SetEnd(aPasteEnd.GetPoint()->GetContentIndex());
-            // Then shrink it to only start at the paste start: we know that the refmark was
-            // truncated to the paste start, as the refmark has to stay inside a single text node
-            pTextRefMark->SetStart(nNewStart);
-            rTextNode.GetSwpHints().SortIfNeedBe();
-            SwPaM aEndMarker(*aPasteEnd.GetPoint());
-            aEndMarker.SetMark();
-            aEndMarker.GetMark()->AdjustContent(1);
-            SwPaM aStartMarker(SwPosition(rTextNode, nOldStart), SwPosition(rTextNode, nNewStart));
-
-            // Remove markers. The start marker includes the old content as well.
-            rIDCO.DeleteAndJoin(aStartMarker);
-            rIDCO.DeleteAndJoin(aEndMarker);
-        }
+        pTextRefMark->UpdateFieldContent(pDoc, rWrtSh, aContent);
     }
 
     rWrtSh.EndAction();
-    pDoc->GetIDocumentUndoRedo().EndUndo(SwUndoId::INSBOOKMARK, nullptr);
+    pDoc->GetIDocumentUndoRedo().EndUndo(SwUndoId::UPDATE_FIELDS, nullptr);
     return true;
 }
 
@@ -945,46 +907,7 @@ void UpdateFieldContent(SfxRequest& rReq, SwWrtShell& rWrtSh)
 
     OUString aContent = aMap["Content"].get<OUString>();
     auto pTextRefMark = const_cast<SwTextRefMark*>(rRefmark.GetTextRefMark());
-    if (!pTextRefMark->End())
-    {
-        return;
-    }
-
-    // Insert markers to remember where the paste positions are.
-    const SwTextNode& rTextNode = pTextRefMark->GetTextNode();
-    SwPaM aMarkers(SwPosition(rTextNode, *pTextRefMark->End()));
-    IDocumentContentOperations& rIDCO = pDoc->getIDocumentContentOperations();
-    pTextRefMark->SetDontExpand(false);
-    if (!rIDCO.InsertString(aMarkers, "XY"))
-    {
-        return;
-    }
-
-    SwPaM aPasteEnd(SwPosition(rTextNode, *pTextRefMark->End()));
-    aPasteEnd.Move(fnMoveBackward, GoInContent);
-
-    // Paste HTML content.
-    SwPaM* pCursorPos = rWrtSh.GetCursor();
-    *pCursorPos = aPasteEnd;
-    SwTranslateHelper::PasteHTMLToPaM(rWrtSh, pCursorPos, aContent.toUtf8(), true);
-
-    // Update the refmark to point to the new content.
-    sal_Int32 nOldStart = pTextRefMark->GetStart();
-    sal_Int32 nNewStart = *pTextRefMark->End();
-    // First grow it to include text till the end of the paste position.
-    pTextRefMark->SetEnd(aPasteEnd.GetPoint()->GetContentIndex());
-    // Then shrink it to only start at the paste start: we know that the refmark was
-    // truncated to the paste start, as the refmark has to stay inside a single text node
-    pTextRefMark->SetStart(nNewStart);
-    rTextNode.GetSwpHints().SortIfNeedBe();
-    SwPaM aEndMarker(*aPasteEnd.GetPoint());
-    aEndMarker.SetMark();
-    aEndMarker.GetMark()->AdjustContent(1);
-    SwPaM aStartMarker(SwPosition(rTextNode, nOldStart), SwPosition(rTextNode, nNewStart));
-
-    // Remove markers. The start marker includes the old content as well.
-    rIDCO.DeleteAndJoin(aStartMarker);
-    rIDCO.DeleteAndJoin(aEndMarker);
+    pTextRefMark->UpdateFieldContent(pDoc, rWrtSh, aContent);
 }
 }
 
@@ -1474,7 +1397,7 @@ void SwBaseShell::Execute(SfxRequest &rReq)
                 rSh.ChgAnchor(eSet);
             else if (rSh.IsFrameSelected())
             {
-                SwFormatAnchor aAnc(eSet, rSh.GetPhyPageNum());
+                SwFormatAnchor aAnc(eSet, eSet == RndStdIds::FLY_AT_PAGE ? rSh.GetPhyPageNum() : 0);
                 SfxItemSet aSet(SwFEShell::makeItemSetFromFormatAnchor(GetPool(), aAnc));
                 rSh.SetFlyFrameAttr(aSet);
             }
@@ -2897,7 +2820,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 // for example disable header
                 SwView& rTempView = GetView();
 
-                OString sPageId;
+                OUString sPageId;
                 switch (nSlot)
                 {
                     case FN_FORMAT_PAGE_COLUMN_DLG:
@@ -2908,7 +2831,7 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                         break;
                     case FN_FORMAT_PAGE_DLG:
                         if (pItem)
-                          sPageId = OUStringToOString(static_cast<const SfxStringItem*>(pItem)->GetValue(), RTL_TEXTENCODING_UTF8);
+                          sPageId = static_cast<const SfxStringItem*>(pItem)->GetValue();
                         break;
                 }
                 rTempView.GetDocShell()->FormatPage(rReq.GetFrameWeld(), rPageDesc.GetName(), sPageId, rSh, &rReq);
@@ -3048,8 +2971,18 @@ void SwBaseShell::ExecDlg(SfxRequest &rReq)
                 if (pTheme)
                 {
                     std::shared_ptr<svx::IThemeColorChanger> pChanger(new sw::ThemeColorChanger(pDocumentShell));
-                    auto pDialog = std::make_shared<svx::ThemeDialog>(pMDI, pTheme.get(), pChanger);
-                    weld::DialogController::runAsync(pDialog, [](int) {});
+                    auto pDialog = std::make_shared<svx::ThemeDialog>(pMDI, pTheme.get());
+                    weld::DialogController::runAsync(pDialog, [pDialog, pChanger](sal_uInt32 nResult) {
+                        if (RET_OK != nResult)
+                            return;
+
+                        auto oColorSet = pDialog->getCurrentColorSet();
+                        if (oColorSet)
+                        {
+                            auto& rColorSet = (*oColorSet).get();
+                            pChanger->apply(rColorSet);
+                        }
+                    });
                 }
             }
         }

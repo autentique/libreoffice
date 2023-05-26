@@ -10,7 +10,9 @@
 #include <swmodeltestbase.hxx>
 
 #include <com/sun/star/awt/CharSet.hpp>
+#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/WrapTextMode.hpp>
 
 #include <docsh.hxx>
 #include <formatcontentcontrol.hxx>
@@ -19,6 +21,11 @@
 #include <frmmgr.hxx>
 #include <frameformats.hxx>
 #include <formatflysplit.hxx>
+#include <IDocumentLayoutAccess.hxx>
+#include <rootfrm.hxx>
+#include <pagefrm.hxx>
+#include <ftnfrm.hxx>
+#include <IDocumentSettingAccess.hxx>
 
 namespace
 {
@@ -119,7 +126,6 @@ CPPUNIT_TEST_FIXTURE(Test, testDocxHyperlinkShape)
     // Given a document with a hyperlink at char positions 0 -> 6 and a shape with text anchored at
     // char position 6:
     createSwDoc();
-    uno::Reference<lang::XMultiServiceFactory> xMSF(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XText> xText = xTextDocument->getText();
     uno::Reference<text::XTextCursor> xCursor = xText->createTextCursor();
@@ -169,7 +175,6 @@ CPPUNIT_TEST_FIXTURE(Test, testDocxSymbolFontExport)
 {
     // Create document with symbol character and font Wingdings
     mxComponent = loadFromDesktop("private:factory/swriter");
-    uno::Reference<lang::XMultiServiceFactory> xMSF(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XText> xText = xTextDocument->getText();
     uno::Reference<text::XTextCursor> xCursor = xText->createTextCursor();
@@ -211,8 +216,8 @@ CPPUNIT_TEST_FIXTURE(Test, testDocxFloatingTableExport)
     pWrtShell->StartAllAction();
     aMgr.InsertFlyFrame(RndStdIds::FLY_AT_PARA, aMgr.GetPos(), aMgr.GetSize());
     // Mark it as a floating table:
-    SwFrameFormats& rFlys = *pDoc->GetSpzFrameFormats();
-    SwFrameFormat* pFly = rFlys[0];
+    auto& rFlys = *pDoc->GetSpzFrameFormats();
+    auto pFly = rFlys[0];
     SwAttrSet aSet(pFly->GetAttrSet());
     aSet.Put(SwFormatFlySplit(true));
     pDoc->SetAttr(aSet, *pFly);
@@ -227,6 +232,115 @@ CPPUNIT_TEST_FIXTURE(Test, testDocxFloatingTableExport)
     // - XPath '//w:tbl/w:tblPr/w:tblpPr' number of nodes is incorrect
     // i.e. no floating table was exported.
     assertXPath(pXmlDoc, "//w:tbl/w:tblPr/w:tblpPr", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testDocFloatingTableImport)
+{
+    // Given a document with 2 pages:
+    createSwDoc("floattable-compat14.doc");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Make sure that the table is split between page 1 and page 2:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    // Without the accompanying fix in place, this test would have failed, the fly frame was not
+    // split between page 1 and page 2.
+    CPPUNIT_ASSERT(pPage1->GetNext());
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testWrapThroughLayoutInCell)
+{
+    // Given a document with a shape, "keep inside text boundaries" is off, wrap type is set to
+    // "through":
+    createSwDoc();
+    uno::Reference<css::lang::XMultiServiceFactory> xFactory(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XShape> xShape(
+        xFactory->createInstance("com.sun.star.drawing.RectangleShape"), uno::UNO_QUERY);
+    xShape->setSize(awt::Size(10000, 10000));
+    uno::Reference<beans::XPropertySet> xShapeProps(xShape, uno::UNO_QUERY);
+    xShapeProps->setPropertyValue("AnchorType", uno::Any(text::TextContentAnchorType_AT_CHARACTER));
+    xShapeProps->setPropertyValue("Surround", uno::Any(text::WrapTextMode_THROUGH));
+    xShapeProps->setPropertyValue("HoriOrientRelation", uno::Any(text::RelOrientation::FRAME));
+    uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
+    xDrawPageSupplier->getDrawPage()->add(xShape);
+
+    // When saving to docx:
+    save("Office Open XML Text");
+
+    // Then make sure that layoutInCell is undoing the effect of the import-time tweak:
+    xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // - attribute 'layoutInCell' of '//wp:anchor' incorrect value.
+    // i.e. layoutInCell was disabled, leading to bad layout in Word.
+    assertXPath(pXmlDoc, "//wp:anchor", "layoutInCell", "1");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, test3Endnotes)
+{
+    // Given a DOC file with 3 endnotes:
+    createSwDoc("3endnotes.doc");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure that all 3 endnotes are on the last page, like in Word:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    SwPageFrame* pPage = pLayout->GetLastPage();
+    SwFootnoteContFrame* pFootnoteCont = pPage->FindFootnoteCont();
+    int nEndnotes = 0;
+    for (SwFrame* pLower = pFootnoteCont->GetLower(); pLower; pLower = pLower->GetNext())
+    {
+        ++nEndnotes;
+    }
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 3
+    // - Actual  : 1
+    // i.e. only 1 endnote was on the last page, the other 2 was not moved to the end of the
+    // document, which is incorrect.
+    CPPUNIT_ASSERT_EQUAL(3, nEndnotes);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testDoNotBreakWrappedTables)
+{
+    // Given a document with the DO_NOT_BREAK_WRAPPED_TABLES compat mode enabled:
+    createSwDoc();
+    SwDoc* pDoc = getSwDoc();
+    IDocumentSettingAccess& rIDSA = pDoc->getIDocumentSettingAccess();
+    rIDSA.set(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES, true);
+
+    // When saving to docx:
+    save("Office Open XML Text");
+
+    // Then make sure the compat flag is serialized:
+    xmlDocUniquePtr pXmlDoc = parseExport("word/settings.xml");
+    // Without the accompanying fix in place, this test would have failed with:
+    // - Expected: 1
+    // - Actual  : 0
+    // - XPath '/w:settings/w:compat/w:doNotBreakWrappedTables' number of nodes is incorrect
+    // i.e. <w:doNotBreakWrappedTables> was not written.
+    assertXPath(pXmlDoc, "/w:settings/w:compat/w:doNotBreakWrappedTables", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testDOCfDontBreakWrappedTables)
+{
+    // Given a document with fDontBreakWrappedTables:
+    // When importing that document:
+    createSwDoc("dont-break-wrapped-tables.doc");
+
+    // Then make sure that the matching compat flag is set:
+    SwDoc* pDoc = getSwDoc();
+    IDocumentSettingAccess& rIDSA = pDoc->getIDocumentSettingAccess();
+    bool bDontBreakWrappedTables = rIDSA.get(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES);
+    // Without the accompanying fix in place, this test would have failed, the compat flag was not
+    // set.
+    CPPUNIT_ASSERT(bDontBreakWrappedTables);
 }
 }
 

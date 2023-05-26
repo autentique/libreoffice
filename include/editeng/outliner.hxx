@@ -369,8 +369,8 @@ public:
 class SAL_NO_VTABLE SAL_DLLPUBLIC_RTTI OutlinerViewShell
 {
 public:
-    virtual void libreOfficeKitViewCallback(int nType, const char* pPayload) const = 0;
-    virtual void libreOfficeKitViewCallbackWithViewId(int nType, const char* pPayload, int nViewId) const = 0;
+    virtual void libreOfficeKitViewCallback(int nType, const OString& pPayload) const = 0;
+    virtual void libreOfficeKitViewCallbackWithViewId(int nType, const OString& pPayload, int nViewId) const = 0;
     virtual void libreOfficeKitViewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) const = 0;
     virtual void libreOfficeKitViewUpdatedCallback(int nType) const = 0;
     virtual void libreOfficeKitViewUpdatedCallbackPerViewId(int nType, int nViewId, int nSourceViewId) const = 0;
@@ -502,6 +502,7 @@ private:
 
     std::optional<Color> mxTxtColor;
     std::optional<Color> mxFldColor;
+    std::optional<FontLineStyle> mxFldLineStyle;
 
     OUString            aRepresentation;
 
@@ -530,6 +531,9 @@ public:
 
     std::optional<Color> const & GetFieldColor() const { return mxFldColor; }
     void            SetFieldColor( std::optional<Color> xCol ) { mxFldColor = xCol; }
+
+    std::optional<FontLineStyle> const& GetFontLineStyle() const { return mxFldLineStyle; }
+    void            SetFontLineStyle( std::optional<FontLineStyle> xLineStyle ) { mxFldLineStyle = xLineStyle; }
 
     sal_Int32       GetPara() const { return nPara; }
     sal_Int32       GetPos() const { return nPos; }
@@ -897,7 +901,7 @@ public:
     bool            UpdateFields();
     void            RemoveFields( const std::function<bool ( const SvxFieldData* )>& isFieldData = [] (const SvxFieldData* ){return true;} );
 
-    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rTxtColor, std::optional<Color>& rFldColor );
+    virtual OUString CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rTxtColor, std::optional<Color>& rFldColor, std::optional<FontLineStyle>& rFldLineStyle );
 
     void            SetSpeller( css::uno::Reference< css::linguistic2::XSpellChecker1 > const &xSpeller );
     css::uno::Reference< css::linguistic2::XSpellChecker1 > const &
@@ -931,8 +935,10 @@ public:
     bool            IsTextPos( const Point& rPaperPos, sal_uInt16 nBorder );
     bool            IsTextPos( const Point& rPaperPos, sal_uInt16 nBorder, bool* pbBulletPos );
 
-    void            SetGlobalCharStretching(double nX = 100.0, double nY = 100.0);
-    void            GetGlobalCharStretching(double& rX, double& rY) const;
+    void setGlobalScale(double rFontX = 100.0, double rFontY = 100.0, double rSpacingX = 100.0, double rSpacingY = 100.0);
+    void getGlobalScale(double& rFontX, double& rFontY, double& rSpacingX, double& rSpacingY) const;
+    void setRoundFontSizeToPt(bool bRound) const;
+
     void            EraseVirtualDevice();
 
     bool            ShouldCreateBigTextObject() const;

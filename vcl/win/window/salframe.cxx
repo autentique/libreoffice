@@ -984,11 +984,6 @@ WinSalFrame::~WinSalFrame()
         if ( pSalData->mhWantLeaveMsg == mhWnd )
         {
             pSalData->mhWantLeaveMsg = nullptr;
-            if ( pSalData->mpMouseLeaveTimer )
-            {
-                delete pSalData->mpMouseLeaveTimer;
-                pSalData->mpMouseLeaveTimer = nullptr;
-            }
         }
 
         // remove windows properties
@@ -2834,6 +2829,10 @@ void WinSalFrame::UpdateSettings( AllSettings& rSettings )
     aStyleSettings.SetFieldTextColor( aStyleSettings.GetWindowTextColor() );
     aStyleSettings.SetFieldRolloverTextColor( aStyleSettings.GetFieldTextColor() );
     aStyleSettings.SetListBoxWindowTextColor( aStyleSettings.GetFieldTextColor() );
+
+    aStyleSettings.SetAccentColor( ImplWinColorToSal( GetSysColor( COLOR_HIGHLIGHT ) ) );
+    // https://devblogs.microsoft.com/oldnewthing/20170405-00/?p=95905
+
     aStyleSettings.SetHighlightColor( ImplWinColorToSal( GetSysColor( COLOR_HIGHLIGHT ) ) );
     aStyleSettings.SetHighlightTextColor(aHighlightTextColor);
     aStyleSettings.SetListBoxWindowHighlightColor( aStyleSettings.GetHighlightColor() );
@@ -3115,6 +3114,11 @@ void WinSalFrame::UpdateDarkMode()
     ::UpdateDarkMode(mhWnd);
 }
 
+bool WinSalFrame::GetUseDarkMode() const
+{
+    return UseDarkMode();
+}
+
 static bool ImplHandleMouseMsg( HWND hWnd, UINT nMsg,
                                 WPARAM wParam, LPARAM lParam )
 {
@@ -3185,15 +3189,6 @@ static bool ImplHandleMouseMsg( HWND hWnd, UINT nMsg,
                 SendMessageW( pSalData->mhWantLeaveMsg, SAL_MSG_MOUSELEAVE, 0, GetMessagePos() );
 
             pSalData->mhWantLeaveMsg = hWnd;
-            // Start MouseLeave-Timer
-            if ( !pSalData->mpMouseLeaveTimer )
-            {
-                pSalData->mpMouseLeaveTimer = new AutoTimer( "ImplHandleMouseMsg SalData::mpMouseLeaveTimer" );
-                pSalData->mpMouseLeaveTimer->SetTimeout( SAL_MOUSELEAVE_TIMEOUT );
-                pSalData->mpMouseLeaveTimer->Start();
-                // We don't need to set a timeout handler, because we test
-                // for mouseleave in the timeout callback
-            }
             aMouseEvt.mnButton = 0;
             nEvent = SalEvent::MouseMove;
             }
@@ -3226,11 +3221,6 @@ static bool ImplHandleMouseMsg( HWND hWnd, UINT nMsg,
                     }
                 }
                 pSalData->mhWantLeaveMsg = nullptr;
-                if ( pSalData->mpMouseLeaveTimer )
-                {
-                    delete pSalData->mpMouseLeaveTimer;
-                    pSalData->mpMouseLeaveTimer = nullptr;
-                }
                 aMouseEvt.mnX = aPt.x;
                 aMouseEvt.mnY = aPt.y;
                 aMouseEvt.mnButton = 0;

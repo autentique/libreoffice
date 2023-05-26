@@ -6211,22 +6211,16 @@ void PPTParagraphObj::ApplyTo( SfxItemSet& rSet,  std::optional< sal_Int16 >& rS
     GetAttrib(PPT_ParaAttr_BulletOn, nIsBullet2, nDestinationInstance);
     GetAttrib(PPT_ParaAttr_TextOfs, _nTextOfs, nDestinationInstance);
     GetAttrib(PPT_ParaAttr_BulletOfs, _nBulletOfs, nDestinationInstance);
+    SvxLRSpaceItem aLRSpaceItem( EE_PARA_LRSPACE );
     if ( !nIsBullet2 )
     {
-        SvxLRSpaceItem aLRSpaceItem( EE_PARA_LRSPACE );
         auto const nAbsLSpace = convertMasterUnitToMm100(_nTextOfs);
         auto const nFirstLineOffset = nAbsLSpace - convertMasterUnitToMm100(_nBulletOfs);
-        aLRSpaceItem.SetLeft( nAbsLSpace );
         aLRSpaceItem.SetTextFirstLineOffsetValue( -nFirstLineOffset );
-        rSet.Put( aLRSpaceItem );
+        aLRSpaceItem.SetTextLeft( nAbsLSpace );
     }
-    else
-    {
-        SvxLRSpaceItem aLRSpaceItem( EE_PARA_LRSPACE );
-        aLRSpaceItem.SetLeft( 0 );
-        aLRSpaceItem.SetTextFirstLineOffsetValue( 0 );
-        rSet.Put( aLRSpaceItem );
-    }
+    rSet.Put( aLRSpaceItem );
+
     if ( GetAttrib( PPT_ParaAttr_Adjust, nVal, nDestinationInstance ) )
     {
         if ( nVal <= 3 )
@@ -7395,19 +7389,19 @@ static void ApplyCellAttributes( const SdrObject* pObj, Reference< XCell > const
             case drawing::FillStyle_GRADIENT :
                 {
                     eFS = css::drawing::FillStyle_GRADIENT;
-                    XGradient aXGradient(pObj->GetMergedItem(XATTR_FILLGRADIENT).GetGradientValue());
+                    basegfx::BGradient aBGradient(pObj->GetMergedItem(XATTR_FILLGRADIENT).GetGradientValue());
 
                     css::awt::Gradient aGradient;
-                    aGradient.Style = aXGradient.GetGradientStyle();
-                    aGradient.StartColor = static_cast<sal_Int32>(Color(aXGradient.GetColorStops().front().getStopColor()));
-                    aGradient.EndColor = static_cast<sal_Int32>(Color(aXGradient.GetColorStops().back().getStopColor()));
-                    aGradient.Angle = static_cast<short>(aXGradient.GetAngle());
-                    aGradient.Border = aXGradient.GetBorder();
-                    aGradient.XOffset = aXGradient.GetXOffset();
-                    aGradient.YOffset = aXGradient.GetYOffset();
-                    aGradient.StartIntensity = aXGradient.GetStartIntens();
-                    aGradient.EndIntensity = aXGradient.GetEndIntens();
-                    aGradient.StepCount = aXGradient.GetSteps();
+                    aGradient.Style = aBGradient.GetGradientStyle();
+                    aGradient.StartColor = static_cast<sal_Int32>(Color(aBGradient.GetColorStops().front().getStopColor()));
+                    aGradient.EndColor = static_cast<sal_Int32>(Color(aBGradient.GetColorStops().back().getStopColor()));
+                    aGradient.Angle = static_cast<short>(aBGradient.GetAngle());
+                    aGradient.Border = aBGradient.GetBorder();
+                    aGradient.XOffset = aBGradient.GetXOffset();
+                    aGradient.YOffset = aBGradient.GetYOffset();
+                    aGradient.StartIntensity = aBGradient.GetStartIntens();
+                    aGradient.EndIntensity = aBGradient.GetEndIntens();
+                    aGradient.StepCount = aBGradient.GetSteps();
 
                     xPropSet->setPropertyValue( "FillGradient", Any( aGradient ) );
                 }

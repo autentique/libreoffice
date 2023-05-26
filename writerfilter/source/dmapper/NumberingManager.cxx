@@ -276,9 +276,9 @@ void ListLevel::AddParaProperties( uno::Sequence< beans::PropertyValue >* props 
 {
     uno::Sequence< beans::PropertyValue >& aProps = *props;
 
-    OUString sFirstLineIndent = getPropertyName(
+    const OUString & sFirstLineIndent = getPropertyName(
             PROP_FIRST_LINE_INDENT );
-    OUString sIndentAt = getPropertyName(
+    const OUString & sIndentAt = getPropertyName(
             PROP_INDENT_AT );
 
     bool hasFirstLineIndent = lcl_findProperty( aProps, sFirstLineIndent );
@@ -292,9 +292,9 @@ void ListLevel::AddParaProperties( uno::Sequence< beans::PropertyValue >* props 
     // ParaFirstLineIndent -> FirstLineIndent
     // ParaLeftMargin -> IndentAt
 
-    OUString sParaIndent = getPropertyName(
+    const OUString & sParaIndent = getPropertyName(
             PROP_PARA_FIRST_LINE_INDENT );
-    OUString sParaLeftMargin = getPropertyName(
+    const OUString & sParaLeftMargin = getPropertyName(
             PROP_PARA_LEFT_MARGIN );
 
     for ( const auto& rParaProp : aParaProps )
@@ -531,17 +531,15 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
     try
     {
         // Create the numbering style
-        uno::Reference< beans::XPropertySet > xStyle (
-            xFactory->createInstance("com.sun.star.style.NumberingStyle"),
-            uno::UNO_QUERY_THROW );
-
         if (GetId() == nOutline)
             m_StyleName = "Outline"; //SwNumRule.GetOutlineRuleName()
         else
-            xStyles->insertByName(GetStyleName(GetId(), xStyles), css::uno::Any(xStyle));
+            xStyles->insertByName(
+                GetStyleName(GetId(), xStyles),
+                css::uno::Any(xFactory->createInstance("com.sun.star.style.NumberingStyle")));
 
         uno::Any oStyle = xStyles->getByName(GetStyleName());
-        xStyle.set( oStyle, uno::UNO_QUERY_THROW );
+        uno::Reference< beans::XPropertySet > xStyle( oStyle, uno::UNO_QUERY_THROW );
 
         // Get the default OOo Numbering style rules
         uno::Any aRules = xStyle->getPropertyValue( getPropertyName( PROP_NUMBERING_RULES ) );
@@ -615,7 +613,7 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
         }
 
         // Create the numbering style for these rules
-        OUString sNumRulesName = getPropertyName( PROP_NUMBERING_RULES );
+        const OUString & sNumRulesName = getPropertyName( PROP_NUMBERING_RULES );
         xStyle->setPropertyValue( sNumRulesName, uno::Any( m_xNumRules ) );
     }
     catch( const lang::IllegalArgumentException& )
@@ -696,7 +694,7 @@ void ListsManager::lcl_attribute( Id nName, Value& rVal )
                 //replace it with a hard-hyphen (0x2d)
                 //-> this fixes missing hyphen export in PDF etc.
                 // see tdf#101626
-                std::string sLevelText = rVal.getString().replace(0xad, 0x2d).toUtf8().getStr();
+                std::string sLevelText( rVal.getString().replace(0xad, 0x2d).toUtf8() );
 
                 // DOCX level-text contains levels definition in format "%1.%2.%3"
                 // we need to convert it to LO internal representation: "%1%.%2%.%3%"

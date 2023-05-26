@@ -298,9 +298,7 @@ static OUString lcl_dbg_out(const SwpHints & rHints)
 
     for (size_t i = 0; i < rHints.Count(); ++i)
     {
-        aStr.append("  ");
-        aStr.append(lcl_dbg_out(*rHints.Get(i)));
-        aStr.append("\n");
+        aStr.append("  " + lcl_dbg_out(*rHints.Get(i)) + "\n");
     }
 
     aStr.append("]\n");
@@ -409,15 +407,14 @@ static OUString lcl_AnchoredFrames(const SwNode & rNode)
     OUStringBuffer aResult("[");
 
     const SwDoc& rDoc = rNode.GetDoc();
-    const SwFrameFormats * pFrameFormats = rDoc.GetSpzFrameFormats();
+    const sw::SpzFrameFormats* pSpzs = rDoc.GetSpzFrameFormats();
 
-    if (pFrameFormats)
+    if (pSpzs)
     {
         bool bFirst = true;
-        for (SwFrameFormats::const_iterator i(pFrameFormats->begin());
-             i != pFrameFormats->end(); ++i)
+        for(const sw::SpzFrameFormat* pSpz: *pSpzs)
         {
-            const SwFormatAnchor & rAnchor = (*i)->GetAnchor();
+            const SwFormatAnchor& rAnchor = pSpz->GetAnchor();
             const SwNode * pPos = rAnchor.GetAnchorNode();
 
             if (pPos && *pPos == rNode)
@@ -425,8 +422,8 @@ static OUString lcl_AnchoredFrames(const SwNode & rNode)
                 if (! bFirst)
                     aResult.append(", ");
 
-                if (*i)
-                    aResult.append(lcl_dbg_out(**i));
+                if (pSpz)
+                    aResult.append(lcl_dbg_out(*pSpz));
                 bFirst = false;
             }
         }
@@ -647,8 +644,7 @@ static OUString lcl_dbg_out(SwOutlineNodes const & rNodes)
 
     for (size_t i = 0; i < rNodes.size(); i++)
     {
-        aStr.append(lcl_dbg_out(*rNodes[i]));
-        aStr.append("\n");
+        aStr.append(lcl_dbg_out(*rNodes[i]) + "\n");
     }
 
     aStr.append("]\n");
@@ -669,10 +665,7 @@ static OUString lcl_dbg_out(const SvxNumberFormat & rFormat)
 
 static OUString lcl_dbg_out(const SwNumRule & rRule)
 {
-    OUStringBuffer aResult("[ ");
-
-    aResult.append(rRule.GetName());
-    aResult.append(" [");
+    OUStringBuffer aResult("[ " + rRule.GetName() + " [");
 
     for (sal_uInt8 n = 0; n < MAXLEVEL; n++)
     {
@@ -682,9 +675,7 @@ static OUString lcl_dbg_out(const SwNumRule & rRule)
         aResult.append(lcl_dbg_out(rRule.Get(n)));
     }
 
-    aResult.append("]");
-
-    aResult.append("]");
+    aResult.append("]]");
 
     return aResult.makeStringAndClear();
 }
@@ -705,12 +696,12 @@ const char * dbg_out(const SwTextFormatColl & rFormat)
     return dbg_out(lcl_dbg_out(rFormat));
 }
 
-static OUString lcl_dbg_out(const SwFrameFormats & rFrameFormats)
+static OUString lcl_dbg_out(const sw::FrameFormats<sw::SpzFrameFormat*>& rFrameFormats)
 {
-    return lcl_dbg_out_SvPtrArr<SwFrameFormats>(rFrameFormats);
+    return lcl_dbg_out_SvPtrArr<sw::FrameFormats<sw::SpzFrameFormat*>>(rFrameFormats);
 }
 
-const char * dbg_out(const SwFrameFormats & rFrameFormats)
+const char * dbg_out(const sw::FrameFormats<sw::SpzFrameFormat*>& rFrameFormats)
 {
     return dbg_out(lcl_dbg_out(rFrameFormats));
 }
@@ -792,9 +783,7 @@ static OUString lcl_dbg_out(const SwFormTokens & rTokens)
         if (aIt != rTokens.begin())
             aStr.append(", ");
 
-        aStr.append(lcl_TokenType2Str(aIt->eTokenType));
-        aStr.append(": ");
-        aStr.append(lcl_dbg_out(*aIt));
+        aStr.append(lcl_TokenType2Str(aIt->eTokenType) + ": " + lcl_dbg_out(*aIt));
     }
 
     aStr.append("]");

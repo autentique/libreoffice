@@ -141,18 +141,6 @@ enum class ExtDateFieldFormat
     FORCE_EQUAL_SIZE=SAL_MAX_ENUM
 };
 
-// this appears to be a direct copy of css::awt::GradientStyle
-enum class GradientStyle
-{
-    Linear = 0,
-    Axial = 1,
-    Radial = 2,
-    Elliptical = 3,
-    Square = 4,
-    Rect = 5,
-    FORCE_EQUAL_SIZE = SAL_MAX_ENUM
-};
-
 enum class HatchStyle
 {
     Single = 0,
@@ -341,10 +329,11 @@ enum class FloatWinPopupFlags
     NoMouseUpClose       = 0x000200,
     GrabFocus            = 0x000400,
     NoHorzPlacement      = 0x000800,
+    MakeClientWindowVisibleBeforePopup  = 0x001000,
 };
 namespace o3tl
 {
-    template<> struct typed_flags<FloatWinPopupFlags> : is_typed_flags<FloatWinPopupFlags, 0x0fff> {};
+    template<> struct typed_flags<FloatWinPopupFlags> : is_typed_flags<FloatWinPopupFlags, 0x1fff> {};
 }
 
 // Flags for Window::Show()

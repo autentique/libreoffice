@@ -60,12 +60,12 @@ static void assertMotionPath(std::u16string_view rStr1, std::u16string_view rStr
 
         if (checkBeginWithNumber(aToken1) && checkBeginWithNumber(aToken2))
             assertDoubleEquals(aToken1.toDouble(), aToken2.toDouble(), DBL_EPSILON, rSourceLine,
-                               sMessage.getStr());
+                               std::string(sMessage));
         else
-            assertEquals(aToken1, aToken2, rSourceLine, sMessage.getStr());
+            assertEquals(aToken1, aToken2, rSourceLine, std::string(sMessage));
     }
-    assertEquals(sal_Int32(-1), nIdx1, rSourceLine, sMessage.getStr());
-    assertEquals(sal_Int32(-1), nIdx2, rSourceLine, sMessage.getStr());
+    assertEquals(sal_Int32(-1), nIdx1, rSourceLine, std::string(sMessage));
+    assertEquals(sal_Int32(-1), nIdx2, rSourceLine, std::string(sMessage));
 }
 
 class SdOOXMLExportTest2 : public SdModelTestBase
@@ -1007,11 +1007,19 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testTdf105739)
         CPPUNIT_ASSERT_EQUAL(int(drawing::FillStyle_GRADIENT), static_cast<int>(aFillStyle));
 
         // Test gradient properties
-        com::sun::star::awt::Gradient aFillGradient;
+        com::sun::star::awt::Gradient2 aFillGradient;
         aXBackgroundPropSet->getPropertyValue("FillGradient") >>= aFillGradient;
+
+        // MCGR: Use the completely imported gradient to check for correctness
+        const basegfx::BColorStops aColorStops(aFillGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(1.0, 0.0, 0.0));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(),
+                             basegfx::BColor(0.0, 0.69019607843137254, 0.31372549019607843));
         CPPUNIT_ASSERT_EQUAL(int(awt::GradientStyle_LINEAR), static_cast<int>(aFillGradient.Style));
-        CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, Color(ColorTransparency, aFillGradient.StartColor));
-        CPPUNIT_ASSERT_EQUAL(Color(0x00b050), Color(ColorTransparency, aFillGradient.EndColor));
     }
 }
 
@@ -1823,10 +1831,10 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testTextColumns_3columns)
         CPPUNIT_ASSERT_EQUAL(uno::Any(sal_Int32(300)),
                              xColProps->getPropertyValue("AutomaticDistance"));
         // Scale value may be unstable; just test that the text is actually scaled
-        sal_Int16 nScale;
-        CPPUNIT_ASSERT(xProps->getPropertyValue("TextFitToSizeScale") >>= nScale);
-        CPPUNIT_ASSERT_GREATER(sal_Int16(0), nScale);
-        CPPUNIT_ASSERT_LESS(sal_Int16(100), nScale);
+        double fScale;
+        CPPUNIT_ASSERT(xProps->getPropertyValue("TextFitToSizeScale") >>= fScale);
+        CPPUNIT_ASSERT_GREATER(0.0, fScale);
+        CPPUNIT_ASSERT_LESS(100.0, fScale);
     }
 
     save("Impress Office Open XML");
@@ -1843,10 +1851,10 @@ CPPUNIT_TEST_FIXTURE(SdOOXMLExportTest2, testTextColumns_3columns)
         CPPUNIT_ASSERT_EQUAL(uno::Any(sal_Int32(300)),
                              xColProps->getPropertyValue("AutomaticDistance"));
         // Scale value may be unstable; just test that the text is actually scaled
-        sal_Int16 nScale;
-        CPPUNIT_ASSERT(xProps->getPropertyValue("TextFitToSizeScale") >>= nScale);
-        CPPUNIT_ASSERT_GREATER(sal_Int16(0), nScale);
-        CPPUNIT_ASSERT_LESS(sal_Int16(100), nScale);
+        double fScale;
+        CPPUNIT_ASSERT(xProps->getPropertyValue("TextFitToSizeScale") >>= fScale);
+        CPPUNIT_ASSERT_GREATER(0.0, fScale);
+        CPPUNIT_ASSERT_LESS(100.0, fScale);
     }
 
     xmlDocUniquePtr pXmlDocRels = parseExport("ppt/slides/slide1.xml");

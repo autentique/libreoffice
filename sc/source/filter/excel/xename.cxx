@@ -324,6 +324,11 @@ OUString XclExpName::GetWithDefaultRangeSeparator( const OUString& rSymbol ) con
 
 void XclExpName::SaveXml( XclExpXmlStream& rStrm )
 {
+    // tdf#100034: Don't save print range if the built-in index is unknown
+    // and sheet index is valid (this is a deleted range)
+    if (mcBuiltIn == EXC_BUILTIN_UNKNOWN && mnScTab != SCTAB_GLOBAL)
+        return;
+
     sax_fastparser::FSHelperPtr& rWorkbook = rStrm.GetCurrentStream();
     rWorkbook->startElement( XML_definedName,
             // OOXTODO: XML_comment, "",
@@ -333,7 +338,7 @@ void XclExpName::SaveXml( XclExpXmlStream& rStrm )
             // OOXTODO: XML_functionGroupId, "",
             // OOXTODO: XML_help, "",
             XML_hidden, ToPsz( ::get_flag( mnFlags, EXC_NAME_HIDDEN ) ),
-            XML_localSheetId, mnScTab == SCTAB_GLOBAL ? nullptr : OString::number( mnScTab ).getStr(),
+            XML_localSheetId, sax_fastparser::UseIf(OString::number( mnScTab ), mnScTab != SCTAB_GLOBAL),
             XML_name, maOrigName.toUtf8(),
             // OOXTODO: XML_publishToServer, "",
             // OOXTODO: XML_shortcutKey, "",

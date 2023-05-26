@@ -1222,7 +1222,7 @@ void SwView::ExecTabWin( SfxRequest const & rReq )
     {
         if ( pReqArgs && rDesc.GetMaster().GetHeader().IsActive())
         {
-            const SfxInt16Item& aLayoutItem = static_cast<const SfxInt16Item&>(pReqArgs->Get(SID_ATTR_PAGE_HEADER_LAYOUT));
+            const SfxInt16Item& aLayoutItem = pReqArgs->Get(SID_ATTR_PAGE_HEADER_LAYOUT);
             sal_uInt16 nLayout = aLayoutItem.GetValue();
             SwPageDesc aDesc(rDesc);
             aDesc.ChgHeaderShare((nLayout>>1) == 0);
@@ -1275,7 +1275,7 @@ void SwView::ExecTabWin( SfxRequest const & rReq )
     {
         if ( pReqArgs && rDesc.GetMaster().GetFooter().IsActive())
         {
-            const SfxInt16Item& aLayoutItem = static_cast<const SfxInt16Item&>(pReqArgs->Get(SID_ATTR_PAGE_FOOTER_LAYOUT));
+            const SfxInt16Item& aLayoutItem = pReqArgs->Get(SID_ATTR_PAGE_FOOTER_LAYOUT);
             sal_uInt16 nLayout = aLayoutItem.GetValue();
             SwPageDesc aDesc(rDesc);
             aDesc.ChgFooterShare((nLayout>>1) == 0);
@@ -1615,7 +1615,7 @@ void SwView::StateTabWin(SfxItemSet& rSet)
 
                     std::stringstream aStream;
                     boost::property_tree::write_json(aStream, aRootTree);
-                    rSh.GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_TAB_STOP_LIST, aStream.str().c_str());
+                    rSh.GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_TAB_STOP_LIST, OString(aStream.str()));
                 }
             }
             break;
@@ -2441,10 +2441,8 @@ void SwView::StateTabWin(SfxItemSet& rSet)
             rSet.Put( SfxBoolItem(SID_ATTR_PAGE_HEADER, bHeaderOn ) );
             if(bHeaderOn)
             {
-                const SvxLRSpaceItem* pLR = static_cast<const SvxLRSpaceItem*>(
-                                            rHeader.GetHeaderFormat()->GetAttrSet().GetItem(SID_ATTR_LRSPACE));
-                const SvxULSpaceItem* pUL = static_cast<const SvxULSpaceItem*>(
-                                            rHeader.GetHeaderFormat()->GetAttrSet().GetItem(SID_ATTR_ULSPACE));
+                const SvxLRSpaceItem* pLR = rHeader.GetHeaderFormat()->GetAttrSet().GetItem(SID_ATTR_LRSPACE);
+                const SvxULSpaceItem* pUL = rHeader.GetHeaderFormat()->GetAttrSet().GetItem(SID_ATTR_ULSPACE);
                 if (pLR && pUL)
                 {
                     SvxLongLRSpaceItem aLR(pLR->GetLeft(), pLR->GetRight(), SID_ATTR_PAGE_HEADER_LRMARGIN);
@@ -2517,8 +2515,8 @@ void SwView::StateTabWin(SfxItemSet& rSet)
 
                     case drawing::FillStyle_GRADIENT:
                     {
-                        const XGradient& xGradient = aSet.GetItem<XFillGradientItem>( XATTR_FILLGRADIENT )->GetGradientValue();
-                        XFillGradientItem aFillGradientItem( OUString(), xGradient, SID_ATTR_PAGE_GRADIENT  );
+                        const basegfx::BGradient& aBGradient = aSet.GetItem<XFillGradientItem>( XATTR_FILLGRADIENT )->GetGradientValue();
+                        XFillGradientItem aFillGradientItem( OUString(), aBGradient, SID_ATTR_PAGE_GRADIENT  );
                         rSet.Put( aFillGradientItem );
                     }
                     break;

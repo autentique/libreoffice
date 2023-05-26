@@ -14,7 +14,7 @@
 #include <string_view>
 
 #include <com/sun/star/awt/FontWeight.hpp>
-#include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -36,7 +36,8 @@
 #include <rtl/math.hxx>
 #include <svx/svdoashp.hxx>
 #include <tools/color.hxx>
-#include <docmodel/uno/UnoThemeColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 
 using namespace ::com::sun::star;
 
@@ -312,15 +313,14 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testTdf54095_SmartArtThemeTextColor)
     // - Actual  : 16777215 (0xFFFFFF), that is text was white
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0x1F497D), nActualColor);
 
-    // clrScheme. For map between name in docx and index from CharColorThemeReference see
+    // clrScheme. For map between name in docx and index from CharComplexColor see
     // oox::drawingml::Color::getSchemeColorIndex()
     // Without fix the color scheme was "lt1" (1) but should be "dk2" (2).
-    uno::Reference<util::XThemeColor> xThemeColor;
-    CPPUNIT_ASSERT(xPortion->getPropertyValue("CharColorThemeReference") >>= xThemeColor);
-    CPPUNIT_ASSERT(xThemeColor.is());
-    model::ThemeColor aThemeColor;
-    model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Dark2, aThemeColor.getType());
+    uno::Reference<util::XComplexColor> xComplexColor;
+    xPortion->getPropertyValue("CharComplexColor") >>= xComplexColor;
+    CPPUNIT_ASSERT(xComplexColor.is());
+    auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Dark2, aComplexColor.getSchemeType());
 
     if (!bUseGroup)
     {
@@ -467,11 +467,21 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testWriterFontwork3)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(0), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        const basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.0, 0.0, 1.0));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[1].getStopColor(),
+            basegfx::BColor(0.96862745098039216, 0.58823529411764708, 0.27450980392156865));
+
         CPPUNIT_ASSERT_EQUAL(sal_Int16(690), aGradient.Angle);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(255), aGradient.StartColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(16225862), aGradient.EndColor);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(0), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(0), aGradient.YOffset);
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_LINEAR, aGradient.Style);
@@ -482,11 +492,21 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testWriterFontwork3)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(1), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        const basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.40000000000000002));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[0].getStopColor(),
+            basegfx::BColor(0.96862745098039216, 0.58823529411764708, 0.27450980392156865));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.0, 0.0, 1.0));
+
         CPPUNIT_ASSERT_EQUAL(sal_Int16(900), aGradient.Angle);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(255), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(16225862), aGradient.StartColor);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.YOffset);
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RADIAL, aGradient.Style);
@@ -497,11 +517,21 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testWriterFontwork3)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(2), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        const basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[0].getStopColor(),
+            basegfx::BColor(0.96862745098039216, 0.58823529411764708, 0.27450980392156865));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(0.0, 0.0, 1.0));
+
         CPPUNIT_ASSERT_EQUAL(sal_Int16(900), aGradient.Angle);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(255), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(16225862), aGradient.StartColor);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(100), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(100), aGradient.YOffset);
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RECT, aGradient.Style);
@@ -604,12 +634,22 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testImportWordArtGradient)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(0), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        const basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(),
+                             basegfx::BColor(1.0, 0.75294117647058822, 0.0));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(),
+                             basegfx::BColor(0.75294117647058822, 0.0, 0.0));
+
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_LINEAR, aGradient.Style);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(690), aGradient.Angle);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(16760832), aGradient.StartColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(12582912), aGradient.EndColor);
 
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::LineStyle_SOLID),
                              xShapeProps->getPropertyValue(u"LineStyle"));
@@ -627,19 +667,40 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testImportWordArtGradient)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(1), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(),
+                             basegfx::BColor(0.0, 0.51372549019607838, 0.8784313725490196));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(),
+                             basegfx::BColor(0.90196078431372551, 0.90196078431372551, 0.0));
+
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RADIAL, aGradient.Style);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(15132160), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(33760), aGradient.StartColor);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.YOffset);
 
         xShapeProps->getPropertyValue(u"FillTransparenceGradient") >>= aGradient;
-        CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RADIAL, aGradient.Style);
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        aColorStops = basegfx::BColorStops(aGradient.ColorStops);
+
         // Transparency is encoded in gray color.
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(5000268), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(6710886), aGradient.StartColor);
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[0].getStopColor(),
+            basegfx::BColor(0.40000000000000002, 0.40000000000000002, 0.40000000000000002));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[1].getStopColor(),
+            basegfx::BColor(0.29999999999999999, 0.29999999999999999, 0.29999999999999999));
+
+        CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RADIAL, aGradient.Style);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(50), aGradient.YOffset);
 
@@ -663,19 +724,38 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testImportWordArtGradient)
         uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(2), uno::UNO_QUERY);
         CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_GRADIENT),
                              xShapeProps->getPropertyValue(u"FillStyle"));
-        awt::Gradient aGradient;
+        awt::Gradient2 aGradient;
         xShapeProps->getPropertyValue(u"FillGradient") >>= aGradient;
+
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        basegfx::BColorStops aColorStops(aGradient.ColorStops);
+
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[0].getStopColor(),
+            basegfx::BColor(0.26666666666666666, 0.44705882352941179, 0.7686274509803922));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(
+            aColorStops[1].getStopColor(),
+            basegfx::BColor(0.26666666666666666, 0.44705882352941179, 0.7686274509803922));
+
         CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RECT, aGradient.Style);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(4485828), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(4485828), aGradient.StartColor);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(100), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(0), aGradient.YOffset);
 
         xShapeProps->getPropertyValue(u"FillTransparenceGradient") >>= aGradient;
-        CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RECT, aGradient.Style);
+        // MCGR: Use the completely imported transparency gradient to check for correctness
+        aColorStops = basegfx::BColorStops(aGradient.ColorStops);
+
         // Transparency is encoded in gray color.
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(16777215), aGradient.EndColor);
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(0), aGradient.StartColor);
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aColorStops.size());
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[0].getStopOffset(), 0.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[0].getStopColor(), basegfx::BColor(0.0, 0.0, 0.0));
+        CPPUNIT_ASSERT(basegfx::fTools::equal(aColorStops[1].getStopOffset(), 1.0));
+        CPPUNIT_ASSERT_EQUAL(aColorStops[1].getStopColor(), basegfx::BColor(1.0, 1.0, 1.0));
+
+        CPPUNIT_ASSERT_EQUAL(awt::GradientStyle_RECT, aGradient.Style);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(100), aGradient.XOffset);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(0), aGradient.YOffset);
 
@@ -714,6 +794,23 @@ CPPUNIT_TEST_FIXTURE(OoxShapeTest, testWordArtBitmapFill)
     CPPUNIT_ASSERT(xGraphicDescriptor->getPropertyValue("Size100thMM") >>= aSize100thMM);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1592), aSize100thMM.Width);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(1592), aSize100thMM.Height);
+}
+
+CPPUNIT_TEST_FIXTURE(OoxShapeTest, testWordArtDefaultColor)
+{
+    // The document has a WordArt shape for which the text color is not explicitly set. In such cases
+    // MS Office uses the scheme color 'tx1'. Without fix it was imported as 'fill none'. The shape
+    // existed but was not visible on screen.
+    loadFromURL(u"tdf155327_WordArtDefaultColor.pptx");
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<drawing::XDrawPage> xDrawPage(xDrawPagesSupplier->getDrawPages()->getByIndex(0),
+                                                 uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xShapeProps(xDrawPage->getByIndex(0), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(uno::Any(drawing::FillStyle_SOLID),
+                         xShapeProps->getPropertyValue(u"FillStyle"));
+
+    CPPUNIT_ASSERT_EQUAL(uno::Any(Color(3, 74, 144)), xShapeProps->getPropertyValue(u"FillColor"));
 }
 CPPUNIT_PLUGIN_IMPLEMENT();
 

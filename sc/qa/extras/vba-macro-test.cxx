@@ -47,61 +47,9 @@ public:
         : UnoApiTest("/sc/qa/extras/testdocuments")
     {
     }
-
-    void testSimpleCopyAndPaste();
-    void testMultiDocumentCopyAndPaste();
-    void testSheetAndColumnSelectAndHide();
-    void testPrintArea();
-    void testSelectAllChaged();
-    void testRangeSelect();
-    void testWindowState();
-    void testScroll();
-    void testMacroKeyBinding();
-
-    void testVba();
-    void testTdf149579();
-    void testVbaRangeSort();
-    void testTdf107885();
-    void testTdf131562();
-    void testTdf52602();
-    void testTdf107902();
-    void testTdf90278();
-    void testTdf149531();
-    void testTdf118247();
-    void testTdf126457();
-    void testVbaPDFExport();
-    void testForEachInSelection();
-    void testNonAsciiMacroIRI();
-
-    CPPUNIT_TEST_SUITE(VBAMacroTest);
-    CPPUNIT_TEST(testSimpleCopyAndPaste);
-    CPPUNIT_TEST(testMultiDocumentCopyAndPaste);
-    CPPUNIT_TEST(testSheetAndColumnSelectAndHide);
-    CPPUNIT_TEST(testPrintArea);
-    CPPUNIT_TEST(testSelectAllChaged);
-    CPPUNIT_TEST(testRangeSelect);
-    CPPUNIT_TEST(testWindowState);
-    CPPUNIT_TEST(testScroll);
-    CPPUNIT_TEST(testMacroKeyBinding);
-
-    CPPUNIT_TEST(testVba);
-    CPPUNIT_TEST(testTdf149579);
-    CPPUNIT_TEST(testVbaRangeSort);
-    CPPUNIT_TEST(testTdf107885);
-    CPPUNIT_TEST(testTdf131562);
-    CPPUNIT_TEST(testTdf52602);
-    CPPUNIT_TEST(testTdf107902);
-    CPPUNIT_TEST(testTdf90278);
-    CPPUNIT_TEST(testTdf149531);
-    CPPUNIT_TEST(testTdf118247);
-    CPPUNIT_TEST(testTdf126457);
-    CPPUNIT_TEST(testVbaPDFExport);
-    CPPUNIT_TEST(testForEachInSelection);
-    CPPUNIT_TEST(testNonAsciiMacroIRI);
-    CPPUNIT_TEST_SUITE_END();
 };
 
-void VBAMacroTest::testSimpleCopyAndPaste()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testSimpleCopyAndPaste)
 {
     // Copy-paste values in the same sheet
 
@@ -138,7 +86,7 @@ void VBAMacroTest::testSimpleCopyAndPaste()
     CPPUNIT_ASSERT_EQUAL(30.0, rDoc.GetValue(ScAddress(1, 5, 0)));
 }
 
-void VBAMacroTest::testMultiDocumentCopyAndPaste()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testMultiDocumentCopyAndPaste)
 {
     // Creates a new workbook (document) and copy-pastes values
     // between the documents.
@@ -172,7 +120,7 @@ void VBAMacroTest::testMultiDocumentCopyAndPaste()
     CPPUNIT_ASSERT_EQUAL(0.0, rDoc.GetValue(ScAddress(1, 3, 0)));
 }
 
-void VBAMacroTest::testSheetAndColumnSelectAndHide()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testSheetAndColumnSelectAndHide)
 {
     loadFromURL(u"SheetAndColumnSelectAndHide.xlsm");
 
@@ -233,7 +181,7 @@ void VBAMacroTest::testSheetAndColumnSelectAndHide()
     CPPUNIT_ASSERT_EQUAL(SCTAB(0), rViewData.GetTabNo());
 }
 
-void VBAMacroTest::testPrintArea()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testPrintArea)
 {
     // Sets the print area to A1:B5
     // ActiveSheet.PageSetup.PrintArea = "$A$1:$B$5"
@@ -258,7 +206,7 @@ void VBAMacroTest::testPrintArea()
     }
 }
 
-void VBAMacroTest::testSelectAllChaged()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testSelectAllChaged)
 {
     // Columns("A:A").Select
     // Range(Selection, Selection.End(xlToRight)).Select
@@ -280,7 +228,7 @@ void VBAMacroTest::testSelectAllChaged()
     CPPUNIT_ASSERT_EQUAL(ScRange(0, 0, 0, 4, MAXROW, 0), pViewData.GetMarkData().GetMarkArea());
 }
 
-void VBAMacroTest::testRangeSelect()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testRangeSelect)
 {
     // Range("B2").Select
     // Range(Selection, Selection.End(xlToRight)).Select
@@ -302,7 +250,7 @@ void VBAMacroTest::testRangeSelect()
     CPPUNIT_ASSERT_EQUAL(ScRange(1, 1, 0, 4, 1, 0), pViewData.GetMarkData().GetMarkArea());
 }
 
-void VBAMacroTest::testWindowState()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testWindowState)
 {
     // Application.WindowState = xlMinimized
     // Application.WindowState = xlMaximized
@@ -313,7 +261,7 @@ void VBAMacroTest::testWindowState()
                  "location=document");
 }
 
-void VBAMacroTest::testScroll()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testScroll)
 {
     // ActiveWindow.ScrollColumn = 30
     // ActiveWindow.ScrollRow = 100
@@ -340,7 +288,7 @@ void VBAMacroTest::testScroll()
     CPPUNIT_ASSERT_EQUAL(SCROW(99), rViewData.GetPosY(ScVSplitPos::SC_SPLIT_BOTTOM));
 }
 
-void VBAMacroTest::testMacroKeyBinding()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testMacroKeyBinding)
 {
     // key_U() -> CTRL+U
     // key_T() -> CTRL+T
@@ -375,36 +323,36 @@ void VBAMacroTest::testMacroKeyBinding()
         xAccelerator->getCommandByKeyEvent(aCtrlT));
 }
 
-void VBAMacroTest::testVba()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testVba)
 {
     TestMacroInfo testInfo[] = {
-        { OUString("TestAddress."),
+        { OUString("TestAddress.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
         {
-            OUString("vba."),
+            OUString("vba.xls"),
             OUString(
                 "vnd.sun.Star.script:VBAProject.Modul1.Modul1?language=Basic&location=document"),
         },
-        { OUString("MiscRangeTests."),
+        { OUString("MiscRangeTests.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("bytearraystring."),
+        { OUString("bytearraystring.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacro.test?language=Basic&location=document") },
-        { OUString("AutoFilter."),
+        { OUString("AutoFilter.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("CalcFont."),
+        { OUString("CalcFont.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("TestIntersection."),
+        { OUString("TestIntersection.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("TestUnion."),
+        { OUString("TestUnion.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("range-4."),
+        { OUString("range-4.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
 // FIXME: sometimes it fails on Windows with
@@ -415,62 +363,62 @@ void VBAMacroTest::testVba()
 // Tests passed: 4
 // Tests failed: 4
 #if !defined(_WIN32)
-        { OUString("Ranges-3."),
+        { OUString("Ranges-3.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
 #endif
-        { OUString("TestCalc_Rangetest."),
+        { OUString("TestCalc_Rangetest.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("TestCalc_Rangetest2."),
+        { OUString("TestCalc_Rangetest2.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Ranges-2."),
+        { OUString("Ranges-2.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("pagesetup."),
+        { OUString("pagesetup.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Window."),
+        { OUString("Window.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("window2."),
+        { OUString("window2.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("PageBreaks."),
+        { OUString("PageBreaks.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Shapes."),
+        { OUString("Shapes.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Ranges."),
+        { OUString("Ranges.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("CheckOptionToggleValue."),
+        { OUString("CheckOptionToggleValue.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("GeneratedEventTest."),
+        { OUString("GeneratedEventTest.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("MiscControlTests."),
+        { OUString("MiscControlTests.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Workbooks."),
+        { OUString("Workbooks.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("Names."),
+        { OUString("Names.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("NamesSheetLocal."),
+        { OUString("NamesSheetLocal.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("vba_endFunction."),
+        { OUString("vba_endFunction.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("vba_findFunction."),
+        { OUString("vba_findFunction.xls"),
           OUString(
               "vnd.sun.Star.script:VBAProject.testMacros.test?language=Basic&location=document") },
-        { OUString("BGR-RGBTest."),
+        { OUString("BGR-RGBTest.xls"),
           OUString("vnd.sun.Star.script:VBAProject.Module1.test?language=Basic&location=document") }
     };
     OUString sTempDir;
@@ -482,14 +430,14 @@ void VBAMacroTest::testVba()
     uno::Sequence<uno::Any> aParams;
     for (const auto& rTestInfo : testInfo)
     {
-        OUString aFileName = loadFromURL(Concat2View(rTestInfo.sFileBaseName + "xls"));
+        OUString aFileName = loadFromURL(rTestInfo.sFileBaseName);
 
         // process all events such as OnLoad events etc.  otherwise they tend
         // to arrive later at a random time - while processing other StarBasic
         // methods.
         Scheduler::ProcessEventsToIdle();
 
-        bool bWorkbooksHandling = rTestInfo.sFileBaseName == "Workbooks." && !sTempDir.isEmpty();
+        bool bWorkbooksHandling = rTestInfo.sFileBaseName == "Workbooks.xls" && !sTempDir.isEmpty();
 
         if (bWorkbooksHandling)
         {
@@ -504,7 +452,7 @@ void VBAMacroTest::testVba()
         aRet >>= aStringRes;
 
         CPPUNIT_ASSERT_EQUAL_MESSAGE(
-            OUString("script reported failure in file " + rTestInfo.sFileBaseName + "xls")
+            OUString("script reported failure in file " + rTestInfo.sFileBaseName)
                 .toUtf8()
                 .getStr(),
             OUString("OK"), aStringRes);
@@ -520,7 +468,7 @@ void VBAMacroTest::testVba()
     }
 }
 
-void VBAMacroTest::testTdf149579()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf149579)
 {
     mxComponent = loadFromDesktop("private:factory/scalc");
 
@@ -553,7 +501,7 @@ void VBAMacroTest::testTdf149579()
     CPPUNIT_ASSERT_EQUAL(10.0, rDoc.GetValue(ScAddress(0, 2, 0)));
 }
 
-void VBAMacroTest::testVbaRangeSort()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testVbaRangeSort)
 {
     mxComponent = loadFromDesktop("private:factory/scalc");
 
@@ -601,7 +549,7 @@ void VBAMacroTest::testVbaRangeSort()
     CPPUNIT_ASSERT_EQUAL(0.5, rDoc.GetValue(ScAddress(0, 2, 0)));
 }
 
-void VBAMacroTest::testTdf107885()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf107885)
 {
     loadFromURL(u"tdf107885.xlsm");
 
@@ -636,7 +584,7 @@ void VBAMacroTest::testTdf107885()
     CPPUNIT_ASSERT(!rDoc.RowHidden(4, 0));
 }
 
-void VBAMacroTest::testTdf131562()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf131562)
 {
     loadFromURL(u"tdf131562.xlsm");
 
@@ -657,7 +605,7 @@ void VBAMacroTest::testTdf131562()
     CPPUNIT_ASSERT_EQUAL(OUString("1 .cat"), rDoc.GetString(ScAddress(0, 3, 0)));
 }
 
-void VBAMacroTest::testTdf52602()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf52602)
 {
     loadFromURL(u"tdf52602.xls");
 
@@ -684,7 +632,8 @@ void VBAMacroTest::testTdf52602()
     CPPUNIT_ASSERT_EQUAL(OUString("1/ Mar 2012"), rDoc.GetString(ScAddress(5, 0, 0)));
     CPPUNIT_ASSERT_EQUAL(OUString("1/ Mar 2012"), rDoc.GetString(ScAddress(5, 1, 0)));
 }
-void VBAMacroTest::testTdf107902()
+
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf107902)
 {
     loadFromURL(u"tdf107902.xlsm");
 
@@ -712,7 +661,7 @@ void VBAMacroTest::testTdf107902()
     CPPUNIT_ASSERT(rDoc.RowHidden(4, 0));
 }
 
-void VBAMacroTest::testTdf90278()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf90278)
 {
     loadFromURL(u"tdf90278.xls");
 
@@ -727,7 +676,7 @@ void VBAMacroTest::testTdf90278()
     CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aReturnValue);
 }
 
-void VBAMacroTest::testTdf149531()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf149531)
 {
     loadFromURL(u"tdf149531.xls");
 
@@ -750,7 +699,7 @@ void VBAMacroTest::testTdf149531()
     CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(25749), nWidth);
 }
 
-void VBAMacroTest::testTdf118247()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf118247)
 {
     loadFromURL(u"tdf118247.xlsm");
 
@@ -780,7 +729,7 @@ void VBAMacroTest::testTdf118247()
     }
 }
 
-void VBAMacroTest::testTdf126457()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testTdf126457)
 {
     auto xComponent = loadFromDesktop("private:factory/scalc");
 
@@ -842,7 +791,7 @@ void VBAMacroTest::testTdf126457()
     pDocSh->DoClose();
 }
 
-void VBAMacroTest::testVbaPDFExport()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testVbaPDFExport)
 {
     mxComponent = loadFromDesktop("private:factory/scalc");
 
@@ -879,7 +828,7 @@ void VBAMacroTest::testVbaPDFExport()
     CPPUNIT_ASSERT_MESSAGE("Failed to get the pdf document", aDocument.Read(aStream));
 }
 
-void VBAMacroTest::testForEachInSelection()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testForEachInSelection)
 {
     loadFromURL(u"ForEachInSelection.ods");
     SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(mxComponent);
@@ -906,7 +855,7 @@ void VBAMacroTest::testForEachInSelection()
     CPPUNIT_ASSERT_EQUAL(OUString("zab"), rDoc.GetString(ScAddress(0, 2, 0)));
 }
 
-void VBAMacroTest::testNonAsciiMacroIRI()
+CPPUNIT_TEST_FIXTURE(VBAMacroTest, testNonAsciiMacroIRI)
 {
     loadFromURL(u"ForEachInSelection.ods");
     SfxObjectShell* pFoundShell = SfxObjectShell::GetShellFromComponent(mxComponent);
@@ -932,8 +881,6 @@ void VBAMacroTest::testNonAsciiMacroIRI()
     CPPUNIT_ASSERT_EQUAL(OUString("rab"), rDoc.GetString(ScAddress(0, 1, 0)));
     CPPUNIT_ASSERT_EQUAL(OUString("zab"), rDoc.GetString(ScAddress(0, 2, 0)));
 }
-
-CPPUNIT_TEST_SUITE_REGISTRATION(VBAMacroTest);
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

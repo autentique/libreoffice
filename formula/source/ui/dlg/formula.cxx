@@ -141,9 +141,9 @@ public:
     const OUString          m_aTitle2;
     FormulaHelper           m_aFormulaHelper;
 
-    OString                 m_aEditHelpId;
+    OUString                m_aEditHelpId;
 
-    OString                 m_aOldHelp;
+    OUString                 m_aOldHelp;
     bool                    m_bMakingTree;  // in method of constructing tree
 
     bool                    m_bEditFlag;
@@ -828,7 +828,8 @@ void FormulaDlg_Impl::FillListboxes()
     }
     else if ( pData )
     {
-        m_xFuncPage->SetCategory( 1 );
+        // tdf#104487 - remember last used function category
+        m_xFuncPage->SetCategory(FuncPage::GetRememeberdFunctionCategory());
         m_xFuncPage->SetFunction( -1 );
     }
     FuncSelHdl(*m_xFuncPage);
@@ -869,7 +870,7 @@ void FormulaDlg_Impl::FillControls( bool &rbNext, bool &rbPrev)
             m_xFtEditName->set_label( m_pFuncDesc->getFunctionName() );
             m_xFtEditName->show();
             m_xParaWinBox->show();
-            const OString aHelpId = m_pFuncDesc->getHelpId();
+            const OUString aHelpId = m_pFuncDesc->getHelpId();
             if ( !aHelpId.isEmpty() )
                 m_xMEdit->set_help_id(aHelpId);
         }
@@ -1456,14 +1457,22 @@ IMPL_LINK_NOARG( FormulaDlg_Impl, FormulaCursorHdl, weld::TextView&, void)
 void FormulaDlg_Impl::UpdateSelection()
 {
     m_pHelper->setSelection( m_aFuncSel.Min(), m_aFuncSel.Max());
-    m_pHelper->setCurrentFormula( m_pFuncDesc->getFormula( m_aArguments ) );
+    if (m_pFuncDesc)
+    {
+        m_pHelper->setCurrentFormula( m_pFuncDesc->getFormula( m_aArguments ) );
+        m_nArgs = m_pFuncDesc->getSuppressedArgumentCount();
+    }
+    else
+    {
+        m_pHelper->setCurrentFormula("");
+        m_nArgs = 0;
+    }
+
     m_xMEdit->set_text(m_pHelper->getCurrentFormula());
     sal_Int32 PrivStart, PrivEnd;
     m_pHelper->getSelection( PrivStart, PrivEnd);
     m_aFuncSel.Min() = PrivStart;
     m_aFuncSel.Max() = PrivEnd;
-
-    m_nArgs = m_pFuncDesc->getSuppressedArgumentCount();
 
     OUString aFormula = m_xMEdit->get_text();
     sal_Int32 nArgPos = m_aFormulaHelper.GetArgStart( aFormula, PrivStart, 0);

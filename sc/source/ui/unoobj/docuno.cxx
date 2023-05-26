@@ -1010,7 +1010,7 @@ static void lcl_sendLOKDocumentBackground(const ScViewData* pViewData)
     const Color& rColor = rBackground.GetColor();
 
     ScTabViewShell* pViewShell = pViewData->GetViewShell();
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_DOCUMENT_BACKGROUND_COLOR, rColor.AsRGBHexString().toUtf8().getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_DOCUMENT_BACKGROUND_COLOR, rColor.AsRGBHexString().toUtf8());
 }
 
 void ScModelObj::setClientZoom(int nTilePixelWidth_, int nTilePixelHeight_, int nTileTwipWidth_, int nTileTwipHeight_)
@@ -3737,7 +3737,7 @@ void SAL_CALL ScTableSheetsObj::insertNewByName( const OUString& aName, sal_Int1
         bDone = pDocShell->GetDocFunc().InsertTable( nPosition, aName, true, true );
     }
     if (!bDone)
-        throw uno::RuntimeException();      // no other exceptions specified
+        throw uno::RuntimeException("ScTableSheetsObj::insertNewByName(): Illegal object name or bad index. Duplicate name?");      // no other exceptions specified
 }
 
 void SAL_CALL ScTableSheetsObj::moveByName( const OUString& aName, sal_Int16 nDestination )
@@ -3779,7 +3779,7 @@ void SAL_CALL ScTableSheetsObj::copyByName( const OUString& aName,
         }
     }
     if (!bDone)
-        throw uno::RuntimeException();      // no other exceptions specified
+        throw uno::RuntimeException("ScTableSheetsObj::copyByName(): Illegal object name or bad index. Duplicate name?");      // no other exceptions specified
 }
 
 void SAL_CALL ScTableSheetsObj::insertByName( const OUString& aName, const uno::Any& aElement )

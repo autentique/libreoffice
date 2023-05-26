@@ -243,7 +243,6 @@ basegfx/source/color/bcolormodifier.cxx
 basegfx/source/color/bcolortools.cxx
 basegfx/source/curve/b2dbeziertools.cxx
 basegfx/source/curve/b2dcubicbezier.cxx
-basegfx/source/inc/hommatrixtemplate.hxx
 basegfx/source/inc/stringconversiontools.hxx
 basegfx/source/matrix/b2dhommatrix.cxx
 basegfx/source/matrix/b2dhommatrixtools.cxx
@@ -1007,6 +1006,7 @@ chart2/source/inc/ConfigColorScheme.hxx
 chart2/source/inc/DataInterpreter.hxx
 chart2/source/inc/DataSeries.hxx
 chart2/source/inc/DataSeriesHelper.hxx
+chart2/source/inc/DataSeriesProperties.hxx
 chart2/source/inc/DataSource.hxx
 chart2/source/inc/DataSourceHelper.hxx
 chart2/source/inc/Diagram.hxx
@@ -1018,6 +1018,7 @@ chart2/source/inc/ExponentialRegressionCurveCalculator.hxx
 chart2/source/inc/FillProperties.hxx
 chart2/source/inc/FormattedString.hxx
 chart2/source/inc/FormattedStringHelper.hxx
+chart2/source/inc/GridProperties.hxx
 chart2/source/inc/InternalData.hxx
 chart2/source/inc/InternalDataProvider.hxx
 chart2/source/inc/LabeledDataSequence.hxx
@@ -1079,11 +1080,9 @@ chart2/source/model/main/DataPointProperties.cxx
 chart2/source/model/main/DataPointProperties.hxx
 chart2/source/model/main/DataSeries.cxx
 chart2/source/model/main/DataSeriesProperties.cxx
-chart2/source/model/main/DataSeriesProperties.hxx
 chart2/source/model/main/Diagram.cxx
 chart2/source/model/main/FormattedString.cxx
 chart2/source/model/main/GridProperties.cxx
-chart2/source/model/main/GridProperties.hxx
 chart2/source/model/main/Legend.cxx
 chart2/source/model/main/PageBackground.cxx
 chart2/source/model/main/PageBackground.hxx
@@ -1390,7 +1389,6 @@ comphelper/source/misc/officerestartmanager.cxx
 comphelper/source/misc/officerestartmanager.hxx
 comphelper/source/misc/proxyaggregation.cxx
 comphelper/source/misc/sequenceashashmap.cxx
-comphelper/source/misc/servicedecl.cxx
 comphelper/source/misc/sharedmutex.cxx
 comphelper/source/misc/solarmutex.cxx
 comphelper/source/misc/stillreadwriteinteraction.cxx
@@ -3717,7 +3715,6 @@ extensions/source/propctrlr/eventhandler.cxx
 extensions/source/propctrlr/eventhandler.hxx
 extensions/source/propctrlr/fontdialog.cxx
 extensions/source/propctrlr/fontdialog.hxx
-extensions/source/propctrlr/fontitemids.hxx
 extensions/source/propctrlr/formbrowsertools.cxx
 extensions/source/propctrlr/formbrowsertools.hxx
 extensions/source/propctrlr/formcomponenthandler.cxx
@@ -4755,6 +4752,7 @@ include/basegfx/curve/b2dcubicbezier.hxx
 include/basegfx/matrix/b2dhommatrix.hxx
 include/basegfx/matrix/b2dhommatrixtools.hxx
 include/basegfx/matrix/b3dhommatrix.hxx
+include/basegfx/matrix/hommatrixtemplate.hxx
 include/basegfx/numeric/ftools.hxx
 include/basegfx/pixel/bpixel.hxx
 include/basegfx/point/b2dpoint.hxx
@@ -4910,7 +4908,6 @@ include/comphelper/seekableinput.hxx
 include/comphelper/seqstream.hxx
 include/comphelper/sequence.hxx
 include/comphelper/sequenceashashmap.hxx
-include/comphelper/servicedecl.hxx
 include/comphelper/servicehelper.hxx
 include/comphelper/sharedmutex.hxx
 include/comphelper/simplefileaccessinteraction.hxx
@@ -5297,7 +5294,6 @@ include/linguistic/lngprophelp.hxx
 include/linguistic/misc.hxx
 include/linguistic/spelldta.hxx
 include/o3tl/any.hxx
-include/o3tl/char16_t2wchar_t.hxx
 include/o3tl/cow_wrapper.hxx
 include/o3tl/enumarray.hxx
 include/o3tl/enumrange.hxx
@@ -5844,7 +5840,6 @@ include/svx/imapdlg.hxx
 include/svx/itextprovider.hxx
 include/svx/langbox.hxx
 include/svx/lathe3d.hxx
-include/svx/legacyitem.hxx
 include/svx/linectrl.hxx
 include/svx/msdffdef.hxx
 include/svx/nbdtmg.hxx
@@ -6046,7 +6041,6 @@ include/svx/xftouit.hxx
 include/svx/xftshit.hxx
 include/svx/xftshxy.hxx
 include/svx/xftstit.hxx
-include/svx/xgrad.hxx
 include/svx/xgrscit.hxx
 include/svx/xhatch.hxx
 include/svx/xit.hxx
@@ -6110,7 +6104,6 @@ include/toolkit/helper/accessiblefactory.hxx
 include/toolkit/helper/convert.hxx
 include/toolkit/helper/listenermultiplexer.hxx
 include/toolkit/helper/macros.hxx
-include/toolkit/helper/property.hxx
 include/toolkit/helper/vclunohelper.hxx
 include/tools/b3dtrans.hxx
 include/tools/bigint.hxx
@@ -11234,6 +11227,7 @@ svx/inc/extrud3d.hxx
 svx/inc/galbrws2.hxx
 svx/inc/galobj.hxx
 svx/inc/helpids.h
+svx/inc/legacyitem.hxx
 svx/inc/palettes.hxx
 svx/inc/sdgcoitm.hxx
 svx/inc/sdginitm.hxx
@@ -13565,6 +13559,7 @@ toolkit/inc/controls/unocontrolcontainermodel.hxx
 toolkit/inc/helper/accessibilityclient.hxx
 toolkit/inc/helper/btndlg.hxx
 toolkit/inc/helper/imagealign.hxx
+toolkit/inc/helper/property.hxx
 toolkit/inc/helper/scrollabledialog.hxx
 toolkit/inc/helper/unopropertyarrayhelper.hxx
 toolkit/inc/helper/unowrapper.hxx
@@ -14981,7 +14976,7 @@ vcl/unx/generic/printer/ppdparser.cxx
 vcl/unx/generic/printer/printerinfomanager.cxx
 vcl/unx/generic/window/salframe.cxx
 vcl/unx/generic/window/salobj.cxx
-vcl/unx/generic/window/screensaverinhibitor.cxx
+vcl/unx/generic/window/sessioninhibitor.cxx
 vcl/unx/gtk3/a11y/atklistener.hxx
 vcl/unx/gtk3/a11y/atkwrapper.hxx
 vcl/unx/gtk3/a11y/atkaction.cxx

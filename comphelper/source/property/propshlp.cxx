@@ -109,13 +109,6 @@ OPropertySetHelper::OPropertySetHelper(bool bIgnoreRuntimeExceptionsWhileFiring)
 {
 }
 
-OPropertySetHelper::OPropertySetHelper(cppu::IEventNotificationHook* i_pFireEvents,
-                                       bool bIgnoreRuntimeExceptionsWhileFiring)
-    : m_pFireEvents(i_pFireEvents)
-    , m_bIgnoreRuntimeExceptionsWhileFiring(bIgnoreRuntimeExceptionsWhileFiring)
-{
-}
-
 /**
  * You must call disposing before.
  */
@@ -162,19 +155,12 @@ OPropertySetHelper::createPropertySetInfo(IPropertyArrayHelper& rProperties)
 // XPropertySet
 void OPropertySetHelper::setPropertyValue(const OUString& rPropertyName, const Any& rValue)
 {
-    std::unique_lock aGuard(m_aMutex);
-    setPropertyValueImpl(aGuard, rPropertyName, rValue);
-}
-
-void OPropertySetHelper::setPropertyValueImpl(std::unique_lock<std::mutex>& rGuard,
-                                              const OUString& rPropertyName, const Any& rValue)
-{
     // get the map table
     IPropertyArrayHelper& rPH = getInfoHelper();
     // map the name to the handle
     sal_Int32 nHandle = rPH.getHandleByName(rPropertyName);
-    // call the method of the XFastPropertySet interface
-    setFastPropertyValueImpl(rGuard, nHandle, rValue);
+    std::unique_lock aGuard(m_aMutex);
+    setFastPropertyValueImpl(aGuard, nHandle, rValue);
 }
 
 // XPropertySet
@@ -532,12 +518,6 @@ void OPropertySetHelper::fire(std::unique_lock<std::mutex>& rGuard, sal_Int32* p
     if (!m_bFireEvents)
         return;
 
-    if (m_pFireEvents)
-    {
-        m_pFireEvents->fireEvents(pnHandles, nHandles, bVetoable,
-                                  m_bIgnoreRuntimeExceptionsWhileFiring);
-    }
-
     // Only fire, if one or more properties changed
     if (!nHandles)
         return;
@@ -602,10 +582,10 @@ void OPropertySetHelper::fire(std::unique_lock<std::mutex>& rGuard, sal_Int32* p
 
     // Here is a Bug, unbound properties are also fired
     OInterfaceIteratorHelper4 aIt(rGuard, maPropertiesChangeListeners);
+    rGuard.unlock();
     while (aIt.hasMoreElements())
     {
         XPropertiesChangeListener* pL = aIt.next().get();
-        rGuard.unlock();
         try
         {
             try
@@ -633,8 +613,8 @@ void OPropertySetHelper::fire(std::unique_lock<std::mutex>& rGuard, sal_Int32* p
             if (!bIgnoreRuntimeExceptionsWhileFiring)
                 throw;
         }
-        rGuard.lock();
     }
+    rGuard.lock();
 }
 
 void OPropertySetHelper::fireVetoableChangeListeners(
@@ -646,10 +626,10 @@ void OPropertySetHelper::fireVetoableChangeListeners(
         return;
     // Iterate over all listeners and send events
     OInterfaceIteratorHelper4 aIt(rGuard, *pListeners);
+    rGuard.unlock();
     while (aIt.hasMoreElements())
     {
         XVetoableChangeListener* pL = aIt.next().get();
-        rGuard.unlock();
         try
         {
             try
@@ -675,8 +655,8 @@ void OPropertySetHelper::fireVetoableChangeListeners(
             if (!m_bIgnoreRuntimeExceptionsWhileFiring)
                 throw;
         }
-        rGuard.lock();
     }
+    rGuard.lock();
 }
 
 void OPropertySetHelper::firePropertyChangeListeners(
@@ -688,10 +668,10 @@ void OPropertySetHelper::firePropertyChangeListeners(
         return;
     // Iterate over all listeners and send events
     OInterfaceIteratorHelper4 aIt(rGuard, *pListeners);
+    rGuard.unlock();
     while (aIt.hasMoreElements())
     {
         XPropertyChangeListener* pL = aIt.next().get();
-        rGuard.unlock();
         try
         {
             try
@@ -717,8 +697,8 @@ void OPropertySetHelper::firePropertyChangeListeners(
             if (!m_bIgnoreRuntimeExceptionsWhileFiring)
                 throw;
         }
-        rGuard.lock();
     }
+    rGuard.lock();
 }
 
 // OPropertySetHelper

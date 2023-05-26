@@ -310,8 +310,7 @@ void SwHTMLWrtTable::OutTableCell( SwHTMLWriter& rWrt,
     }
 
     rWrt.OutNewLine();  // <TH>/<TD> in new line
-    OStringBuffer sOut;
-    sOut.append('<');
+    OStringBuffer sOut("<");
     OString aTag(bHead ? OOO_STRING_SVTOOLS_HTML_tableheader : OOO_STRING_SVTOOLS_HTML_tabledata);
     sOut.append(rWrt.GetNamespace() + aTag);
 
@@ -1025,7 +1024,8 @@ SwHTMLWriter& OutHTML_SwTableNode( SwHTMLWriter& rWrt, SwTableNode & rNode,
         break;
     }
 
-    if( bCheckDefList )
+    // In ReqIF case, do not emulate indentation with fake description list
+    if( bCheckDefList && !rWrt.mbReqIF )
     {
         OSL_ENSURE( !rWrt.GetNumInfo().GetNumRule() ||
                 rWrt.GetNextNumInfo(),
@@ -1034,9 +1034,8 @@ SwHTMLWriter& OutHTML_SwTableNode( SwHTMLWriter& rWrt, SwTableNode & rNode,
         if( aLRItem.GetLeft() > 0 && rWrt.m_nDefListMargin > 0 &&
             ( !rWrt.GetNumInfo().GetNumRule() ||
               ( rWrt.GetNextNumInfo() &&
-                (rWrt.GetNextNumInfo()->IsRestart() ||
-                 rWrt.GetNumInfo().GetNumRule() !=
-                    rWrt.GetNextNumInfo()->GetNumRule()) ) ) )
+                (rWrt.GetNumInfo().GetNumRule() != rWrt.GetNextNumInfo()->GetNumRule() ||
+                 rWrt.GetNextNumInfo()->IsRestart(rWrt.GetNumInfo())) ) ) )
         {
             // If the paragraph before the table is not numbered or the
             // paragraph after the table starts with a new numbering or with
@@ -1048,16 +1047,8 @@ SwHTMLWriter& OutHTML_SwTableNode( SwHTMLWriter& rWrt, SwTableNode & rNode,
         }
     }
 
-    if( !pFlyFrameFormat && nNewDefListLvl != rWrt.m_nDefListLvl )
+    if( !pFlyFrameFormat && !rWrt.mbReqIF && nNewDefListLvl != rWrt.m_nDefListLvl )
         rWrt.OutAndSetDefList( nNewDefListLvl );
-
-    if( nNewDefListLvl )
-    {
-        if( rWrt.m_bLFPossible )
-            rWrt.OutNewLine();
-        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), Concat2View(rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_dd) );
-        rWrt.IncIndentLevel();
-    }
 
     // eFlyHoriOri and eTabHoriOri now only contain the values of
     // LEFT/CENTER and RIGHT!
@@ -1183,15 +1174,6 @@ SwHTMLWriter& OutHTML_SwTableNode( SwHTMLWriter& rWrt, SwTableNode & rNode,
     // move Pam behind the table
     rWrt.m_pCurrentPam->GetPoint()->Assign( *rNode.EndOfSectionNode() );
 
-    if (nNewDefListLvl)
-    {
-        rWrt.DecIndentLevel();
-        if (rWrt.m_bLFPossible)
-            rWrt.OutNewLine();
-        // close the dd element
-        HTMLOutFuncs::Out_AsciiTag(rWrt.Strm(), Concat2View(rWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_dd), false);
-    }
-
     if( bPreserveForm )
     {
         rWrt.m_bPreserveForm = false;
@@ -1201,9 +1183,8 @@ SwHTMLWriter& OutHTML_SwTableNode( SwHTMLWriter& rWrt, SwTableNode & rNode,
     rWrt.m_bOutTable = false;
 
     if( rWrt.GetNextNumInfo() &&
-        !rWrt.GetNextNumInfo()->IsRestart() &&
-        rWrt.GetNextNumInfo()->GetNumRule() ==
-            rWrt.GetNumInfo().GetNumRule() )
+        rWrt.GetNextNumInfo()->GetNumRule() == rWrt.GetNumInfo().GetNumRule() &&
+        !rWrt.GetNextNumInfo()->IsRestart(rWrt.GetNumInfo()) )
     {
         // If the paragraph after the table is numbered with the same rule as the
         // one before, then the NumInfo of the next paragraph holds the level of

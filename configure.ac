@@ -9,7 +9,7 @@ dnl in order to create a configure script.
 # several non-alphanumeric characters, those are split off and used only for the
 # ABOUTBOXPRODUCTVERSIONSUFFIX in openoffice.lst. Why that is necessary, no idea.
 
-AC_INIT([LibreOffice],[7.6.0.0.alpha0+],[],[],[http://documentfoundation.org/])
+AC_INIT([LibreOffice],[7.6.0.0.alpha1+],[],[],[http://documentfoundation.org/])
 
 dnl libnumbertext needs autoconf 2.68, but that can pick up autoconf268 just fine if it is installed
 dnl whereas aclocal (as run by autogen.sh) insists on using autoconf and fails hard
@@ -1893,6 +1893,11 @@ AC_ARG_ENABLE(silent-msi,
         [Enable MSI with LIMITUI=1 (silent install).]),
 ,)
 
+AC_ARG_ENABLE(wix,
+    AS_HELP_STRING([--enable-wix],
+        [Build Windows installer using WiX.]),
+,)
+
 AC_ARG_ENABLE(macosx-code-signing,
     AS_HELP_STRING([--enable-macosx-code-signing=<identity>],
         [Sign executables, dylibs, frameworks and the app bundle. If you
@@ -2822,6 +2827,13 @@ AC_ARG_WITH(onedrive-client-secret,
         authentication on OneDrive. If either this or
         --with-onedrive-client-id is empty, the feature will be disabled]),
 )
+
+dnl Check for coredumpctl support to present information about crashing test processes:
+AC_ARG_WITH(coredumpctl,
+    AS_HELP_STRING([--with-coredumpctl],
+        [Use coredumpctl (together with systemd-run) to retrieve core dumps of crashing test
+        processes.]))
+
 dnl ===================================================================
 dnl Do we want to use pre-build binary tarball for recompile
 dnl ===================================================================
@@ -3974,7 +3986,7 @@ map_vs_year_to_version()
     2022)
         vsversion=17;;
     2022preview)
-        vsversion=17.5;;
+        vsversion=17.6;;
     *)
         AC_MSG_ERROR([Assertion failure - invalid argument "$1" to map_vs_year_to_version()]);;
     esac
@@ -4094,7 +4106,7 @@ find_msvc()
             vcyear=2019
             vctoolset=v142
             ;;
-        17.0 | 17.5)
+        17.0 | 17.6)
             vcyear=2022
             vctoolset=v143
             ;;
@@ -4266,7 +4278,7 @@ if test "$_os" = "WINNT"; then
         # are always "better", we list them in reverse chronological order.
 
         case "$vcnumwithdot" in
-        16.0 | 17.0 | 17.5)
+        16.0 | 17.0 | 17.6)
             WINDOWS_SDK_ACCEPTABLE_VERSIONS="10.0 8.1A 8.1 8.0"
             ;;
         esac
@@ -6516,7 +6528,7 @@ find_al()
     done
 }
 
-find_dotnetsdk46()
+find_dotnetsdk()
 {
     unset frametest
 
@@ -6527,6 +6539,7 @@ find_dotnetsdk46()
             return
         fi
     done
+    AC_MSG_ERROR([The Windows NET SDK (minimum 4.6) not found, check the installation])
 }
 
 find_winsdk_version()
@@ -6607,7 +6620,7 @@ find_msms()
 
     msmdir=
     case "$VCVER" in
-    16.0 | 17.0 | 17.5)
+    16.0 | 17.0 | 17.6)
         for l in `ls -1 $VC_PRODUCT_DIR/redist/MSVC/`; do
             my_msm_dir="$VC_PRODUCT_DIR/redist/MSVC/$l/MergeModules/"
             echo "$as_me:$LINENO: looking for $my_msm_dir${my_msm_file}])" >&5
@@ -6643,7 +6656,7 @@ find_msvc_x64_dlls()
 
     msvcdllpath="$VC_PRODUCT_DIR/redist/x64/Microsoft.VC${VCVER}.CRT"
     case "$VCVER" in
-    16.0 | 17.0 | 17.5)
+    16.0 | 17.0 | 17.6)
         for crtver in 141 142 143; do
             for l in `ls -1 $VC_PRODUCT_DIR/redist/MSVC/`; do
                 echo "$as_me:$LINENO: testing $VC_PRODUCT_DIR/redist/MSVC/$l/x64/Microsoft.VC$crtver.CRT" >&5
@@ -6880,7 +6893,7 @@ if test "$build_os" = "cygwin" -o "$build_os" = "wsl"; then
 
     dnl Check mscoree.lib / .NET Framework dir
     AC_MSG_CHECKING(.NET Framework)
-    find_dotnetsdk46
+    find_dotnetsdk
     PathFormat "$frametest"
     frametest="$formatted_path_unix"
     if test -f "$frametest/Lib/um/$WIN_BUILD_ARCH/mscoree.lib"; then
@@ -7521,7 +7534,7 @@ if test -z "${CXXFLAGS_CXX11+x}"; then
     elif test "$GCC" = "yes" -o "$COM_IS_CLANG" = TRUE; then
         my_flags='-std=c++17 -std=c++1z'
         if test "$with_latest_c__" = yes; then
-            my_flags="-std=c++23 -std=c++2b -std=c++20 -std=c++2a $my_flags"
+            my_flags="-std=c++26 -std=c++2c -std=c++23 -std=c++2b -std=c++20 -std=c++2a $my_flags"
         fi
         for flag in $my_flags; do
             if test "$COM" = MSC; then
@@ -13419,6 +13432,21 @@ else
 fi
 AC_SUBST(ENABLE_SILENT_MSI)
 
+dnl ===================================================================
+dnl Check for WiX tools.
+dnl ===================================================================
+if test "$enable_wix" = "" -o "enable_wix" = "no"; then
+    AC_MSG_RESULT([no])
+    ENABLE_WIX=
+else
+    AC_MSG_RESULT([yes])
+    if ! which candle  >/dev/null 2>&1; then
+      AC_MSG_ERROR([WiX requested but WiX toolset not found.])
+    fi
+    ENABLE_WIX=TRUE
+fi
+AC_SUBST(ENABLE_SILENT_MSI)
+
 AC_MSG_CHECKING([whether and how to use Xinerama])
 if test "$_os" = "Linux" -o "$_os" = "FreeBSD"; then
     if test "$x_libraries" = "default_x_libraries"; then
@@ -14561,6 +14589,53 @@ if test $_os = WINNT -a -f "$SRC_ROOT/antivirusDetection.vbs" ; then
 fi
 
 dnl ===================================================================
+
+AC_MSG_CHECKING([for coredumpctl support])
+if test -z "$with_coredumpctl" && test $_os != Linux; then
+    with_coredumpctl=no
+fi
+if test "$with_coredumpctl" = no; then
+    WITH_COREDUMPCTL=
+else
+    AC_PATH_PROG(COREDUMPCTL, coredumpctl)
+    AC_PATH_PROG(JQ, jq)
+    AC_PATH_PROG(SYSTEMD_ESCAPE, systemd-escape)
+    AC_PATH_PROG(SYSTEMD_RUN, systemd-run)
+    if test -z "$COREDUMPCTL" || test -z "$JQ" || test -z "$SYSTEMD_ESCAPE" \
+        || test -z "$SYSTEMD_RUN"
+    then
+        if test -z "$with_coredumpctl"; then
+            WITH_COREDUMPCTL=
+        else
+            if test -z "$COREDUMPCTL"; then
+                AC_MSG_ERROR([coredumpctl not found])
+            fi
+            if test -z "$JQ"; then
+                AC_MSG_ERROR([jq not found])
+            fi
+            if test -z "$SYSTEMD_ESCAPE"; then
+                AC_MSG_ERROR([systemd-escape not found])
+            fi
+            if test -z "$SYSTEMD_RUN"; then
+                AC_MSG_ERROR([systemd-run not found])
+            fi
+        fi
+    else
+        WITH_COREDUMPCTL=TRUE
+    fi
+fi
+if test -z "$WITH_COREDUMPCTL"; then
+    AC_MSG_RESULT([no])
+else
+    AC_MSG_RESULT([yes])
+fi
+AC_SUBST(COREDUMPCTL)
+AC_SUBST(JQ)
+AC_SUBST(SYSTEMD_ESCAPE)
+AC_SUBST(SYSTEMD_RUN)
+AC_SUBST(WITH_COREDUMPCTL)
+
+dnl ===================================================================
 dnl Setting up the environment.
 dnl ===================================================================
 AC_MSG_NOTICE([setting up the build environment variables...])
@@ -14621,10 +14696,13 @@ if test -n "$TMPDIR"; then
 else
     TEMP_DIRECTORY="/tmp"
 fi
+CYGWIN_BASH="C:/cygwin64/bin/bash.exe"
 if test "$build_os" = "cygwin"; then
     TEMP_DIRECTORY=`cygpath -m "$TEMP_DIRECTORY"`
+    CYGWIN_BASH=`cygpath -m /usr/bin/bash`
 fi
 AC_SUBST(TEMP_DIRECTORY)
+AC_SUBST(CYGWIN_BASH)
 
 # setup the PATH for the environment
 if test -n "$LO_PATH_FOR_BUILD"; then
@@ -14653,6 +14731,11 @@ else
         if test "$WIN_BUILD_ARCH" = "x64"; then
             # needed for msi packaging
             pathmunge "$WINDOWS_SDK_BINDIR_NO_ARCH/x86" "before"
+        fi
+        if test "$WIN_BUILD_ARCH" = "arm64"; then
+            # needed for msi packaging - as of 10.0.22621 SDK no arm64 ones yet
+            # the x86 ones probably would work just as well...
+            pathmunge "$WINDOWS_SDK_BINDIR_NO_ARCH/arm" "before"
         fi
         # .NET 4.6 and higher don't have bin directory
         if test -f "$DOTNET_FRAMEWORK_HOME/bin"; then

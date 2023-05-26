@@ -40,11 +40,11 @@
 #include <com/sun/star/container/XChild.hpp>
 #include <comphelper/types.hxx>
 #include <o3tl/safeint.hxx>
-#include <o3tl/sorted_vector.hxx>
 #include <rtl/ustring.hxx>
 #include <tools/debug.hxx>
 #include <svx/SvxShapeTypes.hxx>
 #include <vcl/window.hxx>
+#include <shapecollection.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -447,7 +447,7 @@ void ChildrenManagerImpl::CreateAccessibilityObjects (
             mrContext.CommitChange (
                 AccessibleEventId::CHILD,
                 uno::Any(uno::Reference<XAccessible>(rChild.mxAccessibleShape)),
-                uno::Any());
+                uno::Any(), -1);
         }
         ++nPos;
     }
@@ -499,7 +499,8 @@ void ChildrenManagerImpl::AddShape (const Reference<drawing::XShape>& rxShape)
     mrContext.CommitChange (
         AccessibleEventId::CHILD,
         aNewShape,
-        uno::Any());
+        uno::Any(),
+        maVisibleChildren.size() - 1);
     RegisterAsDisposeListener(rxShape);
 }
 
@@ -559,7 +560,7 @@ void ChildrenManagerImpl::ClearAccessibleShapeList()
     mrContext.CommitChange (
         AccessibleEventId::INVALIDATE_ALL_CHILDREN,
         uno::Any(),
-        uno::Any());
+        uno::Any(), -1);
 
     // Now the objects in the local lists can be safely disposed without
     // having problems with callers that want to update their child lists.
@@ -770,7 +771,7 @@ bool ChildrenManagerImpl::ReplaceChild (
         mrContext.CommitChange (
             AccessibleEventId::CHILD,
             uno::Any(),
-            uno::Any (uno::Reference<XAccessible>(I->mxAccessibleShape)));
+            uno::Any (uno::Reference<XAccessible>(I->mxAccessibleShape)), -1);
 
         // Replace with replacement and send an event about existence
         // of the new child.
@@ -787,7 +788,7 @@ bool ChildrenManagerImpl::ReplaceChild (
         mrContext.CommitChange (
             AccessibleEventId::CHILD,
             uno::Any (uno::Reference<XAccessible>(I->mxAccessibleShape)),
-            uno::Any());
+            uno::Any(), -1);
 
         return true;
     }
@@ -860,16 +861,22 @@ void ChildrenManagerImpl::UpdateSelection()
         }
 
         // tdf#139220 to quickly find if a given drawing::XShape is selected
-        o3tl::sorted_vector<css::uno::Reference<css::drawing::XShape>> aSortedSelectedShapes;
+        std::vector<css::uno::Reference<css::drawing::XShape>> aSortedSelectedShapes;
         if (!xSelectedShape.is() && xSelectedShapeAccess.is())
         {
             sal_Int32 nCount = xSelectedShapeAccess->getCount();
             aSortedSelectedShapes.reserve(nCount);
-            for (sal_Int32 i = 0; i < nCount; ++i)
+            if (auto pSvxShape = dynamic_cast<SvxShapeCollection*>(xSelectedShapeAccess.get()))
             {
-                css::uno::Reference<css::drawing::XShape> xShape(xSelectedShapeAccess->getByIndex(i), uno::UNO_QUERY);
-                aSortedSelectedShapes.insert(xShape);
+                pSvxShape->getAllShapes(aSortedSelectedShapes);
             }
+            else
+                for (sal_Int32 i = 0; i < nCount; ++i)
+                {
+                    css::uno::Reference<css::drawing::XShape> xShape(xSelectedShapeAccess->getByIndex(i), uno::UNO_QUERY);
+                    aSortedSelectedShapes.push_back(xShape);
+                }
+            std::sort(aSortedSelectedShapes.begin(), aSortedSelectedShapes.end());
         }
 
         for (const auto& rChild : maVisibleChildren)
@@ -898,7 +905,7 @@ void ChildrenManagerImpl::UpdateSelection()
                 }
                 else if (!aSortedSelectedShapes.empty())
                 {
-                    if (aSortedSelectedShapes.find(rChild.mxShape) != aSortedSelectedShapes.end())
+                    if (std::binary_search(aSortedSelectedShapes.begin(), aSortedSelectedShapes.end(), rChild.mxShape))
                     {
                         bShapeIsSelected = true;
                         // In a multi-selection no shape has the focus.
@@ -961,7 +968,7 @@ void ChildrenManagerImpl::UpdateSelection()
 
     if (nAddSelect >= 10 )//fire selection  within
     {
-        mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_WITHIN,uno::Any(),uno::Any());
+        mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_WITHIN,uno::Any(),uno::Any(), -1);
         nAddSelect =0 ;//not fire selection event
     }
     for (VEC_SHAPE::reverse_iterator vi = vecSelect.rbegin(), aEndVecSelect = vecSelect.rend(); vi != aEndVecSelect ;++vi)
@@ -977,7 +984,7 @@ void ChildrenManagerImpl::UpdateSelection()
             {
                 if (  nAddSelect > 0 )
                 {
-                    mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_ADD,anyShape,uno::Any());
+                    mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_ADD,anyShape,uno::Any(), -1);
                 }
             }
             else
@@ -985,7 +992,7 @@ void ChildrenManagerImpl::UpdateSelection()
                 //if has not selected shape ,first selected shape is fire selection event;
                 if (nAddSelect > 0 )
                 {
-                    mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED,anyShape,uno::Any());
+                    mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED,anyShape,uno::Any(), -1);
                 }
                 if (nAddSelect > 1 )//check other selected shape fire selection add event
                 {
@@ -995,7 +1002,7 @@ void ChildrenManagerImpl::UpdateSelection()
         }
         else //selection remove
         {
-            mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_REMOVE,anyShape,uno::Any());
+            mrContext.CommitChange(AccessibleEventId::SELECTION_CHANGED_REMOVE,anyShape,uno::Any(), -1);
         }
     }
 
@@ -1077,7 +1084,7 @@ void ChildDescriptor::disposeAccessibleObject (AccessibleContextBase& rParent)
     rParent.CommitChange (
         AccessibleEventId::CHILD,
         uno::Any(),
-        aOldValue);
+        aOldValue, -1);
 
     // Dispose and remove the object.
     if (mxAccessibleShape.is())

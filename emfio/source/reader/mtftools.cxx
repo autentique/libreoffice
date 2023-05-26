@@ -1618,10 +1618,12 @@ namespace emfio
     {
         sal_uInt16 nPoints = rPolygon.GetSize();
         if ( ( nPoints < 4 ) || ( ( ( nPoints - 4 ) % 3 ) != 0 ) )
+        {
+            SAL_WARN("emfio",
+                "EMF file error: Number of Bezier points is not set of three");
             return;
-
+        }
         UpdateClipRegion();
-
         ImplMap( rPolygon );
         if ( bTo )
         {
@@ -1680,11 +1682,11 @@ namespace emfio
             mnLatestTextLayoutMode = mnTextLayoutMode;
             mpGDIMetaFile->AddAction( new MetaLayoutModeAction( mnTextLayoutMode ) );
         }
-        SetGfxMode( nGfxMode );
+        SetGfxMode(nGfxMode);
         TextAlign eTextAlign;
-        if ( ( mnTextAlign & TA_BASELINE) == TA_BASELINE )
+        if (mnTextAlign & TA_BASELINE)
             eTextAlign = ALIGN_BASELINE;
-        else if( ( mnTextAlign & TA_BOTTOM) == TA_BOTTOM )
+        else if (mnTextAlign & TA_BOTTOM)
             eTextAlign = ALIGN_BOTTOM;
         else
             eTextAlign = ALIGN_TOP;
@@ -1779,9 +1781,9 @@ namespace emfio
             if( mnTextAlign & TA_UPDATECP )
                 rPosition = maActPos;
 
-            if ( mnTextAlign & TA_RIGHT_CENTER )
+            if (mnTextAlign & TA_RIGHT_CENTER)
             {
-                Point aDisplacement( ( ( mnTextAlign & TA_RIGHT_CENTER ) == TA_RIGHT ) ? nTextWidth : nTextWidth >> 1, 0 );
+                Point aDisplacement(((mnTextAlign & TA_RIGHT_CENTER) == TA_CENTER) ? nTextWidth >> 1: nTextWidth, 0);
                 Point().RotateAround(aDisplacement, maFont.GetOrientation());
                 rPosition -= aDisplacement;
             }

@@ -56,7 +56,7 @@
 #include <XMLFillBitmapSizePropertyHandler.hxx>
 #include <XMLBitmapLogicalSizePropertyHandler.hxx>
 #include <XMLBitmapRepeatOffsetPropertyHandler.hxx>
-#include <XMLThemeColorHandler.hxx>
+#include <XMLComplexColorHandler.hxx>
 #include <vcl/graph.hxx>
 
 using namespace ::com::sun::star;
@@ -926,8 +926,7 @@ bool XMLTextEmphasizePropHdl_Impl::exportXML(
             if( nType != 0 )
             {
                 enum XMLTokenEnum ePos = bBelow ? XML_BELOW : XML_ABOVE;
-                aOut.append( ' ' );
-                aOut.append( GetXMLToken(ePos) );
+                aOut.append( " " + GetXMLToken(ePos) );
             }
             rStrExpValue = aOut.makeStringAndClear();
         }
@@ -1413,8 +1412,8 @@ static const XMLPropertyHandler *GetPropertyHandler
     case XML_TYPE_GRAPHIC:
         pHdl = new XMLGraphicPropertyHandler;
         break;
-    case XML_TYPE_THEME_COLOR:
-        pHdl = new XMLThemeColorHandler;
+    case XML_TYPE_COMPLEX_COLOR:
+        pHdl = new XMLComplexColorHandler;
         break;
     default:
     {

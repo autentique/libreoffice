@@ -16,7 +16,6 @@
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XMasterPageTarget.hpp>
-#include <com/sun/star/util/Color.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/text/XTextTable.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
@@ -29,8 +28,9 @@
 #include <svx/unopage.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdomedia.hxx>
-#include <docmodel/uno/UnoThemeColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <docmodel/uno/UnoTheme.hxx>
+#include <docmodel/theme/Theme.hxx>
 
 using namespace ::com::sun::star;
 
@@ -126,8 +126,8 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeExport)
         xDrawPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
     uno::Reference<beans::XPropertySet> xMasterPage(xDrawPage->getMasterPage(), uno::UNO_QUERY);
 
-    model::Theme aTheme("mytheme");
-    std::unique_ptr<model::ColorSet> pColorSet(new model::ColorSet("mycolorscheme"));
+    auto pTheme = std::make_shared<model::Theme>("mytheme");
+    auto pColorSet = std::make_shared<model::ColorSet>("mycolorscheme");
     pColorSet->add(model::ThemeColorType::Dark1, 0x0);
     pColorSet->add(model::ThemeColorType::Light1, 0x1);
     pColorSet->add(model::ThemeColorType::Dark2, 0x2);
@@ -140,9 +140,9 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeExport)
     pColorSet->add(model::ThemeColorType::Accent6, 0x9);
     pColorSet->add(model::ThemeColorType::Hyperlink, 0xa);
     pColorSet->add(model::ThemeColorType::FollowedHyperlink, 0xb);
-    aTheme.SetColorSet(std::move(pColorSet));
+    pTheme->setColorSet(pColorSet);
 
-    uno::Reference<util::XTheme> xTheme = model::theme::createXTheme(aTheme);
+    uno::Reference<util::XTheme> xTheme = model::theme::createXTheme(pTheme);
     xMasterPage->setPropertyValue("Theme", uno::Any(xTheme));
 
     // Export to ODP:
@@ -155,7 +155,7 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeExport)
     // - Actual  : 0
     // - XPath '//style:master-page/loext:theme/loext:color-table/loext:color' number of nodes is incorrect
     // i.e. the theme was lost on exporting to ODF.
-    assertXPath(pXmlDoc, "//style:master-page/loext:theme/loext:color-table/loext:color", 12);
+    assertXPath(pXmlDoc, "//style:master-page/loext:theme/loext:theme-colors/loext:color", 12);
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testVideoSnapshot)
@@ -204,7 +204,7 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testVideoSnapshot)
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeImport)
 {
     // Given a document that has a master page with a theme associated:
-    loadFromURL(u"theme.odp");
+    loadFromURL(u"theme.fodp");
 
     // Then make sure the doc model has a master page with a theme:
     uno::Reference<drawing::XDrawPagesSupplier> xDrawPagesSupplier(mxComponent, uno::UNO_QUERY);
@@ -219,13 +219,16 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeImport)
     CPPUNIT_ASSERT(xTheme.is());
     auto* pUnoTheme = dynamic_cast<UnoTheme*>(xTheme.get());
     CPPUNIT_ASSERT(pUnoTheme);
-    auto const& rTheme = pUnoTheme->getTheme();
+    auto pTheme = pUnoTheme->getTheme();
+    CPPUNIT_ASSERT(pTheme);
 
-    CPPUNIT_ASSERT_EQUAL(OUString("Office Theme"), rTheme.GetName());
-    CPPUNIT_ASSERT_EQUAL(OUString("Office"), rTheme.GetColorSet()->getName());
+    CPPUNIT_ASSERT_EQUAL(OUString("Office Theme"), pTheme->GetName());
+    auto pColorSet = pTheme->getColorSet();
+    CPPUNIT_ASSERT(pColorSet);
+    CPPUNIT_ASSERT_EQUAL(OUString("Office"), pColorSet->getName());
 
     CPPUNIT_ASSERT_EQUAL(Color(0x954F72),
-                         rTheme.GetColorSet()->getColor(model::ThemeColorType::FollowedHyperlink));
+                         pColorSet->getColor(model::ThemeColorType::FollowedHyperlink));
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
@@ -239,47 +242,47 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
 
     // Text color
     OString aStyle1(
-        "//style:style[@style:name='T2']/style:text-properties/loext:char-color-theme-reference");
-    assertXPath(pXmlDoc, aStyle1, "type", "accent3");
+        "//style:style[@style:name='T2']/style:text-properties/loext:char-complex-color");
+    assertXPath(pXmlDoc, aStyle1, "theme-type", "accent3");
     assertXPath(pXmlDoc, aStyle1 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aStyle1 + "/loext:transformation[1]", "value", "2000");
     assertXPath(pXmlDoc, aStyle1 + "/loext:transformation[2]", "type", "lumoff");
     assertXPath(pXmlDoc, aStyle1 + "/loext:transformation[2]", "value", "8000");
 
     OString aStyle2(
-        "//style:style[@style:name='T3']/style:text-properties/loext:char-color-theme-reference");
-    assertXPath(pXmlDoc, aStyle2, "type", "accent3");
+        "//style:style[@style:name='T3']/style:text-properties/loext:char-complex-color");
+    assertXPath(pXmlDoc, aStyle2, "theme-type", "accent3");
     assertXPath(pXmlDoc, aStyle2 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aStyle2 + "/loext:transformation[1]", "value", "6000");
     assertXPath(pXmlDoc, aStyle2 + "/loext:transformation[2]", "type", "lumoff");
     assertXPath(pXmlDoc, aStyle2 + "/loext:transformation[2]", "value", "4000");
 
     OString aStyle3(
-        "//style:style[@style:name='T4']/style:text-properties/loext:char-color-theme-reference");
-    assertXPath(pXmlDoc, aStyle3, "type", "accent3");
+        "//style:style[@style:name='T4']/style:text-properties/loext:char-complex-color");
+    assertXPath(pXmlDoc, aStyle3, "theme-type", "accent3");
     assertXPath(pXmlDoc, aStyle3 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aStyle3 + "/loext:transformation[1]", "value", "5000");
 
     // Shapes fill color
     OString aShape1("//style:style[@style:name='gr1']/style:graphic-properties/"
-                    "loext:fill-color-theme-reference");
-    assertXPath(pXmlDoc, aShape1, "type", "accent2");
+                    "loext:fill-complex-color");
+    assertXPath(pXmlDoc, aShape1, "theme-type", "accent2");
     assertXPath(pXmlDoc, aShape1 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aShape1 + "/loext:transformation[1]", "value", "2000");
     assertXPath(pXmlDoc, aShape1 + "/loext:transformation[2]", "type", "lumoff");
     assertXPath(pXmlDoc, aShape1 + "/loext:transformation[2]", "value", "8000");
 
     OString aShape2("//style:style[@style:name='gr2']/style:graphic-properties/"
-                    "loext:fill-color-theme-reference");
-    assertXPath(pXmlDoc, aShape2, "type", "accent2");
+                    "loext:fill-complex-color");
+    assertXPath(pXmlDoc, aShape2, "theme-type", "accent2");
     assertXPath(pXmlDoc, aShape2 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aShape2 + "/loext:transformation[1]", "value", "6000");
     assertXPath(pXmlDoc, aShape2 + "/loext:transformation[2]", "type", "lumoff");
     assertXPath(pXmlDoc, aShape2 + "/loext:transformation[2]", "value", "4000");
 
     OString aShape3("//style:style[@style:name='gr3']/style:graphic-properties/"
-                    "loext:fill-color-theme-reference");
-    assertXPath(pXmlDoc, aShape3, "type", "accent2");
+                    "loext:fill-complex-color");
+    assertXPath(pXmlDoc, aShape3, "theme-type", "accent2");
     assertXPath(pXmlDoc, aShape3 + "/loext:transformation[1]", "type", "lummod");
     assertXPath(pXmlDoc, aShape3 + "/loext:transformation[1]", "value", "5000");
 
@@ -291,17 +294,16 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         uno::Reference<drawing::XShape> xShape(getShape(0));
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xShapeProperties(xShape, uno::UNO_QUERY);
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xShapeProperties->getPropertyValue("FillColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(2), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xShapeProperties->getPropertyValue("FillComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aComplexColor.getSchemeType());
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aComplexColor.getTransformations().size());
+        auto const& rTrans1 = aComplexColor.getTransformations()[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(2000), rTrans1.mnValue);
-        auto const& rTrans2 = aThemeColor.getTransformations()[1];
+        auto const& rTrans2 = aComplexColor.getTransformations()[1];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff, rTrans2.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(8000), rTrans2.mnValue);
     }
@@ -309,17 +311,16 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         uno::Reference<drawing::XShape> xShape(getShape(1));
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xShapeProperties(xShape, uno::UNO_QUERY);
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xShapeProperties->getPropertyValue("FillColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(2), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xShapeProperties->getPropertyValue("FillComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aComplexColor.getSchemeType());
+        CPPUNIT_ASSERT_EQUAL(size_t(2), aComplexColor.getTransformations().size());
+        auto const& rTrans1 = aComplexColor.getTransformations()[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(6000), rTrans1.mnValue);
-        auto const& rTrans2 = aThemeColor.getTransformations()[1];
+        auto const& rTrans2 = aComplexColor.getTransformations()[1];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff, rTrans2.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(4000), rTrans2.mnValue);
     }
@@ -327,14 +328,13 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         uno::Reference<drawing::XShape> xShape(getShape(2));
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xShapeProperties(xShape, uno::UNO_QUERY);
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xShapeProperties->getPropertyValue("FillColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(1), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xShapeProperties->getPropertyValue("FillComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent2, aComplexColor.getSchemeType());
+        CPPUNIT_ASSERT_EQUAL(size_t(1), aComplexColor.getTransformations().size());
+        auto const& rTrans1 = aComplexColor.getTransformations()[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(5000), rTrans1.mnValue);
     }
@@ -347,17 +347,17 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xPortion = getShapeTextPortion(0, xShape);
         CPPUNIT_ASSERT(xPortion.is());
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xPortion->getPropertyValue("CharColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(2), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xPortion->getPropertyValue("CharComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aComplexColor.getSchemeType());
+        auto const& rTransforms = aComplexColor.getTransformations();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), rTransforms.size());
+        auto const& rTrans1 = rTransforms[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(2000), rTrans1.mnValue);
-        auto const& rTrans2 = aThemeColor.getTransformations()[1];
+        auto const& rTrans2 = rTransforms[1];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff, rTrans2.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(8000), rTrans2.mnValue);
     }
@@ -368,17 +368,17 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xPortion = getShapeTextPortion(0, xShape);
         CPPUNIT_ASSERT(xPortion.is());
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xPortion->getPropertyValue("CharColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(2), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xPortion->getPropertyValue("CharComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aComplexColor.getSchemeType());
+        auto const& rTransforms = aComplexColor.getTransformations();
+        CPPUNIT_ASSERT_EQUAL(size_t(2), rTransforms.size());
+        auto const& rTrans1 = rTransforms[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(6000), rTrans1.mnValue);
-        auto const& rTrans2 = aThemeColor.getTransformations()[1];
+        auto const& rTrans2 = rTransforms[1];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumOff, rTrans2.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(4000), rTrans2.mnValue);
     }
@@ -389,14 +389,13 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColorExportImport)
         CPPUNIT_ASSERT(xShape.is());
         uno::Reference<beans::XPropertySet> xPortion = getShapeTextPortion(0, xShape);
         CPPUNIT_ASSERT(xPortion.is());
-        uno::Reference<util::XThemeColor> xThemeColor;
-        xPortion->getPropertyValue("CharColorThemeReference") >>= xThemeColor;
-        CPPUNIT_ASSERT(xThemeColor.is());
-        model::ThemeColor aThemeColor;
-        model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aThemeColor.getType());
-        CPPUNIT_ASSERT_EQUAL(size_t(1), aThemeColor.getTransformations().size());
-        auto const& rTrans1 = aThemeColor.getTransformations()[0];
+        uno::Reference<util::XComplexColor> xComplexColor;
+        xPortion->getPropertyValue("CharComplexColor") >>= xComplexColor;
+        CPPUNIT_ASSERT(xComplexColor.is());
+        auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+        CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent3, aComplexColor.getSchemeType());
+        CPPUNIT_ASSERT_EQUAL(size_t(1), aComplexColor.getTransformations().size());
+        auto const& rTrans1 = aComplexColor.getTransformations()[0];
         CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod, rTrans1.meType);
         CPPUNIT_ASSERT_EQUAL(sal_Int16(5000), rTrans1.mnValue);
     }
@@ -413,16 +412,15 @@ CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testThemeColor_ShapeFill)
     uno::Reference<drawing::XShape> xShape(getShape(0));
     CPPUNIT_ASSERT(xShape.is());
     uno::Reference<beans::XPropertySet> xShapeProperties(xShape, uno::UNO_QUERY);
-    uno::Reference<util::XThemeColor> xThemeColor;
-    xShapeProperties->getPropertyValue("FillColorThemeReference") >>= xThemeColor;
-    CPPUNIT_ASSERT(xThemeColor.is());
-    model::ThemeColor aThemeColor;
-    model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent6, aThemeColor.getType());
-    CPPUNIT_ASSERT_EQUAL(size_t(1), aThemeColor.getTransformations().size());
+    uno::Reference<util::XComplexColor> xComplexColor;
+    xShapeProperties->getPropertyValue("FillComplexColor") >>= xComplexColor;
+    CPPUNIT_ASSERT(xComplexColor.is());
+    auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent6, aComplexColor.getSchemeType());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aComplexColor.getTransformations().size());
     CPPUNIT_ASSERT_EQUAL(model::TransformationType::LumMod,
-                         aThemeColor.getTransformations()[0].meType);
-    CPPUNIT_ASSERT_EQUAL(sal_Int16(7500), aThemeColor.getTransformations()[0].mnValue);
+                         aComplexColor.getTransformations()[0].meType);
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(7500), aComplexColor.getTransformations()[0].mnValue);
 }
 
 CPPUNIT_TEST_FIXTURE(XmloffDrawTest, testTableInShape)

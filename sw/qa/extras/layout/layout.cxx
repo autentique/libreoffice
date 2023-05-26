@@ -10,6 +10,7 @@
 #include <swmodeltestbase.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <vcl/scheduler.hxx>
+#include <svx/svddef.hxx>
 
 #include <fmtanchr.hxx>
 #include <fmtfsize.hxx>
@@ -1157,22 +1158,30 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter, TestTdf137025)
     // SDRATTR_TEXT_LEFTDIST
     assertXPath(pXmlDoc,
                 "/root/page/body/txt/anchored/SwAnchoredDrawObject/SdrObject"
-                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item[@whichId='1072']",
+                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item"
+                "[@whichId='"
+                    + OString::number(SDRATTR_TEXT_LEFTDIST) + "']",
                 "value", "567");
     // SDRATTR_TEXT_RIGHTDIST
     assertXPath(pXmlDoc,
                 "/root/page/body/txt/anchored/SwAnchoredDrawObject/SdrObject"
-                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item[@whichId='1073']",
+                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item"
+                "[@whichId='"
+                    + OString::number(SDRATTR_TEXT_RIGHTDIST) + "']",
                 "value", "1134");
     // SDRATTR_TEXT_UPPERDIST
     assertXPath(pXmlDoc,
                 "/root/page/body/txt/anchored/SwAnchoredDrawObject/SdrObject"
-                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item[@whichId='1074']",
+                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item"
+                "[@whichId='"
+                    + OString::number(SDRATTR_TEXT_UPPERDIST) + "']",
                 "value", "1701");
     // SDRATTR_TEXT_LOWERDIST
     assertXPath(pXmlDoc,
                 "/root/page/body/txt/anchored/SwAnchoredDrawObject/SdrObject"
-                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item[@whichId='1075']",
+                "/DefaultProperties/SfxItemSet/SdrMetricItem/SfxInt32Item"
+                "[@whichId='"
+                    + OString::number(SDRATTR_TEXT_LOWERDIST) + "']",
                 "value", "2268");
 
     // Check the textbox-shape import too
@@ -3291,6 +3300,50 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter, testTdf144347)
     assertXPath(pXmlDoc, "/root/page", 1);
     // This was 1 (bad empty table)
     assertXPath(pXmlDoc, "/root/page[1]/body/tab", 0);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter, testTdf155345)
+{
+    createSwDoc("tdf144057.fodt");
+    SwXTextDocument* pTextDoc = dynamic_cast<SwXTextDocument*>(mxComponent.get());
+    CPPUNIT_ASSERT(pTextDoc);
+    SwDoc* pDoc(pTextDoc->GetDocShell()->GetDoc());
+    SwRootFrame* pLayout(pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
+    CPPUNIT_ASSERT(!pLayout->IsHideRedlines());
+
+    // reject all deletions
+    dispatchCommand(mxComponent, ".uno:RejectAllTrackedChanges", {});
+
+    // enable redlining
+    dispatchCommand(mxComponent, ".uno:TrackChanges", {});
+    CPPUNIT_ASSERT_MESSAGE("redlining should be on",
+                           pDoc->getIDocumentRedlineAccess().IsRedlineOn());
+
+    // delete table column with track changes
+    dispatchCommand(mxComponent, ".uno:DeleteColumns", {});
+
+    discardDumpedLayout();
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+    // show tracked column deletions
+    assertXPath(pXmlDoc, "/root/page", 4);
+
+    // hide tracked table column deletions
+    dispatchCommand(mxComponent, ".uno:ShowTrackedChanges", {});
+    CPPUNIT_ASSERT(pLayout->IsHideRedlines());
+    pDoc->getIDocumentLayoutAccess().GetCurrentViewShell()->CalcLayout();
+    discardDumpedLayout();
+    pXmlDoc = parseLayoutDump();
+
+    // This was 4 (unhidden tracked table column deletions)
+    assertXPath(pXmlDoc, "/root/page", 2);
+
+    // show tracked table column deletions again
+    dispatchCommand(mxComponent, ".uno:ShowTrackedChanges", {});
+    CPPUNIT_ASSERT(!pLayout->IsHideRedlines());
+    pDoc->getIDocumentLayoutAccess().GetCurrentViewShell()->CalcLayout();
+    discardDumpedLayout();
+    pXmlDoc = parseLayoutDump();
+    assertXPath(pXmlDoc, "/root/page", 4);
 }
 
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter, testTdf109137)

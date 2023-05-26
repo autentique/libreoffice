@@ -376,7 +376,6 @@ bool SfxUndoManager::ImplIsUndoEnabled_Lock() const
     return m_xData->mbUndoEnabled;
 }
 
-
 void SfxUndoManager::SetMaxUndoActionCount( size_t nMaxUndoActionCount )
 {
     UndoManagerGuard aGuard( *m_xData );
@@ -411,6 +410,10 @@ void SfxUndoManager::SetMaxUndoActionCount( size_t nMaxUndoActionCount )
     ImplCheckEmptyActions();
 }
 
+size_t SfxUndoManager::GetMaxUndoActionCount() const
+{
+    return m_xData->pActUndoArray->nMaxUndoActions;
+}
 
 void SfxUndoManager::ImplClearCurrentLevel_NoNotify( UndoManagerGuard& i_guard )
 {
@@ -1212,7 +1215,7 @@ OUString SfxUndoManager::GetUndoActionsInfo() const
     aTree.add_child("actions", aActions);
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aTree);
-    return OUString::fromUtf8(aStream.str().c_str());
+    return OUString::fromUtf8(aStream.str());
 }
 
 OUString SfxUndoManager::GetRedoActionsInfo() const
@@ -1231,7 +1234,7 @@ OUString SfxUndoManager::GetRedoActionsInfo() const
     aTree.add_child("actions", aActions);
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aTree);
-    return OUString::fromUtf8(aStream.str().c_str());
+    return OUString::fromUtf8(aStream.str());
 }
 
 bool SfxUndoManager::IsEmptyActions() const

@@ -1230,10 +1230,7 @@ bool ImpGraphic::swapOutGraphic(SvStream& rStream)
                 }
 
                 rStream.WriteUInt32(maVectorGraphicData->getBinaryDataContainer().getSize());
-
-                rStream.WriteBytes(
-                    maVectorGraphicData->getBinaryDataContainer().getData(),
-                    maVectorGraphicData->getBinaryDataContainer().getSize());
+                maVectorGraphicData->getBinaryDataContainer().writeToStream(rStream);
             }
             else if (mpAnimation)
             {
@@ -1252,6 +1249,9 @@ bool ImpGraphic::swapOutGraphic(SvStream& rStream)
         case GraphicType::Default:
             break;
     }
+
+    if (mpGfxLink)
+        mpGfxLink->getDataContainer().swapOut();
 
     return true;
 }
@@ -1434,6 +1434,8 @@ void ImpGraphic::dumpState(rtl::OStringBuffer &rState)
     rState.append(static_cast<sal_Int32>(meType));
     rState.append("\tsize:\t");
     rState.append(static_cast<sal_Int64>(mnSizeBytes));
+    rState.append("\tgfxl:\t");
+    rState.append(static_cast<sal_Int64>(mpGfxLink ? mpGfxLink->getSizeBytes() : -1));
     rState.append("\t");
     rState.append(static_cast<sal_Int32>(maSwapInfo.maSizePixel.Width()));
     rState.append("x");

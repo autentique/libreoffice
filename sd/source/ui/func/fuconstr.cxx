@@ -29,6 +29,7 @@
 #include <svx/xflclit.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xlnclit.hxx>
+#include <docmodel/theme/Theme.hxx>
 
 #include <app.hrc>
 #include <strings.hrc>
@@ -392,7 +393,7 @@ void FuConstruct::SetStyleSheet( SfxItemSet& rAttr, SdrObject* pObj,
                 model::ThemeColorType eColorType = model::ThemeColorType::Accent1;
                 Color aColor = pTheme->GetColor(eColorType);
                 XFillColorItem aFillColorItem("", aColor);
-                aFillColorItem.GetThemeColor().setType(eColorType);
+                aFillColorItem.getComplexColor().setSchemeColor(eColorType);
                 aAttr.Put(aFillColorItem);
 
                 aAttr.Put(XLineStyleItem(css::drawing::LineStyle_SOLID));

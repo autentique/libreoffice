@@ -510,7 +510,7 @@ void SmGraphicWidget::SetIsCursorVisible(bool bVis)
     {
         mrViewShell.SendCaretToLOK();
         mrViewShell.libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE,
-                                               OString::boolean(bVis).getStr());
+                                               OString::boolean(bVis));
     }
 }
 
@@ -1814,7 +1814,7 @@ void SmViewShell::Execute(SfxRequest& rReq)
 
         case SID_INSERTCOMMANDTEXT:
         {
-            const SfxStringItem& rItem = static_cast<const SfxStringItem&>(rReq.GetArgs()->Get(SID_INSERTCOMMANDTEXT));
+            const SfxStringItem& rItem = rReq.GetArgs()->Get(SID_INSERTCOMMANDTEXT);
 
             if (pWin && (mbInsertIntoEditWindow || !IsInlineEditEnabled()))
             {
@@ -1831,8 +1831,7 @@ void SmViewShell::Execute(SfxRequest& rReq)
 
         case SID_INSERTSPECIAL:
         {
-            const SfxStringItem& rItem =
-                static_cast<const SfxStringItem&>(rReq.GetArgs()->Get(SID_INSERTSPECIAL));
+            const SfxStringItem& rItem = rReq.GetArgs()->Get(SID_INSERTSPECIAL);
 
             if (pWin && (mbInsertIntoEditWindow || !IsInlineEditEnabled()))
                 pWin->InsertText(rItem.GetValue());
@@ -1936,8 +1935,7 @@ void SmViewShell::Execute(SfxRequest& rReq)
         {
             if (rReq.GetArgs() != nullptr)
             {
-                const SfxStringItem& rItem =
-                    static_cast<const SfxStringItem&>(rReq.GetArgs()->Get(SID_TEXTSTATUS));
+                const SfxStringItem& rItem = rReq.GetArgs()->Get(SID_TEXTSTATUS);
 
                 SetStatusText(rItem.GetValue());
             }
@@ -2181,7 +2179,7 @@ public:
         if (comphelper::LibreOfficeKit::isActive())
             if (auto pViewShell = GetViewShell_Impl())
                 pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CURSOR_VISIBLE,
-                                                       OString::boolean(false).getStr());
+                                                       OString::boolean(false));
 
         SfxBaseController::dispose();
     }
@@ -2391,11 +2389,11 @@ void SmViewShell::SendCaretToLOK() const
     if (const auto& payload = getLOKPayload(LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR, nViewId))
     {
         libreOfficeKitViewCallbackWithViewId(LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR,
-                                             payload->getStr(), nViewId);
+                                             *payload, nViewId);
     }
     if (const auto& payload = getLOKPayload(LOK_CALLBACK_TEXT_SELECTION, nViewId))
     {
-        libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, payload->getStr());
+        libreOfficeKitViewCallback(LOK_CALLBACK_TEXT_SELECTION, *payload);
     }
 }
 

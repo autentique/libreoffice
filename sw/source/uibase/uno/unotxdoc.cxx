@@ -69,6 +69,7 @@
 #include <unostyle.hxx>
 #include <unodraw.hxx>
 #include <svl/eitem.hxx>
+#include <unotools/configmgr.hxx>
 #include <unotools/datetime.hxx>
 #include <unocrsr.hxx>
 #include <unofieldcoll.hxx>
@@ -940,9 +941,9 @@ Sequence< beans::PropertyValue > SwXTextDocument::getPagePrintSettings()
     if(pData)
         aData = *pData;
     Any aVal;
-    aVal <<= static_cast<sal_Int16>(aData.GetRow());
+    aVal <<= aData.GetRow();
     pArray[0] = beans::PropertyValue("PageRows", -1, aVal, PropertyState_DIRECT_VALUE);
-    aVal <<= static_cast<sal_Int16>(aData.GetCol());
+    aVal <<= aData.GetCol();
     pArray[1] = beans::PropertyValue("PageColumns", -1, aVal, PropertyState_DIRECT_VALUE);
     aVal <<= static_cast<sal_Int32>(convertTwipToMm100(aData.GetLeftSpace()));
     pArray[2] = beans::PropertyValue("LeftMargin", -1, aVal, PropertyState_DIRECT_VALUE);
@@ -996,8 +997,7 @@ static OUString lcl_CreateOutlineString(const size_t nIndex, const SwDoc* pDoc)
             tools::Long nVal = aNumVector[nLevel];
             nVal ++;
             nVal -= pOutlRule->Get(nLevel).GetStart();
-            sEntry.append( nVal );
-            sEntry.append(".");
+            sEntry.append( OUString::number(nVal) + ".");
         }
     OUString sOutlineText = pDoc->getIDocumentOutlineNodes().getOutlineText(
                 nIndex, pDoc->GetDocShell()->GetWrtShell()->GetLayout(), false);
@@ -1026,13 +1026,13 @@ void SwXTextDocument::setPagePrintSettings(const Sequence< beans::PropertyValue 
         {
             if(!nVal || nVal > 0xff)
                 throw RuntimeException("Invalid value");
-            aData.SetRow(static_cast<sal_uInt8>(nVal));
+            aData.SetRow(nVal);
         }
         else if(sName == "PageColumns")
         {
             if(!nVal  || nVal > 0xff)
                 throw RuntimeException("Invalid value");
-            aData.SetCol(static_cast<sal_uInt8>(nVal));
+            aData.SetCol(nVal);
         }
         else if(sName == "LeftMargin")
         {
@@ -2554,7 +2554,7 @@ sal_Int32 SAL_CALL SwXTextDocument::getRendererCount(
             // #122919# Force field update before PDF export, but after layout init (tdf#121962)
             bool bStateChanged = false;
             // check configuration: shall update of printing information in DocInfo set the document to "modified"?
-            if (pRenderDocShell->IsEnableSetModified() && !officecfg::Office::Common::Print::PrintingModifiesDocument::get())
+            if (pRenderDocShell->IsEnableSetModified() && !utl::ConfigManager::IsFuzzing() && !officecfg::Office::Common::Print::PrintingModifiesDocument::get())
             {
                 pRenderDocShell->EnableSetModified( false );
                 bStateChanged = true;
@@ -3415,8 +3415,10 @@ OString SwXTextDocument::getViewRenderState()
                 aState.append('P');
             if (pVOpt->IsOnlineSpell())
                 aState.append('S');
-            if (pVOpt->GetThemeName() == u"COLOR_SCHEME_LIBREOFFICE_DARK")
-                aState.append('D');
+            aState.append(';');
+
+            OString aThemeName = OUStringToOString(pVOpt->GetThemeName(), RTL_TEXTENCODING_UTF8);
+            aState.append(aThemeName);
         }
     }
     return aState.makeStringAndClear();
@@ -3601,6 +3603,10 @@ void SwXTextDocument::initializeForTiledRendering(const css::uno::Sequence<css::
 
     // Disable field shadings: the result would depend on the cursor position.
     aViewOption.SetAppearanceFlag(ViewOptFlags::FieldShadings, false);
+    // The fancy header/footer controls don't work in tiled mode anyway, so
+    // explicitly disable them to enable skipping invalidating the view for
+    // the case of clicking in the header area of a document with no headers
+    aViewOption.SetUseHeaderFooterMenu(false);
 
     OUString sOrigAuthor = SW_MOD()->GetRedlineAuthor(SW_MOD()->GetRedlineAuthor());
     OUString sAuthor;

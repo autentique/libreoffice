@@ -87,7 +87,7 @@ ChartColorWrapper::ChartColorWrapper(
 {
 }
 
-void ChartColorWrapper::operator()([[maybe_unused]] const OUString& , const svx::NamedThemedColor& rColor)
+void ChartColorWrapper::operator()([[maybe_unused]] const OUString& , const NamedColor& rColor)
 {
     css::uno::Reference<css::beans::XPropertySet> xPropSet = getPropSet(mxModel);
 
@@ -126,11 +126,11 @@ void ChartColorWrapper::updateData()
     SfxViewShell* pViewShell = SfxViewShell::Current();
     if (comphelper::LibreOfficeKit::isActive() && pViewShell && (maPropertyName == aLineColor))
     {
-        std::string sCommand = OUStringToOString(aUrl.Complete, RTL_TEXTENCODING_ASCII_US).getStr();
+        OString sCommand = OUStringToOString(aUrl.Complete, RTL_TEXTENCODING_ASCII_US);
         sal_Int32 nColor = -1;
         aEvent.State >>= nColor;
         pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED,
-                                               (sCommand + "=" + std::to_string(nColor)).c_str());
+                                               sCommand + "=" + OString::number(nColor));
     }
 }
 

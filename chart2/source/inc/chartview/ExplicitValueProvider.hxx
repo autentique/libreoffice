@@ -41,7 +41,7 @@ class SvxShape;
 
 namespace chart
 {
-
+class Axis;
 class BaseCoordinateSystem;
 class DrawModelWrapper;
 class ChartModel;
@@ -56,7 +56,7 @@ public:
         If the given Axis could not be found or for another reason no correct output can be given false is returned.
      */
     virtual bool getExplicitValuesForAxis(
-        css::uno::Reference< css::chart2::XAxis > xAxis
+        rtl::Reference< ::chart::Axis > xAxis
         , ExplicitScaleData&  rExplicitScale
         , ExplicitIncrementData& rExplicitIncrement )=0;
 
@@ -80,7 +80,7 @@ public:
             , const css::awt::Rectangle& rPositionAndSize, bool bSubtract );
 
     static sal_Int32 getExplicitNumberFormatKeyForAxis(
-              const css::uno::Reference< css::chart2::XAxis >& xAxis
+              const rtl::Reference< ::chart::Axis >& xAxis
             , const rtl::Reference< ::chart::BaseCoordinateSystem > & xCorrespondingCoordinateSystem
             , const rtl::Reference<::chart::ChartModel>& xChartDoc);
 

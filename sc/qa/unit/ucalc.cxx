@@ -28,6 +28,8 @@
 
 #include <docfunc.hxx>
 #include <funcdesc.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 #include <columniterator.hxx>
 #include <scopetools.hxx>
@@ -67,6 +69,8 @@
 
 class ScUndoPaste;
 class ScUndoCut;
+using ::std::cerr;
+using ::std::endl;
 
 namespace {
 
@@ -448,6 +452,32 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf66613)
 
     m_pDoc->DeleteTab(nFirstTab);
     m_pDoc->DeleteTab(nSecondTab);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf113027)
+{
+    // Insert some sheets including a whitespace in their name and switch the grammar to R1C1
+    CPPUNIT_ASSERT(m_pDoc->InsertTab(0, "Sheet 1"));
+    CPPUNIT_ASSERT(m_pDoc->InsertTab(1, "Sheet 2"));
+    FormulaGrammarSwitch aFGSwitch(m_pDoc, formula::FormulaGrammar::GRAM_ENGLISH_XL_R1C1);
+
+    // Add a formula containing a remote reference, i.e., to another sheet
+    const ScAddress aScAddress(0, 0, 0);
+    const OUString aFormula = "='Sheet 2'!RC";
+    m_pDoc->SetString(aScAddress, aFormula);
+
+    // Switch from relative to absolute cell reference
+    ScRefFinder aFinder(aFormula, aScAddress, *m_pDoc, m_pDoc->GetAddressConvention());
+    aFinder.ToggleRel(0, aFormula.getLength());
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: ='Sheet 2'!R1C1
+    // - Actual  : ='Sheet 2'!RC
+    // i.e. the cell reference was not changed from relative to absolute
+    CPPUNIT_ASSERT_EQUAL(OUString("='Sheet 2'!R1C1"), aFinder.GetText());
+
+    m_pDoc->DeleteTab(0);
+    m_pDoc->DeleteTab(1);
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf90698)
@@ -4751,6 +4781,22 @@ CPPUNIT_TEST_FIXTURE(Test, testShiftCells)
 
     CPPUNIT_ASSERT_MESSAGE("there should be NO note", !m_pDoc->HasNote(5, 3, 0));
     CPPUNIT_ASSERT_MESSAGE("there should be a note", m_pDoc->HasNote(4, 3, 0));
+
+    m_pDoc->DeleteTab(0);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testNoteDefaultStyle)
+{
+    m_pDoc->InsertTab(0, "PostIts");
+
+    // We need a drawing layer in order to create caption objects.
+    m_pDoc->InitDrawLayer(m_xDocShell.get());
+
+    auto pNote = m_pDoc->GetOrCreateNote({0, 0, 0});
+    auto pCaption = pNote->GetCaption();
+
+    CPPUNIT_ASSERT(pCaption);
+    CPPUNIT_ASSERT_EQUAL(ScResId(STR_STYLENAME_NOTE), pCaption->GetStyleSheet()->GetName());
 
     m_pDoc->DeleteTab(0);
 }

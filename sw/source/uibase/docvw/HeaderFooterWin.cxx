@@ -152,8 +152,8 @@ void SwFrameButtonPainter::PaintButton(drawinglayer::primitive2d::Primitive2DCon
         if (bOnTop)
             nAngle = 0;
 
-        FillGradientAttribute aFillAttrs(drawinglayer::attribute::GradientStyle::Linear, 0.0, 0.0, 0.0, nAngle,
-            basegfx::utils::createColorStopsFromStartEndColor(aLighterColor, aFillColor));
+        FillGradientAttribute aFillAttrs(css::awt::GradientStyle_LINEAR, 0.0, 0.0, 0.0, nAngle,
+            basegfx::BColorStops(aLighterColor, aFillColor));
         rSeq.push_back(drawinglayer::primitive2d::Primitive2DReference(
                             new drawinglayer::primitive2d::FillGradientPrimitive2D(aGradientRect, std::move(aFillAttrs))));
     }
@@ -480,19 +480,19 @@ bool SwHeaderFooterWin::IsEmptyHeaderFooter( ) const
     return bResult;
 }
 
-void SwHeaderFooterWin::ExecuteCommand(std::string_view rIdent)
+void SwHeaderFooterWin::ExecuteCommand(std::u16string_view rIdent)
 {
     SwView& rView = m_pEditWin->GetView();
     SwWrtShell& rSh = rView.GetWrtShell();
 
     const SwPageFrame* pPageFrame = SwFrameMenuButtonBase::GetPageFrame(m_pFrame);
     const OUString& rStyleName = pPageFrame->GetPageDesc()->GetName();
-    if (rIdent == "edit")
+    if (rIdent == u"edit")
     {
-        OString sPageId = m_bIsHeader ? OString("header") : OString("footer");
+        OUString sPageId = m_bIsHeader ? OUString("header") : OUString("footer");
         rView.GetDocShell()->FormatPage(rView.GetFrameWeld(), rStyleName, sPageId, rSh);
     }
-    else if (rIdent == "borderback")
+    else if (rIdent == u"borderback")
     {
         const SwPageDesc* pDesc = pPageFrame->GetPageDesc();
         const SwFrameFormat& rMaster = pDesc->GetMaster();
@@ -527,18 +527,18 @@ void SwHeaderFooterWin::ExecuteCommand(std::string_view rIdent)
             rView.GetDocShell()->SetModified();
         }
     }
-    else if (rIdent == "delete")
+    else if (rIdent == u"delete")
     {
         rSh.ChangeHeaderOrFooter( rStyleName, m_bIsHeader, false, true );
         // warning: "this" may be disposed now
         rSh.GetWin()->GrabFocusToDocument();
     }
-    else if (rIdent == "insert_pagenumber")
+    else if (rIdent == u"insert_pagenumber")
     {
         SfxViewFrame& rVFrame = rSh.GetView().GetViewFrame();
         rVFrame.GetBindings().Execute(FN_INSERT_FLD_PGNUMBER);
     }
-    else if (rIdent == "insert_pagecount")
+    else if (rIdent == u"insert_pagecount")
     {
         SfxViewFrame& rVFrame = rSh.GetView().GetViewFrame();
         rVFrame.GetBindings().Execute(FN_INSERT_FLD_PGCOUNT);
@@ -564,7 +564,7 @@ IMPL_LINK_NOARG(SwHeaderFooterWin, ClickHdl, weld::Button&, void)
     PaintButton();
 }
 
-IMPL_LINK(SwHeaderFooterWin, SelectHdl, const OString&, rIdent, void)
+IMPL_LINK(SwHeaderFooterWin, SelectHdl, const OUString&, rIdent, void)
 {
     ExecuteCommand(rIdent);
 }

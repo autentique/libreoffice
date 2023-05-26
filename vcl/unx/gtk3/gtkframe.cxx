@@ -31,6 +31,7 @@
 #include <sal/log.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <vcl/toolkit/floatwin.hxx>
+#include <vcl/toolkit/unowrap.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/weld.hxx>
 #include <vcl/window.hxx>
@@ -42,6 +43,7 @@
 #include <X11/Xutil.h>
 #include <unx/gtk/gtkbackend.hxx>
 
+#include <strings.hrc>
 #include <window.h>
 
 #include <basegfx/vector/b2ivector.hxx>
@@ -62,6 +64,8 @@
 
 #include <com/sun/star/awt/MouseButton.hpp>
 #include <com/sun/star/datatransfer/dnd/DNDConstants.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/util/XModifiable.hpp>
 
 #if !GTK_CHECK_VERSION(4, 0, 0)
 #   define GDK_ALT_MASK GDK_MOD1_MASK
@@ -630,7 +634,6 @@ void on_registrar_unavailable( GDBusConnection * /*connection*/,
 
     SAL_INFO("vcl.unity", "on_registrar_unavailable");
 
-    //pSessionBus = NULL;
     GtkSalFrame* pSalFrame = static_cast< GtkSalFrame* >( user_data );
 
     SalMenu* pSalMenu = pSalFrame->GetMenu();
@@ -720,6 +723,15 @@ GtkSalFrame::~GtkSalFrame()
 
         if (m_pSettingsPortal)
             g_object_unref(m_pSettingsPortal);
+
+        if (m_nSessionClientSignalId)
+            g_signal_handler_disconnect(m_pSessionClient, m_nSessionClientSignalId);
+
+        if (m_pSessionClient)
+            g_object_unref(m_pSessionClient);
+
+        if (m_pSessionManager)
+            g_object_unref(m_pSessionManager);
     }
 
     GtkWidget *pEventWidget = getMouseEventWidget();
@@ -844,48 +856,6 @@ void GtkSalFrame::resizeWindow( tools::Long nWidth, tools::Long nHeight )
         window_resize(nWidth, nHeight);
 }
 
-#if GTK_CHECK_VERSION(4,9,0)
-
-#define LO_TYPE_DRAWING_AREA     (lo_drawing_area_get_type())
-#define LO_DRAWING_AREA(obj)     (G_TYPE_CHECK_INSTANCE_CAST((obj), LO_TYPE_DRAWING_AREA, LODrawingArea))
-#define LO_IS_DRAWING_AREA(obj)  (G_TYPE_CHECK_INSTANCE_TYPE((obj), LO_TYPE_DRAWING_AREA))
-
-struct LODrawingArea
-{
-    GtkDrawingArea parent_instance;
-};
-
-struct LODrawingAreaClass
-{
-    GtkDrawingAreaClass parent_class;
-};
-
-static void lo_drawing_area_accessible_init(GtkAccessibleInterface *iface)
-{
-    // doesn't actually do anything useful yet, just forward back to base impl for now
-    GtkAccessibleInterface *parent_iface = static_cast<GtkAccessibleInterface*>(g_type_interface_peek_parent(iface));
-    iface->get_at_context = parent_iface->get_at_context;
-    iface->get_platform_state = parent_iface->get_platform_state;
-}
-
-G_DEFINE_TYPE_WITH_CODE(LODrawingArea, lo_drawing_area, GTK_TYPE_DRAWING_AREA,
-                        G_IMPLEMENT_INTERFACE(GTK_TYPE_ACCESSIBLE, lo_drawing_area_accessible_init))
-
-static void lo_drawing_area_class_init(LODrawingAreaClass* /*klass*/)
-{
-}
-
-static void lo_drawing_area_init(LODrawingArea* /*area*/)
-{
-}
-
-GtkWidget* lo_drawing_area_new()
-{
-    return GTK_WIDGET(g_object_new(LO_TYPE_DRAWING_AREA, nullptr));
-}
-
-#endif
-
 #if !GTK_CHECK_VERSION(4,0,0)
 // tdf#124694 GtkFixed takes the max size of all its children as its
 // preferred size, causing it to not clip its child, but grow instead.
@@ -982,7 +952,10 @@ void GtkSalFrame::InitCommon()
     m_nGrabLevel = 0;
     m_bSalObjectSetPosSize = false;
     m_nPortalSettingChangedSignalId = 0;
+    m_nSessionClientSignalId = 0;
     m_pSettingsPortal = nullptr;
+    m_pSessionManager = nullptr;
+    m_pSessionClient = nullptr;
 
     m_aDamageHandler.handle = this;
     m_aDamageHandler.damaged = ::damaged;
@@ -1010,12 +983,12 @@ void GtkSalFrame::InitCommon()
     m_pDrawingArea = m_pFixedContainer;
 #else
     m_pOverlay = GTK_OVERLAY(gtk_overlay_new());
-    m_pFixedContainer = GTK_FIXED(gtk_fixed_new());
 #if GTK_CHECK_VERSION(4,9,0)
-    m_pDrawingArea = GTK_DRAWING_AREA(lo_drawing_area_new());
+    m_pFixedContainer = GTK_FIXED(g_object_new( ooo_fixed_get_type(), nullptr ));
 #else
-    m_pDrawingArea = GTK_DRAWING_AREA(gtk_drawing_area_new());
+    m_pFixedContainer = GTK_FIXED(gtk_fixed_new());
 #endif
+    m_pDrawingArea = GTK_DRAWING_AREA(gtk_drawing_area_new());
 #endif
     gtk_widget_set_can_focus(GTK_WIDGET(m_pFixedContainer), true);
     gtk_widget_set_size_request(GTK_WIDGET(m_pFixedContainer), 1, 1);
@@ -1412,6 +1385,16 @@ void GtkSalFrame::SetColorScheme(GVariant* variant)
     g_object_set(pSettings, "gtk-application-prefer-dark-theme", bDarkIconTheme, nullptr);
 }
 
+bool GtkSalFrame::GetUseDarkMode() const
+{
+    if (!m_pWindow)
+        return false;
+    GtkSettings* pSettings = gtk_widget_get_settings(m_pWindow);
+    gboolean bDarkIconTheme = false;
+    g_object_get(pSettings, "gtk-application-prefer-dark-theme", &bDarkIconTheme, nullptr);
+    return bDarkIconTheme;
+}
+
 static void settings_portal_changed_cb(GDBusProxy*, const char*, const char* signal_name,
                                        GVariant* parameters, gpointer frame)
 {
@@ -1449,7 +1432,149 @@ void GtkSalFrame::ListenPortalSettings()
 
     UpdateDarkMode();
 
+    if (!m_pSettingsPortal)
+        return;
+
     m_nPortalSettingChangedSignalId = g_signal_connect(m_pSettingsPortal, "g-signal", G_CALLBACK(settings_portal_changed_cb), this);
+}
+
+static void session_client_response(GDBusProxy* client_proxy)
+{
+    g_dbus_proxy_call(client_proxy,
+                      "EndSessionResponse",
+                      g_variant_new ("(bs)", true, ""),
+                      G_DBUS_CALL_FLAGS_NONE,
+                      G_MAXINT,
+                      nullptr, nullptr, nullptr);
+}
+
+// unset documents "modify" flag so they won't veto closing
+static void clear_modify_and_terminate()
+{
+    css::uno::Reference<css::uno::XComponentContext> xContext = ::comphelper::getProcessComponentContext();
+    uno::Reference<frame::XDesktop> xDesktop(frame::Desktop::create(xContext));
+    uno::Reference<css::container::XEnumeration> xComponents = xDesktop->getComponents()->createEnumeration();
+    while (xComponents->hasMoreElements())
+    {
+        css::uno::Reference<css::util::XModifiable> xModifiable(xComponents->nextElement(), css::uno::UNO_QUERY);
+        if (xModifiable)
+            xModifiable->setModified(false);
+    }
+    xDesktop->terminate();
+}
+
+static void session_client_signal(GDBusProxy* client_proxy, const char*, const char* signal_name,
+                                  GVariant* /*parameters*/, gpointer frame)
+{
+    GtkSalFrame* pThis = static_cast<GtkSalFrame*>(frame);
+
+    if (g_str_equal (signal_name, "QueryEndSession"))
+    {
+        css::uno::Reference<css::uno::XComponentContext> xContext = ::comphelper::getProcessComponentContext();
+        uno::Reference<frame::XDesktop2> xDesktop(frame::Desktop::create(xContext));
+
+        bool bModified = false;
+
+        // find the XModifiable for this GtkSalFrame
+        if (UnoWrapperBase* pWrapper = UnoWrapperBase::GetUnoWrapper(false))
+        {
+            VclPtr<vcl::Window> xThisWindow = pThis->GetWindow();
+            css::uno::Reference<css::container::XIndexAccess> xList = xDesktop->getFrames();
+            sal_Int32 nFrameCount = xList->getCount();
+            for (sal_Int32 i = 0; i < nFrameCount; ++i)
+            {
+                css::uno::Reference<css::frame::XFrame> xFrame;
+                xList->getByIndex(i) >>= xFrame;
+                if (!xFrame)
+                    continue;
+                VclPtr<vcl::Window> xWin = pWrapper->GetWindow(xFrame->getContainerWindow());
+                if (!xWin)
+                   continue;
+                if (xWin->GetFrameWindow() != xThisWindow)
+                    continue;
+                css::uno::Reference<css::frame::XController> xController = xFrame->getController();
+                if (!xController)
+                    break;
+                css::uno::Reference<css::util::XModifiable> xModifiable(xController->getModel(), css::uno::UNO_QUERY);
+                if (!xModifiable)
+                    break;
+                bModified = xModifiable->isModified();
+                break;
+            }
+        }
+
+        pThis->SessionManagerInhibit(bModified, APPLICATION_INHIBIT_LOGOUT, VclResId(STR_UNSAVED_DOCUMENTS),
+                                     gtk_window_get_icon_name(GTK_WINDOW(pThis->getWindow())));
+
+        session_client_response(client_proxy);
+    }
+    else if (g_str_equal (signal_name, "CancelEndSession"))
+    {
+        // restore back to uninhibited (to set again if queried), so frames
+        // that go away before the next logout don't affect that logout
+        pThis->SessionManagerInhibit(false, APPLICATION_INHIBIT_LOGOUT, VclResId(STR_UNSAVED_DOCUMENTS),
+                                     gtk_window_get_icon_name(GTK_WINDOW(pThis->getWindow())));
+    }
+    else if (g_str_equal (signal_name, "EndSession"))
+    {
+        session_client_response(client_proxy);
+        clear_modify_and_terminate();
+    }
+    else if (g_str_equal (signal_name, "Stop"))
+    {
+        clear_modify_and_terminate();
+    }
+}
+
+void GtkSalFrame::ListenSessionManager()
+{
+    EnsureSessionBus();
+
+    if (!pSessionBus)
+        return;
+
+    m_pSessionManager = g_dbus_proxy_new_sync(pSessionBus,
+                                              G_DBUS_PROXY_FLAGS_NONE,
+                                              nullptr,
+                                              "org.gnome.SessionManager",
+                                              "/org/gnome/SessionManager",
+                                              "org.gnome.SessionManager",
+                                              nullptr,
+                                              nullptr);
+
+    if (!m_pSessionManager)
+        return;
+
+    GVariant* res = g_dbus_proxy_call_sync(m_pSessionManager,
+                                 "RegisterClient",
+                                 g_variant_new ("(ss)", "org.libreoffice", ""),
+                                 G_DBUS_CALL_FLAGS_NONE,
+                                 G_MAXINT,
+                                 nullptr,
+                                 nullptr);
+
+    if (!res)
+        return;
+
+    gchar* client_path;
+    g_variant_get(res, "(o)", &client_path);
+    g_variant_unref(res);
+
+    m_pSessionClient = g_dbus_proxy_new_sync(pSessionBus,
+                                             G_DBUS_PROXY_FLAGS_NONE,
+                                             nullptr,
+                                             "org.gnome.SessionManager",
+                                             client_path,
+                                             "org.gnome.SessionManager.ClientPrivate",
+                                             nullptr,
+                                             nullptr);
+
+    g_free(client_path);
+
+    if (!m_pSessionClient)
+        return;
+
+    m_nSessionClientSignalId = g_signal_connect(m_pSessionClient, "g-signal", G_CALLBACK(session_client_signal), this);
 }
 
 void GtkSalFrame::UpdateDarkMode()
@@ -1642,6 +1767,9 @@ void GtkSalFrame::Init( SalFrame* pParent, SalFrameStyleFlags nStyle )
 
         // Listen to portal settings for e.g. prefer dark theme
         ListenPortalSettings();
+
+        // Listen to session manager for e.g. query-end
+        ListenSessionManager();
     }
 }
 
@@ -2502,23 +2630,24 @@ void GtkSalFrame::ShowFullScreen( bool bFullScreen, sal_Int32 nScreen )
     }
 }
 
-void GtkSalFrame::StartPresentation( bool bStart )
+void GtkSalFrame::SessionManagerInhibit(bool bStart, ApplicationInhibitFlags eType, std::u16string_view sReason, const char* application_id)
 {
-    std::optional<guint> aWindow;
+    guint nWindow(0);
     std::optional<Display*> aDisplay;
 
-    bool bX11 = DLSYM_GDK_IS_X11_DISPLAY(getGdkDisplay());
-    if (bX11)
+    if (DLSYM_GDK_IS_X11_DISPLAY(getGdkDisplay()))
     {
-        aWindow = GtkSalFrame::GetNativeWindowHandle(m_pWindow);
+        nWindow = GtkSalFrame::GetNativeWindowHandle(m_pWindow);
         aDisplay = gdk_x11_display_get_xdisplay(getGdkDisplay());
     }
 
-    m_ScreenSaverInhibitor.inhibit( bStart,
-                                    u"presentation",
-                                    bX11,
-                                    aWindow,
-                                    aDisplay );
+    m_SessionManagerInhibitor.inhibit(bStart, sReason, eType,
+                                      nWindow, aDisplay, application_id);
+}
+
+void GtkSalFrame::StartPresentation( bool bStart )
+{
+    SessionManagerInhibit(bStart, APPLICATION_INHIBIT_IDLE, u"presentation", nullptr);
 }
 
 void GtkSalFrame::SetAlwaysOnTop( bool bOnTop )
@@ -2755,7 +2884,7 @@ OUString GtkSalFrame::GetKeyName( sal_uInt16 nKeyCode )
     KeyCodeToGdkKey(nKeyCode, &nGtkKeyCode, &nGtkModifiers );
 
     gchar* pName = gtk_accelerator_get_label(nGtkKeyCode, nGtkModifiers);
-    OUString aRet(pName, rtl_str_getLength(pName), RTL_TEXTENCODING_UTF8);
+    OUString aRet = OStringToOUString(pName, RTL_TEXTENCODING_UTF8);
     g_free(pName);
     return aRet;
 }
@@ -4901,7 +5030,7 @@ public:
             OUString aStr;
             gchar *pText = reinterpret_cast<gchar*>(gtk_selection_data_get_text(m_pData));
             if (pText)
-                aStr = OUString(pText, rtl_str_getLength(pText), RTL_TEXTENCODING_UTF8);
+                aStr = OStringToOUString(pText, RTL_TEXTENCODING_UTF8);
             g_free(pText);
             aRet <<= aStr.replaceAll("\r\n", "\n");
         }

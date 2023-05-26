@@ -18,7 +18,7 @@
  */
 
 #include <DataSeries.hxx>
-#include "DataSeriesProperties.hxx"
+#include <DataSeriesProperties.hxx>
 #include "DataPointProperties.hxx"
 #include <CharacterProperties.hxx>
 #include <UserDefinedProperties.hxx>
@@ -46,9 +46,8 @@ using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
 using ::osl::MutexGuard;
 
-namespace
+namespace chart
 {
-
 const ::chart::tPropertyValueMap & StaticDataSeriesDefaults()
 {
     static const ::chart::tPropertyValueMap aStaticDefaults = []()
@@ -64,6 +63,10 @@ const ::chart::tPropertyValueMap & StaticDataSeriesDefaults()
         }();
     return aStaticDefaults;
 };
+} // namespace chart
+
+namespace
+{
 
 ::cppu::OPropertyArrayHelper& StaticDataSeriesInfoHelper()
 {
@@ -683,6 +686,8 @@ OUString DataSeries::getLabelForRole( const OUString & rLabelSequenceRole )
 
 static bool lcl_SequenceHasUnhiddenData( const uno::Reference< chart2::data::XDataSequence >& xDataSequence )
 {
+    if (!xDataSequence.is())
+        return false;
     uno::Reference< beans::XPropertySet > xProp( xDataSequence, uno::UNO_QUERY );
     if( xProp.is() )
     {

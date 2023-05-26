@@ -133,6 +133,40 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf106234)
                 "width", "7881");
 }
 
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf155324)
+{
+    createSwDoc("tox-update-wrong-pages.odt");
+
+    dispatchCommand(mxComponent, ".uno:UpdateAllIndexes", {});
+
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // the problem was that the first entry was on page 7, 2nd on page 9 etc.
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[1]/SwParaPortion/SwLineLayout/SwLinePortion[1]",
+                "portion", "Foo");
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[1]/SwParaPortion/SwLineLayout/SwLinePortion[2]",
+                "portion", "5");
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[2]/SwParaPortion/SwLineLayout/SwLinePortion[1]",
+                "portion", "bar");
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[2]/SwParaPortion/SwLineLayout/SwLinePortion[2]",
+                "portion", "7");
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[3]/SwParaPortion/SwLineLayout/SwLinePortion[1]",
+                "portion", "Three");
+    assertXPath(pXmlDoc,
+                "/root/page[1]/body/section[2]/txt[3]/SwParaPortion/SwLineLayout/SwLinePortion[2]",
+                "portion", "7");
+
+    // check first content page has the footnotes
+    assertXPath(pXmlDoc, "/root/page[5]/body/txt[1]/SwParaPortion/SwLineLayout", "portion", "Foo");
+    assertXPath(pXmlDoc, "/root/page[4]/ftncont", 0);
+    assertXPath(pXmlDoc, "/root/page[5]/ftncont/ftn", 5);
+}
+
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf120287b)
 {
     createSwDoc("tdf120287b.fodt");
@@ -169,8 +203,8 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf122878)
     for (sal_Int32 i = 1; i <= nFirstPageParaCount; ++i)
     {
         const OString xPath = "/root/page[1]/body/txt[" + OString::number(i) + "]/infos/bounds";
-        const sal_Int32 nTxtBottom = getXPath(pXmlDoc, xPath.getStr(), "top").toInt32()
-                                     + getXPath(pXmlDoc, xPath.getStr(), "height").toInt32();
+        const sal_Int32 nTxtBottom = getXPath(pXmlDoc, xPath, "top").toInt32()
+                                     + getXPath(pXmlDoc, xPath, "height").toInt32();
         // No body paragraphs should overlap the table in the footer
         CPPUNIT_ASSERT_MESSAGE(OString("testing paragraph #" + OString::number(i)).getStr(),
                                nTxtBottom <= nTblTop);
@@ -1260,7 +1294,7 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf128959)
                 "portion", "amet commodo magna eros quis urna.");
 
     // Also check that the widow control for the paragraph is not turned off:
-    SwFrameFormats& rTableFormats = *pDocument->GetTableFrameFormats();
+    sw::TableFrameFormats& rTableFormats = *pDocument->GetTableFrameFormats();
     SwFrameFormat* pTableFormat = rTableFormats[0];
     SwTable* pTable = SwTable::FindTable(pTableFormat);
     const SwTableBox* pCell = pTable->GetTableBox("A1");
@@ -1572,6 +1606,75 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf54465_ColumnsWithFootnoteDoNotOccup
     CPPUNIT_ASSERT(pDoc);
     pXmlDoc = parseLayoutDump();
     assertXPath(pXmlDoc, "/root/page", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf138124)
+{
+    // When the only portion after the footnote number is a FlyCnt, and it doesn't fit into
+    // the page width, it should be moved to the next line without the footnote number, and
+    // not loop, nor OOM, nor fail assertions.
+
+    createSwDoc("wideBoxInFootnote.fodt");
+    Scheduler::ProcessEventsToIdle();
+
+    // Without the fix in place, the layout would loop, creating new FootnoteNum portions
+    // indefinitely, until OOM.
+    // If the footnote paragraph had no orphan control, then the loop would finally end,
+    // but an assertion in SwTextPainter::DrawTextLine would fail during paint.
+
+    xmlDocUniquePtr pXml = parseLayoutDump();
+    assertXPath(pXml, "/root/page", 1);
+    assertXPath(pXml, "/root/page/ftncont/ftn/txt/anchored", 1);
+
+    // And finally, if there were no assertion in SwTextPainter::DrawTextLine, it would have
+    // produced multiple lines with FootnoteNum portions, failing the following check like
+    // - Expected: 1
+    // - Actual  : 49
+
+    assertXPath(pXml,
+                "/root/page/ftncont/ftn/txt//SwFieldPortion[@type='PortionType::FootnoteNum']", 1);
+    assertXPath(pXml, "/root/page/ftncont/ftn/txt//SwLinePortion[@type='PortionType::FlyCnt']", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter3, testTdf154113)
+{
+    createSwDoc("three_sections.fodt");
+    Scheduler::ProcessEventsToIdle();
+
+    dispatchCommand(mxComponent, ".uno:GoToStartOfDoc", {});
+    dispatchCommand(mxComponent, ".uno:GoToNextPara", {});
+    dispatchCommand(mxComponent, ".uno:EndOfDocumentSel", {}); // to the end of current section!
+    dispatchCommand(mxComponent, ".uno:EndOfDocumentSel", {}); // to the end of the document.
+
+    auto xModel = mxComponent.queryThrow<frame::XModel>();
+    auto xSelected = xModel->getCurrentSelection().queryThrow<container::XIndexAccess>();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xSelected->getCount());
+    auto xRange = xSelected->getByIndex(0).queryThrow<text::XTextRange>();
+    CPPUNIT_ASSERT_EQUAL(OUString("<-- Start selection here. Section1" SAL_NEWLINE_STRING
+                                  "Section2" SAL_NEWLINE_STRING "Section3. End selection here -->"),
+                         xRange->getString());
+
+    dispatchCommand(mxComponent, ".uno:Cut", {});
+
+    xSelected = xModel->getCurrentSelection().queryThrow<container::XIndexAccess>();
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(1), xSelected->getCount());
+    xRange = xSelected->getByIndex(0).queryThrow<text::XTextRange>();
+    CPPUNIT_ASSERT_EQUAL(OUString(), xRange->getString());
+
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    xmlDocUniquePtr pXml = parseLayoutDump();
+
+    // Without the fix in place, this would fail with
+    // - Expected: 3
+    // - Actual  : 2
+    assertXPath(pXml, "/root/page/body/section", 3);
+    assertXPath(pXml, "/root/page/body/section[1]/txt/SwParaPortion/SwLineLayout", "portion",
+                "<-- Start selection here. Section1");
+    assertXPath(pXml, "/root/page/body/section[2]/txt/SwParaPortion/SwLineLayout", "portion",
+                "Section2");
+    assertXPath(pXml, "/root/page/body/section[3]/txt/SwParaPortion/SwLineLayout", "portion",
+                "Section3. End selection here -->");
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -65,8 +65,8 @@ CPPUNIT_TEST_FIXTURE(Test, testRelativeKeepAspect)
     // Then make sure that the aspect ratio of the image is kept:
     auto pTextDocument = dynamic_cast<SwXTextDocument*>(mxComponent.get());
     SwDoc* pDoc = pTextDocument->GetDocShell()->GetDoc();
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
-    const SwFrameFormat* pFormat = rFormats[0];
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto pFormat = rFormats[0];
     const SwFormatFrameSize& rSize = pFormat->GetFrameSize();
     // Without the accompanying fix in place, this test would have failed with:
     // - Expected: 255
@@ -86,8 +86,8 @@ CPPUNIT_TEST_FIXTURE(Test, testRelativeKeepAspectImage)
     // Then make sure that the aspect ratio of the image is kept:
     auto pTextDocument = dynamic_cast<SwXTextDocument*>(mxComponent.get());
     SwDoc* pDoc = pTextDocument->GetDocShell()->GetDoc();
-    const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
-    const SwFrameFormat* pFormat = rFormats[0];
+    const auto& rFormats = *pDoc->GetSpzFrameFormats();
+    const auto pFormat = rFormats[0];
     const SwFormatFrameSize& rSize = pFormat->GetFrameSize();
     // Without the accompanying fix in place, this test would have failed with:
     // - Expected: 255
@@ -236,7 +236,7 @@ CPPUNIT_TEST_FIXTURE(Test, testCenteredTableCSSImport)
 
     // Then make sure that the table is centered:
     SwDoc* pDoc = getSwDoc();
-    const SwFrameFormats& rTableFormats = *pDoc->GetTableFrameFormats();
+    const sw::TableFrameFormats& rTableFormats = *pDoc->GetTableFrameFormats();
     const SwFrameFormat* pTableFormat = rTableFormats[0];
     sal_Int16 eHoriOrient = pTableFormat->GetHoriOrient().GetHoriOrient();
     // Without the accompanying fix in place, this test would have failed with:

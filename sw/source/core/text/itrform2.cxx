@@ -540,6 +540,15 @@ void SwTextFormatter::BuildPortions( SwTextFormatInfo &rInf )
                     SwKernPortion* pKrn =
                         new SwKernPortion( *rInf.GetLast(), nLstHeight,
                                            pLast->InFieldGrp() && pPor->InFieldGrp() );
+
+                    // ofz#58550 Direct-leak, pKrn adds itself as the NextPortion
+                    // of rInf.GetLast(), but may use CopyLinePortion to add a copy
+                    // of itself, which will then be left dangling with the following
+                    // SetNextPortion(nullptr)
+                    SwLinePortion *pNext = rInf.GetLast()->GetNextPortion();
+                    if (pNext != pKrn)
+                        delete pNext;
+
                     rInf.GetLast()->SetNextPortion( nullptr );
                     InsertPortion( rInf, pKrn );
                 }
@@ -1064,11 +1073,19 @@ bool SwContentControlPortion::DescribePDFControl(const SwTextPaintInfo& rInf) co
     auto pTextFrame = const_cast<SwTextFrame*>(rInf.GetTextFrame());
     SwTextSizeInfo aInf(pTextFrame);
     SwTextCursor aLine(pTextFrame, &aInf);
-    SwRect aStartRect;
+    SwRect aStartRect, aEndRect;
     aLine.GetCharRect(&aStartRect, nViewStart);
-    aLocation = aStartRect;
-    SwRect aEndRect;
     aLine.GetCharRect(&aEndRect, nViewEnd);
+
+    // Handling RTL text direction
+    if(rInf.GetTextFrame()->IsRightToLeft())
+    {
+        rInf.GetTextFrame()->SwitchLTRtoRTL( aStartRect );
+        rInf.GetTextFrame()->SwitchLTRtoRTL( aEndRect );
+    }
+    // TODO: handle rInf.GetTextFrame()->IsVertical()
+
+    aLocation = aStartRect;
     aLocation.Union(aEndRect);
     pDescriptor->Location = aLocation.SVRect();
 
@@ -1914,6 +1931,7 @@ TextFrameIndex SwTextFormatter::FormatLine(TextFrameIndex const nStartPos)
 
         // These values must not be reset by FormatReset();
         const bool bOldNumDone = GetInfo().IsNumDone();
+        const bool bOldFootnoteDone = GetInfo().IsFootnoteDone();
         const bool bOldArrowDone = GetInfo().IsArrowDone();
         const bool bOldErgoDone = GetInfo().IsErgoDone();
 
@@ -1921,6 +1939,7 @@ TextFrameIndex SwTextFormatter::FormatLine(TextFrameIndex const nStartPos)
         FormatReset( GetInfo() );
 
         GetInfo().SetNumDone( bOldNumDone );
+        GetInfo().SetFootnoteDone(bOldFootnoteDone);
         GetInfo().SetArrowDone( bOldArrowDone );
         GetInfo().SetErgoDone( bOldErgoDone );
 
@@ -1978,7 +1997,15 @@ TextFrameIndex SwTextFormatter::FormatLine(TextFrameIndex const nStartPos)
                      || GetInfo().CheckFootnotePortion(m_pCurr);
             if( bBuild )
             {
-                GetInfo().SetNumDone( bOldNumDone );
+                // fdo44018-2.doc: only restore m_bNumDone if a SwNumberPortion will be truncated
+                for (SwLinePortion * pPor = m_pCurr->GetNextPortion(); pPor; pPor = pPor->GetNextPortion())
+                {
+                    if (pPor->InNumberGrp())
+                    {
+                        GetInfo().SetNumDone( bOldNumDone );
+                        break;
+                    }
+                }
                 GetInfo().ResetMaxWidthDiff();
 
                 // delete old rest
@@ -2728,12 +2755,12 @@ void SwTextFormatter::CalcFlyWidth( SwTextFormatInfo &rInf )
         if( GetTextFrame()->getFramePrintArea().Left() < 0 )
             nFrameLeft += GetTextFrame()->getFramePrintArea().Left();
         if( aInter.Left() < nFrameLeft )
-            aInter.Left( nFrameLeft );
+            aInter.Left(nFrameLeft); // both sets left and reduces width
 
         tools::Long nAddMar = 0;
-        if ( m_pFrame->IsRightToLeft() )
+        if (GetTextFrame()->IsRightToLeft())
         {
-            nAddMar = m_pFrame->getFrameArea().Right() - Right();
+            nAddMar = GetTextFrame()->getFrameArea().Right() - Right();
             if ( nAddMar < 0 )
                 nAddMar = 0;
         }

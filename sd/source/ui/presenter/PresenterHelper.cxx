@@ -24,7 +24,8 @@
 #include "PresenterHelper.hxx"
 #include "PresenterCanvas.hxx"
 #include <cppcanvas/vclfactory.hxx>
-#include <com/sun/star/awt/XWindowPeer.hpp>
+#include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/window.hxx>
@@ -53,6 +54,18 @@ PresenterHelper::~PresenterHelper()
 //----- XInitialize -----------------------------------------------------------
 
 void SAL_CALL PresenterHelper::initialize (const Sequence<Any>&) {}
+
+OUString PresenterHelper::getImplementationName() {
+    return "com.sun.star.comp.Draw.PresenterHelper";
+}
+
+sal_Bool PresenterHelper::supportsService(OUString const & ServiceName) {
+    return cppu::supportsService(this, ServiceName);
+}
+
+css::uno::Sequence<OUString> PresenterHelper::getSupportedServiceNames() {
+    return {"com.sun.star.drawing.PresenterHelper"};
+}
 
 //----- XPaneHelper ----------------------------------------------------
 

@@ -76,6 +76,8 @@ using SwCurrShells = std::set<CurrShell*>;
 
 class SwSectionFrame;
 using SwDestroyList = o3tl::sorted_vector<SwSectionFrame*>;
+class SwFlyFrame;
+using SwFlyDestroyList = o3tl::sorted_vector<SwFlyFrame*>;
 
 /// The root element of a Writer document layout. Lower frames are expected to
 /// be SwPageFrame instances.
@@ -172,6 +174,7 @@ class SW_DLLPUBLIC SwRootFrame final : public SwLayoutFrame
     SdrPage *mpDrawPage;
 
     std::unique_ptr<SwDestroyList> mpDestroy;
+    std::unique_ptr<SwFlyDestroyList> mpFlyDestroy;
 
     sal_uInt16  mnPhyPageNums; /// Page count
     sal_uInt16 mnAccessibleShells; // Number of accessible shells
@@ -180,6 +183,8 @@ class SW_DLLPUBLIC SwRootFrame final : public SwLayoutFrame
     void ImplInvalidateBrowseWidth();
 
     void DeleteEmptySct_(); // Destroys the registered SectionFrames
+    /// Destroys the registered FlyFrames.
+    void DeleteEmptyFlys_();
     void RemoveFromList_( SwSectionFrame* pSct ); // Removes SectionFrames from the Delete List
 
     virtual void DestroyImpl() override;
@@ -218,7 +223,7 @@ public:
      * automatically in the EndAllAction.
      */
     void StartAllAction();
-    void EndAllAction( bool bVirDev = false );
+    void EndAllAction();
 
     /**
      * Certain UNO Actions (e.g. table cursor) require that all Actions are reset temporarily
@@ -381,7 +386,11 @@ public:
      * destroyed later on or deregistered.
      */
     void InsertEmptySct( SwSectionFrame* pDel );
+    /// Empty SwFlyFrames are registered here for deletion and destroyed later if they are not
+    /// de-registered in the meantime.
+    void InsertEmptyFly(SwFlyFrame* pDel);
     void DeleteEmptySct() { if( mpDestroy ) DeleteEmptySct_(); }
+    void DeleteEmptyFlys() { if( mpFlyDestroy ) DeleteEmptyFlys_(); }
     void RemoveFromList( SwSectionFrame* pSct ) { if( mpDestroy ) RemoveFromList_( pSct ); }
 #ifdef DBG_UTIL
     bool IsInDelList( SwSectionFrame* pSct ) const;

@@ -904,10 +904,6 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf144244)
 
     CPPUNIT_ASSERT_EQUAL(OUString("x"), pDoc->GetString(ScAddress(0, 0, 0)));
 
-    // FIXME: validation fails with
-    // Error: unexpected attribute "drawooo:display"
-    skipValidation();
-
     // Without the fix in place, this test would have crashed
     saveAndReload("calc8");
     pModelObj = comphelper::getFromUnoTunnel<ScModelObj>(mxComponent);
@@ -1290,6 +1286,22 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf146994)
     CPPUNIT_ASSERT_EQUAL(OUString("Sheet1.D3:Sheet1.D4"), aMarkedAreaString);
 }
 
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf154991)
+{
+    createScDoc("tdf154991.ods");
+    ScDocument* pDoc = getScDoc();
+
+    goToCell("A1");
+    dispatchCommand(mxComponent, ".uno:SelectColumn", {});
+
+    // Without the fix in place, this test would have crashed here
+    dispatchCommand(mxComponent, ".uno:HideColumn", {});
+    CPPUNIT_ASSERT(pDoc->ColHidden(0, 0));
+
+    dispatchCommand(mxComponent, ".uno:Undo", {});
+    CPPUNIT_ASSERT(!pDoc->ColHidden(0, 0));
+}
+
 CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf95306)
 {
     createScDoc();
@@ -1651,6 +1663,19 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testPasteAsLink)
                                  WEIGHT_NORMAL, aFont.GetWeight());
 }
 
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf119659)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    insertArrayToCell("A1:C1", u"={1,2,3}");
+
+    insertStringToCell("A2", u"=LOOKUP(3; A1:C1; {1,2})");
+
+    // Without the fix in place, this test would have crashed here
+    CPPUNIT_ASSERT_EQUAL(OUString("#N/A"), pDoc->GetString(ScAddress(0, 1, 0)));
+}
+
 CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf131442)
 {
     createScDoc();
@@ -1862,6 +1887,68 @@ CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf150219)
     dispatchCommand(mxComponent, ".uno:Cut", {});
 
     CPPUNIT_ASSERT_EQUAL(OUString(""), pDoc->GetString(ScAddress(0, 0, 1)));
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf153790)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    insertStringToCell("A1", u"=SUM($Sheet1.B1:C1)");
+
+    CPPUNIT_ASSERT_EQUAL(OUString("0"), pDoc->GetString(ScAddress(0, 0, 0)));
+
+    goToCell("A1");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("A2");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    CPPUNIT_ASSERT_EQUAL(OUString("=SUM($Sheet1.B2:C2)"), pDoc->GetFormula(0, 1, 0));
+
+    goToCell("A1");
+    dispatchCommand(mxComponent, ".uno:Cut", {});
+    goToCell("A3");
+    dispatchCommand(mxComponent, ".uno:Paste", {});
+
+    // Without the fix in place, this test would have failed with
+    // - Expected: =SUM($Sheet1.B1:C1)
+    // - Actual  : =SUM($Sheet1.B1:$Sheet1.C1)
+    CPPUNIT_ASSERT_EQUAL(OUString("=SUM($Sheet1.B1:C1)"), pDoc->GetFormula(0, 2, 0));
+}
+
+CPPUNIT_TEST_FIXTURE(ScUiCalcTest, testTdf141440)
+{
+    createScDoc();
+    ScDocument* pDoc = getScDoc();
+
+    // Insert a note to cell A1
+    goToCell("A1");
+    uno::Sequence<beans::PropertyValue> aArgs
+        = comphelper::InitPropertySequence({ { "Text", uno::Any(OUString("Note in A1")) } });
+    dispatchCommand(mxComponent, ".uno:InsertAnnotation", aArgs);
+
+    // Insert a formula to cell A2
+    insertStringToCell("A2", u"=1+1");
+    CPPUNIT_ASSERT_EQUAL(OUString("2"), pDoc->GetString(ScAddress(0, 1, 0)));
+
+    // Copy content of A2 to A1 using paste special command as a formula (Flags F)
+    goToCell("A2");
+    dispatchCommand(mxComponent, ".uno:Copy", {});
+    goToCell("A1");
+    aArgs = comphelper::InitPropertySequence(
+        { { "Flags", uno::Any(OUString("F")) },
+          { "FormulaCommand", uno::Any(sal_uInt16(ScPasteFunc::ADD)) },
+          { "SkipEmptyCells", uno::Any(false) },
+          { "Transpose", uno::Any(false) },
+          { "AsLink", uno::Any(false) },
+          { "MoveMode", uno::Any(sal_uInt16(InsCellCmd::INS_NONE)) } });
+    dispatchCommand(mxComponent, ".uno:InsertContents", aArgs);
+
+    // Check if string in cell A2 was copied to cell A1
+    CPPUNIT_ASSERT_EQUAL(OUString("2"), pDoc->GetString(ScAddress(0, 0, 0)));
+    // Without the fix in place, there would be no note in cell A1 after using paste special
+    CPPUNIT_ASSERT_MESSAGE("There should be a note on A1", pDoc->HasNote(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT_EQUAL(OUString("Note in A1"), pDoc->GetNote(ScAddress(0, 0, 0))->GetText());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

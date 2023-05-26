@@ -136,6 +136,7 @@ void SwHTMLWriter::OutAndSetDefList( sal_uInt16 nNewLvl )
             if( m_bLFPossible )
                 OutNewLine();
             HTMLOutFuncs::Out_AsciiTag( Strm(), Concat2View(GetNamespace() + OOO_STRING_SVTOOLS_HTML_deflist) );
+            HTMLOutFuncs::Out_AsciiTag( Strm(), Concat2View(GetNamespace() + OOO_STRING_SVTOOLS_HTML_dd) );
             IncIndentLevel();
             m_bLFPossible = true;
         }
@@ -147,6 +148,7 @@ void SwHTMLWriter::OutAndSetDefList( sal_uInt16 nNewLvl )
             DecIndentLevel();
             if( m_bLFPossible )
                 OutNewLine();
+            HTMLOutFuncs::Out_AsciiTag( Strm(), Concat2View(GetNamespace() + OOO_STRING_SVTOOLS_HTML_dd), false );
             HTMLOutFuncs::Out_AsciiTag( Strm(), Concat2View(GetNamespace() + OOO_STRING_SVTOOLS_HTML_deflist), false );
             m_bLFPossible = true;
         }
@@ -613,7 +615,7 @@ static void OutHTML_SwFormat( SwHTMLWriter& rWrt, const SwFormat& rFormat,
         // output a line break (without indentation) at the beginning of the
         // paragraph, only
         rInfo.aToken.clear();   // don't output an end tag
-        rWrt.Strm().WriteCharPtr( SAL_NEWLINE_STRING );
+        rWrt.Strm().WriteOString( SAL_NEWLINE_STRING );
 
         return;
     }
@@ -686,12 +688,11 @@ static void OutHTML_SwFormat( SwHTMLWriter& rWrt, const SwFormat& rFormat,
     if( nNewDefListLvl != rWrt.m_nDefListLvl )
         rWrt.OutAndSetDefList( nNewDefListLvl );
 
-    bool bAtLeastOneNumbered = false;
     // if necessary, start a bulleted or numbered list
     if( rInfo.bInNumberBulletList )
     {
         OSL_ENSURE( !rWrt.m_nDefListLvl, "DL cannot be inside OL!" );
-        OutHTML_NumberBulletListStart( rWrt, aNumInfo, bAtLeastOneNumbered );
+        OutHTML_NumberBulletListStart( rWrt, aNumInfo );
 
         if( bNumbered )
         {
@@ -761,18 +762,26 @@ static void OutHTML_SwFormat( SwHTMLWriter& rWrt, const SwFormat& rFormat,
 
     // if necessary, start a new list item
     bool bNumberedForListItem = bNumbered;
-    if (!bNumberedForListItem && rWrt.mbXHTML && bAtLeastOneNumbered)
+    if (!bNumberedForListItem)
     {
-        // OutHTML_NumberBulletListEnd() will end a list item if at least one text node is numbered
-        // in the list, so open the list item with the same condition here.
-        bNumberedForListItem = true;
+        // Open a list also for the leading unnumbered nodes (= list headers in ODF terminology);
+        // to do that, detect if this unnumbered node is the first in this list
+        const auto& rPrevListInfo = rWrt.GetNumInfo();
+        if (rPrevListInfo.GetNumRule() != aNumInfo.GetNumRule() || aNumInfo.IsRestart(rPrevListInfo)
+            || rPrevListInfo.GetDepth() < aNumInfo.GetDepth())
+            bNumberedForListItem = true;
     }
     if( rInfo.bInNumberBulletList && bNumberedForListItem )
     {
         HtmlWriter html(rWrt.Strm(), rWrt.maNamespace);
         html.prettyPrint(rWrt.m_bPrettyPrint);
         html.start(OOO_STRING_SVTOOLS_HTML_li);
-        if( USHRT_MAX != nNumStart )
+        if (!bNumbered)
+        {
+            // Handles list headers (<text:list-header> ODF element)
+            html.attribute(OOO_STRING_SVTOOLS_HTML_O_style, "display: block");
+        }
+        else if (USHRT_MAX != nNumStart)
             html.attribute(OOO_STRING_SVTOOLS_HTML_O_value, OString::number(nNumStart));
         // Finish the opening element, but don't close it.
         html.characters("");
@@ -984,7 +993,7 @@ static void OutHTML_SwFormatOff( SwHTMLWriter& rWrt, const SwHTMLTextCollOutputI
             const SwHTMLNumRuleInfo& rNRInfo = rWrt.GetNumInfo();
             if( rNextInfo.GetNumRule() != rNRInfo.GetNumRule() ||
                 rNextInfo.GetDepth() != rNRInfo.GetDepth() ||
-                rNextInfo.IsNumbered() || rNextInfo.IsRestart() )
+                rNextInfo.IsNumbered() || rNextInfo.IsRestart(rNRInfo) )
                 rWrt.ChangeParaToken( HtmlTokenId::NONE );
             OutHTML_NumberBulletListEnd( rWrt, rNextInfo );
         }
@@ -2496,7 +2505,7 @@ SwHTMLWriter& OutHTML_SwTextNode( SwHTMLWriter& rWrt, const SwContentNode& rNode
                                 // be used as a replacement.
                                 for (sal_Int32 i = 0; i < *rWrt.m_nLeadingTabWidth; ++i)
                                 {
-                                    rWrt.Strm().WriteCharPtr("&#160;");
+                                    rWrt.Strm().WriteOString("&#160;");
                                 }
                                 bConsumed = true;
                             }
@@ -2548,7 +2557,7 @@ SwHTMLWriter& OutHTML_SwTextNode( SwHTMLWriter& rWrt, const SwContentNode& rNode
         {
             // If the last paragraph of a table cell is empty and we export
             // for the MS-IE, we write a &nbsp; instead of a <BR>
-            rWrt.Strm().WriteChar( '&' ).WriteCharPtr( OOO_STRING_SVTOOLS_HTML_S_nbsp ).WriteChar( ';' );
+            rWrt.Strm().WriteChar( '&' ).WriteOString( OOO_STRING_SVTOOLS_HTML_S_nbsp ).WriteChar( ';' );
         }
         else
         {
@@ -2727,7 +2736,7 @@ static SwHTMLWriter& OutHTML_SvxFont( SwHTMLWriter& rWrt, const SfxPoolItem& rHt
                            " " OOO_STRING_SVTOOLS_HTML_O_style "=\"font-family: ";
             rWrt.Strm().WriteOString(sOut);
             HTMLOutFuncs::Out_String(rWrt.Strm(), aNames)
-                .WriteCharPtr("\">");
+                .WriteOString("\">");
         }
         else
         {
@@ -2735,7 +2744,7 @@ static SwHTMLWriter& OutHTML_SvxFont( SwHTMLWriter& rWrt, const SfxPoolItem& rHt
                 OOO_STRING_SVTOOLS_HTML_O_face "=\"";
             rWrt.Strm().WriteOString( sOut );
             HTMLOutFuncs::Out_String( rWrt.Strm(), aNames )
-               .WriteCharPtr( "\">" );
+               .WriteOString( "\">" );
         }
     }
     else
@@ -2920,8 +2929,7 @@ static SwHTMLWriter& OutHTML_SwFlyCnt( SwHTMLWriter& rWrt, const SfxPoolItem& rH
     const SwFrameFormat& rFormat = *rFlyCnt.GetFrameFormat();
     const SdrObject *pSdrObj = nullptr;
 
-    SwHTMLFrameType eType =
-        static_cast<SwHTMLFrameType>(rWrt.GuessFrameType( rFormat, pSdrObj ));
+    SwHTMLFrameType eType = rWrt.GuessFrameType( rFormat, pSdrObj );
     AllHtmlFlags nMode = aHTMLOutFrameAsCharTable[eType][rWrt.m_nExportMode];
     rWrt.OutFrameFormat( nMode, rFormat, pSdrObj );
     return rWrt;
@@ -3056,7 +3064,7 @@ SwHTMLWriter& OutHTML_INetFormat( SwHTMLWriter& rWrt, const SwFormatINetFormat& 
     if( bEvents )
         HTMLOutFuncs::Out_Events( rWrt.Strm(), *pMacTable, aAnchorEventTable,
                                   rWrt.m_bCfgStarBasic );
-    rWrt.Strm().WriteCharPtr( ">" );
+    rWrt.Strm().WriteOString( ">" );
 
     return rWrt;
 }

@@ -50,7 +50,7 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
-#include <boost/lexical_cast.hpp>
+#include <com/sun/star/style/BreakType.hpp>
 #include <officecfg/Office/Writer.hxx>
 
 #ifdef DBG_UTIL
@@ -58,22 +58,6 @@
 #include <rtl/ustring.hxx>
 #include <utility>
 #endif
-
-namespace
-{
-bool IsFlySplitAllowed()
-{
-    bool bRet
-        = officecfg::Office::Writer::Filter::Import::DOCX::ImportFloatingTableAsSplitFly::get();
-
-    if (!bRet)
-    {
-        bRet = getenv("SW_FORCE_FLY_SPLIT") != nullptr;
-    }
-
-    return bRet;
-}
-}
 
 namespace writerfilter::dmapper {
 
@@ -374,29 +358,7 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
 
         comphelper::SequenceAsHashMap aGrabBag;
 
-        if (nullptr != m_rDMapper_Impl.getTableManager().getCurrentTableRealPosition())
-        {
-            TablePositionHandler *pTablePositions = m_rDMapper_Impl.getTableManager().getCurrentTableRealPosition();
-
-            uno::Sequence< beans::PropertyValue  > aGrabBagTS{
-                comphelper::makePropertyValue("bottomFromText", pTablePositions->getBottomFromText()),
-                comphelper::makePropertyValue("horzAnchor", pTablePositions->getHorzAnchor()),
-                comphelper::makePropertyValue("leftFromText", pTablePositions->getLeftFromText()),
-                comphelper::makePropertyValue("rightFromText", pTablePositions->getRightFromText()),
-                comphelper::makePropertyValue("tblpX", pTablePositions->getX()),
-                comphelper::makePropertyValue("tblpXSpec", pTablePositions->getXSpec()),
-                comphelper::makePropertyValue("tblpY", pTablePositions->getY()),
-                comphelper::makePropertyValue("tblpYSpec", pTablePositions->getYSpec()),
-                comphelper::makePropertyValue("topFromText", pTablePositions->getTopFromText()),
-                comphelper::makePropertyValue("vertAnchor", pTablePositions->getVertAnchor())
-            };
-
-            if (!IsFlySplitAllowed())
-            {
-                aGrabBag["TablePosition"] <<= aGrabBagTS;
-            }
-        }
-        else if (bConvertToFloatingInFootnote)
+        if (bConvertToFloatingInFootnote)
         {
             // define empty "TablePosition" to avoid export temporary floating
             aGrabBag["TablePosition"] = uno::Any();
@@ -1285,15 +1247,16 @@ static void lcl_convertFormulaRanges(const uno::Reference<text::XTextTable> & xT
                                         sLastCell = xCell->getPropertyValue("CellName").get<OUString>();
                                         if (sNextCell.isEmpty())
                                             sNextCell = sLastCell;
-                                        try
-                                        {
-                                            // accept numbers with comma and percent
-                                            OUString sCellText = xText->getString().replace(',', '.');
-                                            if (sCellText.endsWith("%"))
-                                                sCellText = sCellText.copy(0, sCellText.getLength()-1);
-                                            boost::lexical_cast<double>(sCellText);
-                                        }
-                                        catch( boost::bad_lexical_cast const& )
+
+                                        // accept numbers with comma and percent
+                                        OUString sCellText = xText->getString().replace(',', '.');
+                                        if (sCellText.endsWith("%"))
+                                            sCellText = sCellText.copy(0, sCellText.getLength()-1);
+
+                                        rtl_math_ConversionStatus eConversionStatus;
+                                        sal_Int32 nParsedEnd;
+                                        rtl::math::stringToDouble(sCellText, '.', ',', &eConversionStatus, &nParsedEnd);
+                                        if ( eConversionStatus != rtl_math_ConversionStatus_Ok || nParsedEnd == 0 )
                                         {
                                             if ( !bFoundFirst )
                                             {
@@ -1366,7 +1329,7 @@ static void lcl_convertFormulaRanges(const uno::Reference<text::XTextTable> & xT
     }
 }
 
-void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel, bool bTableStartsAtCellStart)
+void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel, bool /*bTableStartsAtCellStart*/)
 {
 #ifdef DBG_UTIL
     TagLogger::getInstance().startElement("tablehandler.endTable");
@@ -1579,6 +1542,15 @@ void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel, bool bTab
             // A non-zero left margin would move the table out of the frame, move the frame itself instead.
             xTableProperties->setPropertyValue("LeftMargin", uno::Any(sal_Int32(0)));
 
+            style::BreakType eBreakType{};
+            xTableProperties->getPropertyValue("BreakType") >>= eBreakType;
+            if (eBreakType != style::BreakType_NONE)
+            {
+                // A break before the table was requested. Reset that break here, since the table
+                // will be at the start of the fly frame, not in the body frame.
+                xTableProperties->setPropertyValue("BreakType", uno::Any(style::BreakType_NONE));
+            }
+
             if (nestedTableLevel >= 2)
             {
                 // Floating tables inside a table always stay inside the cell.
@@ -1586,10 +1558,8 @@ void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel, bool bTab
                     comphelper::makePropertyValue("IsFollowingTextFlow", true));
             }
 
-            if (IsFlySplitAllowed())
-            {
-                aFrameProperties.push_back(comphelper::makePropertyValue("IsSplitAllowed", true));
-            }
+            // A text frame created for floating tables is always allowed to split.
+            aFrameProperties.push_back(comphelper::makePropertyValue("IsSplitAllowed", true));
 
             // In case the document ends with a table, we're called after
             // SectionPropertyMap::CloseSectionGroup(), so we'll have no idea
@@ -1604,40 +1574,30 @@ void DomainMapperTableHandler::endTable(unsigned int nestedTableLevel, bool bTab
             m_aTableProperties->getValue(TablePropertyMap::TABLE_WIDTH, nTableWidth);
             sal_Int32 nTableWidthType = text::SizeType::FIX;
             m_aTableProperties->getValue(TablePropertyMap::TABLE_WIDTH_TYPE, nTableWidthType);
-            // Split flys don't need to go via m_aPendingFloatingTables.
-            if (m_rDMapper_Impl.GetSectionContext() && nestedTableLevel <= 1 && !m_rDMapper_Impl.IsInHeaderFooter() && !IsFlySplitAllowed())
+            // m_xText points to the body text, get the current xText from m_rDMapper_Impl, in case e.g. we would be in a header.
+            uno::Reference<text::XTextAppendAndConvert> xTextAppendAndConvert(m_rDMapper_Impl.GetTopTextAppend(), uno::UNO_QUERY);
+            // Only execute the conversion for top-level tables.
+            uno::Reference<beans::XPropertySet> xFrameAnchor;
+            if (xTextAppendAndConvert.is() && nestedTableLevel <= 1)
             {
-                m_rDMapper_Impl.m_aPendingFloatingTables.emplace_back(xStart, xEnd,
-                                comphelper::containerToSequence(aFrameProperties),
-                                nTableWidth, nTableWidthType, bConvertToFloating);
+                std::deque<css::uno::Any> aFramedRedlines = m_rDMapper_Impl.m_aStoredRedlines[StoredRedlines::FRAME];
+                std::vector<sal_Int32> redPos, redLen;
+                std::vector<OUString> redCell;
+                std::vector<OUString> redTable;
+                BeforeConvertToTextFrame(aFramedRedlines, redPos, redLen, redCell, redTable);
+
+                uno::Reference<text::XTextContent> xContent = xTextAppendAndConvert->convertToTextFrame(xStart, xEnd, comphelper::containerToSequence(aFrameProperties));
+                xFrameAnchor.set(xContent->getAnchor(), uno::UNO_QUERY);
+
+                AfterConvertToTextFrame(m_rDMapper_Impl, aFramedRedlines, redPos, redLen, redCell, redTable);
             }
-            else
+
+            if (xFrameAnchor.is() && eBreakType != style::BreakType_NONE)
             {
-                // m_xText points to the body text, get the current xText from m_rDMapper_Impl, in case e.g. we would be in a header.
-                uno::Reference<text::XTextAppendAndConvert> xTextAppendAndConvert(m_rDMapper_Impl.GetTopTextAppend(), uno::UNO_QUERY);
-                // Only execute the conversion if the table is not anchored at
-                // the start of an outer table cell, that's not yet
-                // implemented.
-                // Multi-page floating tables works if an outer/toplevel table is floating, but not
-                // when an inner table would float.
-                bool bToplevelSplitFly = IsFlySplitAllowed() && nestedTableLevel <= 1;
-                if (xTextAppendAndConvert.is() && (!bTableStartsAtCellStart || bToplevelSplitFly))
-                {
-                    std::deque<css::uno::Any> aFramedRedlines = m_rDMapper_Impl.m_aStoredRedlines[StoredRedlines::FRAME];
-                    std::vector<sal_Int32> redPos, redLen;
-                    std::vector<OUString> redCell;
-                    std::vector<OUString> redTable;
-                    BeforeConvertToTextFrame(aFramedRedlines, redPos, redLen, redCell, redTable);
-
-                    xTextAppendAndConvert->convertToTextFrame(xStart, xEnd, comphelper::containerToSequence(aFrameProperties));
-
-                    AfterConvertToTextFrame(m_rDMapper_Impl, aFramedRedlines, redPos, redLen, redCell, redTable);
-                }
+                // A break before the table was requested. Restore that on the anchor.
+                xFrameAnchor->setPropertyValue("BreakType", uno::Any(eBreakType));
             }
         }
-
-        // We're right after a table conversion.
-        m_rDMapper_Impl.m_bConvertedTable = true;
     }
 
     m_aTableProperties.clear();

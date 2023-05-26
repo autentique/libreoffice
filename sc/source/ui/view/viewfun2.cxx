@@ -874,9 +874,7 @@ OUString ScViewFunc::GetAutoSumFormula( const ScRangeList& rRangeList, bool bSub
     ScCompiler aComp(rDoc, rAddr, aArray, rDoc.GetGrammar());
     OUStringBuffer aBuf;
     aComp.CreateStringFromTokenArray(aBuf);
-    OUString aFormula = aBuf.makeStringAndClear();
-    aBuf.append('=');
-    aBuf.append(aFormula);
+    aBuf.insert(0, "=");
     return aBuf.makeStringAndClear();
 }
 
@@ -1138,8 +1136,8 @@ void ScViewFunc::SetPrintRanges( bool bEntireSheet, const OUString* pPrint,
             pNewRanges->GetPrintRangesInfo(aJsonWriter);
 
             SfxViewShell* pViewShell = GetViewData().GetViewShell();
-            const std::string message = aJsonWriter.extractAsStdString();
-            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_PRINT_RANGES, message.c_str());
+            const OString message = aJsonWriter.finishAndGetAsOString();
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_PRINT_RANGES, message);
         }
 
         pDocSh->GetUndoManager()->AddUndoAction(
@@ -2116,7 +2114,7 @@ bool ScViewFunc::SearchAndReplace( const SvxSearchItem* pSearchItem,
             GetFrameWin()->LeaveWait();
             if (!bIsApi)
             {
-                GetViewData().GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, pSearchItem->GetSearchString().toUtf8().getStr());
+                GetViewData().GetViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, pSearchItem->GetSearchString().toUtf8());
                 SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
             }
 
@@ -2197,9 +2195,9 @@ bool ScViewFunc::SearchAndReplace( const SvxSearchItem* pSearchItem,
 
                 std::stringstream aStream;
                 boost::property_tree::write_json(aStream, aTree);
-                OString aPayload = aStream.str().c_str();
+                OString aPayload( aStream.str() );
                 SfxViewShell* pViewShell = GetViewData().GetViewShell();
-                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
+                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload);
 
                 // Trigger LOK_CALLBACK_TEXT_SELECTION now.
                 MarkDataChanged();

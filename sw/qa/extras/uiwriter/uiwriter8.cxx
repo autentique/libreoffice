@@ -21,7 +21,6 @@
 #include <comphelper/propertysequence.hxx>
 #include <boost/property_tree/json_parser.hpp>
 #include <frameformats.hxx>
-#include <swdtflvr.hxx>
 #include <tools/json_writer.hxx>
 #include <unotools/streamwrap.hxx>
 #include <sfx2/linkmgr.hxx>
@@ -1073,7 +1072,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf130805)
     createSwDoc("tdf130805.odt");
     SwDoc* pDoc = getSwDoc();
 
-    const SwFrameFormats& rFrmFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFrmFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT(rFrmFormats.size() >= size_t(o3tl::make_unsigned(1)));
     auto pShape = rFrmFormats.front();
     CPPUNIT_ASSERT(pShape);
@@ -1098,9 +1097,9 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf107893)
     SwDoc* pDoc = getSwDoc();
 
     //Get the format of the shape
-    const SwFrameFormats& rFrmFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFrmFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT(rFrmFormats.size() >= size_t(o3tl::make_unsigned(1)));
-    SwFrameFormat* pShape = rFrmFormats.front();
+    auto pShape = rFrmFormats.front();
     CPPUNIT_ASSERT(pShape);
 
     //Add a textbox
@@ -1151,9 +1150,9 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, TestTextBoxCrashAfterLineDel)
     SwDoc* pDoc = getSwDoc();
 
     // Get the format of the shape
-    const SwFrameFormats& rFrmFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFrmFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT(rFrmFormats.size() >= size_t(o3tl::make_unsigned(1)));
-    SwFrameFormat* pShape = rFrmFormats.front();
+    auto pShape = rFrmFormats.front();
     CPPUNIT_ASSERT(pShape);
 
     // Add a textbox
@@ -1634,15 +1633,15 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, testTdf132603)
 
     tools::JsonWriter aJsonWriter;
     pTextDoc->getPostIts(aJsonWriter);
-    char* pChar = aJsonWriter.extractData();
-    std::stringstream aStream(pChar);
-    free(pChar);
+    OString pChar = aJsonWriter.finishAndGetAsOString();
+    std::stringstream aStream((std::string(pChar)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     for (const boost::property_tree::ptree::value_type& rValue : aTree.get_child("comments"))
     {
         const boost::property_tree::ptree& rComment = rValue.second;
-        OString aText(rComment.get<std::string>("text").c_str());
+
+        OString aText(rComment.get<std::string>("text"));
         CPPUNIT_ASSERT_EQUAL(OString("Comment"), aText);
     }
 }
@@ -1975,7 +1974,7 @@ CPPUNIT_TEST_FIXTURE(SwUiWriterTest8, AtPageTextBoxCrash)
     SwDoc* pDoc = getSwDoc();
 
     // Get the format of the shape
-    const SwFrameFormats& rFrmFormats = *pDoc->GetSpzFrameFormats();
+    const auto& rFrmFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT(rFrmFormats.size() >= size_t(o3tl::make_unsigned(1)));
     auto pShape = rFrmFormats.front();
     CPPUNIT_ASSERT(pShape);

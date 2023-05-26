@@ -332,6 +332,7 @@
 #define RID_CUISTR_BOLD_UNDER                       NC_("RID_SVXSTR_BOLD_UNDER", "Automatic *bold*, /italic/, -strikeout- and _underline_")
 #define RID_CUISTR_NO_DBL_SPACES                    NC_("RID_SVXSTR_NO_DBL_SPACES", "Ignore double spaces")
 #define RID_CUISTR_DETECT_URL                       NC_("RID_SVXSTR_DETECT_URL", "URL Recognition")
+#define RID_CUISTR_DETECT_DOI                       NC_("RID_SVXSTR_DETECT_DOI", "DOI citation recognition")
 #define RID_CUISTR_DASH                             NC_("RID_SVXSTR_DASH", "Replace dashes")
 #define RID_CUISTR_CORRECT_ACCIDENTAL_CAPS_LOCK     NC_("RID_SVXSTR_CORRECT_ACCIDENTAL_CAPS_LOCK", "Correct accidental use of cAPS LOCK key")
 #define RID_CUISTR_NON_BREAK_SPACE                  NC_("RID_SVXSTR_NON_BREAK_SPACE", "Add non-breaking space before specific punctuation marks in French text")
@@ -403,11 +404,11 @@
 #define RID_CUISTR_CLICK_RESULT                     NC_("RID_CUISTR_CLICK_RESULT", "(Click on any test to view its resultant bitmap image)")
 #define RID_CUISTR_ZIPFAIL                          NC_("RID_CUISTR_ZIPFAIL", "Creation of ZIP file failed.")
 #define RID_CUISTR_SAVED                            NC_("RID_CUISTR_SAVED", "The results have been successfully saved in the file 'GraphicTestResults.zip'!")
+#define RID_CUISTR_OPT_READONLY                     NC_("RID_CUISTR_OPT_READONLY", "This property is locked for editing.")
 
 #define RID_LANGUAGETOOL_LEAVE_EMPTY                NC_("RID_LANGUAGETOOL_LEAVE_EMPTY", "Leave this field empty to use the free version")
 
 // Translatable names of color schemes
 #define RID_COLOR_SCHEME_LIBREOFFICE_AUTOMATIC      NC_("RID_COLOR_SCHEME_LIBREOFFICE_AUTOMATIC", "Automatic")
-#define RID_COLOR_SCHEME_LIBREOFFICE_DARK           NC_("RID_COLOR_SCHEME_LIBREOFFICE_DARK", "Dark")
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

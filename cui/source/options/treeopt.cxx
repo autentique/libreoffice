@@ -438,22 +438,22 @@ struct OptionsGroupInfo
         m_pModule( pMod ), m_nDialogId( nId ) {}
 };
 
-#define INI_LIST() \
-    , m_pParent           ( pParent )\
-    , sTitle              ( m_xDialog->get_title() )\
-    , bForgetSelection    ( false )\
-    , bIsFromExtensionManager( false ) \
-    , bIsForSetDocumentLanguage( false ) \
-    , bNeedsRestart ( false ) \
-    , eRestartReason( svtools::RESTART_REASON_NONE )
-
-void OfaTreeOptionsDialog::InitWidgets()
+// Basic ctor with common initialization
+OfaTreeOptionsDialog::OfaTreeOptionsDialog(weld::Window* pParent, bool fromExtensionManager)
+    : SfxOkDialogController(pParent, "cui/ui/optionsdialog.ui", "OptionsDialog")
+    , xOkPB(m_xBuilder->weld_button("ok"))
+    , xApplyPB(m_xBuilder->weld_button("apply"))
+    , xBackPB(m_xBuilder->weld_button("revert"))
+    , xTreeLB(m_xBuilder->weld_tree_view("pages"))
+    , xTabBox(m_xBuilder->weld_container("box"))
+    , m_pParent(pParent)
+    , sTitle(m_xDialog->get_title())
+    , bForgetSelection(false)
+    , bIsFromExtensionManager(fromExtensionManager)
+    , bIsForSetDocumentLanguage(false)
+    , bNeedsRestart(false)
+    , eRestartReason(svtools::RESTART_REASON_NONE)
 {
-    xOkPB = m_xBuilder->weld_button("ok");
-    xApplyPB = m_xBuilder->weld_button("apply");
-    xBackPB = m_xBuilder->weld_button("revert");
-    xTreeLB = m_xBuilder->weld_tree_view("pages");
-    xTabBox = m_xBuilder->weld_container("box");
     Size aSize(xTreeLB->get_approximate_digit_width() * 82, xTreeLB->get_height_rows(30));
 #if HAVE_FEATURE_GPGME
     // tdf#115015: make enough space for crypto settings (approx. 14 text edits + padding)
@@ -461,33 +461,32 @@ void OfaTreeOptionsDialog::InitWidgets()
 #endif
     xTabBox->set_size_request(aSize.Width(), aSize.Height());
     xTreeLB->set_size_request(xTreeLB->get_approximate_digit_width() * 35, aSize.Height());
+
+    // Init tree and handler
+    xTreeLB->set_help_id(HID_OFADLG_TREELISTBOX);
+    xTreeLB->connect_changed(LINK(this, OfaTreeOptionsDialog, ShowPageHdl_Impl));
+    xBackPB->connect_clicked(LINK(this, OfaTreeOptionsDialog, BackHdl_Impl));
+    xApplyPB->connect_clicked(LINK(this, OfaTreeOptionsDialog, ApplyHdl_Impl));
+    xOkPB->connect_clicked(LINK(this, OfaTreeOptionsDialog, ApplyHdl_Impl));
+    m_xDialog->connect_help(LINK(this, OfaTreeOptionsDialog, HelpHdl_Impl));
+
+    xTreeLB->set_accessible_name(sTitle);
 }
 
 // Ctor() with Frame -----------------------------------------------------
 OfaTreeOptionsDialog::OfaTreeOptionsDialog(weld::Window* pParent, const Reference< XFrame >& _xFrame, bool bActivateLastSelection)
-    : SfxOkDialogController(pParent, "cui/ui/optionsdialog.ui", "OptionsDialog")
-    INI_LIST()
+    : OfaTreeOptionsDialog(pParent, false)
 {
-    InitWidgets();
-
-    InitTreeAndHandler();
     Initialize( _xFrame );
     LoadExtensionOptions( u"" );
     if (bActivateLastSelection)
         ActivateLastSelection();
-
-    xTreeLB->set_accessible_name(m_xDialog->get_title());
 }
 
 // Ctor() with ExtensionId -----------------------------------------------
 OfaTreeOptionsDialog::OfaTreeOptionsDialog(weld::Window* pParent, std::u16string_view rExtensionId)
-    : SfxOkDialogController(pParent, "cui/ui/optionsdialog.ui", "OptionsDialog")
-    INI_LIST()
+    : OfaTreeOptionsDialog(pParent, !rExtensionId.empty())
 {
-    InitWidgets();
-
-    bIsFromExtensionManager = ( !rExtensionId.empty() );
-    InitTreeAndHandler();
     LoadExtensionOptions( rExtensionId );
     ActivateLastSelection();
 }
@@ -654,8 +653,8 @@ IMPL_LINK_NOARG(OfaTreeOptionsDialog, HelpHdl_Impl, weld::Widget&, bool)
         OptionsPageInfo* pPageInfo = weld::fromId<OptionsPageInfo*>(xTreeLB->get_id(*xCurrentPageEntry));
         if (pPageInfo->m_xPage)
         {
-            OString sHelpId(pPageInfo->m_xPage->GetHelpId());
-            pHelp->Start(OStringToOUString(sHelpId, RTL_TEXTENCODING_UTF8), m_xDialog.get());
+            OUString sHelpId(pPageInfo->m_xPage->GetHelpId());
+            pHelp->Start(sHelpId, m_xDialog.get());
             return false;
         }
     }
@@ -759,16 +758,6 @@ void OfaTreeOptionsDialog::ApplyItemSets()
         }
         bEntry = xTreeLB->iter_next(*xEntry);
     }
-}
-
-void OfaTreeOptionsDialog::InitTreeAndHandler()
-{
-    xTreeLB->set_help_id(HID_OFADLG_TREELISTBOX);
-    xTreeLB->connect_changed( LINK( this, OfaTreeOptionsDialog, ShowPageHdl_Impl ) );
-    xBackPB->connect_clicked( LINK( this, OfaTreeOptionsDialog, BackHdl_Impl ) );
-    xApplyPB->connect_clicked( LINK( this, OfaTreeOptionsDialog, ApplyHdl_Impl ) );
-    xOkPB->connect_clicked( LINK( this, OfaTreeOptionsDialog, ApplyHdl_Impl ) );
-    m_xDialog->connect_help( LINK( this, OfaTreeOptionsDialog, HelpHdl_Impl ) );
 }
 
 void OfaTreeOptionsDialog::ActivatePage( sal_uInt16 nResId )
@@ -996,7 +985,7 @@ void OfaTreeOptionsDialog::SelectHdl_Impl()
     pNewPage = pPageInfo->m_xPage.get();
 
     // fdo#58170 use current page's layout child HelpId, unless there isn't a current page
-    OString sHelpId(pNewPage ? pNewPage->GetHelpId() : OString());
+    OUString sHelpId(pNewPage ? pNewPage->GetHelpId() : OUString());
     if (sHelpId.isEmpty())
         sHelpId = HID_OFADLG_TREELISTBOX;
     xTreeLB->set_help_id(sHelpId);

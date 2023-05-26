@@ -19,11 +19,12 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/awt/XWindowPeer.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/Frame.hpp>
 #include <com/sun/star/frame/XFrame2.hpp>
 #include <com/sun/star/frame/XSynchronousFrameLoader.hpp>
+#include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
@@ -38,6 +39,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <officecfg/Office/Common.hxx>
 #include <svl/itemprop.hxx>
+#include <sfx2/docfile.hxx>
 #include <sfx2/frmdescr.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/sfxdlg.hxx>
@@ -166,42 +168,58 @@ sal_Bool SAL_CALL IFrameObject::load(
         uno::Reference < util::XURLTransformer > xTrans( util::URLTransformer::create( mxContext ) );
         xTrans->parseStrict( aTargetURL );
 
-        if (INetURLObject(aTargetURL.Complete).GetProtocol() == INetProtocol::Macro)
-        {
-            uno::Reference<frame::XFramesSupplier> xParentFrame = xFrame->getCreator();
-            SfxObjectShell* pDoc = SfxMacroLoader::GetObjectShell(xParentFrame);
-            if (pDoc && !pDoc->AdjustMacroMode())
-                return false;
-        }
-
-        if (!SfxEvents_Impl::isScriptURLAllowed(aTargetURL.Complete))
+        INetURLObject aURLObject(aTargetURL.Complete);
+        if (aURLObject.GetProtocol() == INetProtocol::Macro || aURLObject.isSchemeEqualTo(u"vnd.sun.star.script"))
             return false;
 
-        DBG_ASSERT( !mxFrame.is(), "Frame already existing!" );
-        VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow( xFrame->getContainerWindow() );
-        VclPtr<IFrameWindow_Impl> pWin = VclPtr<IFrameWindow_Impl>::Create( pParent, maFrmDescr.IsFrameBorderOn() );
-        pWin->SetSizePixel( pParent->GetOutputSizePixel() );
-        pWin->SetBackground();
-        pWin->Show();
+        uno::Reference<frame::XFramesSupplier> xParentFrame = xFrame->getCreator();
+        SfxObjectShell* pDoc = SfxMacroLoader::GetObjectShell(xParentFrame);
 
-        uno::Reference < awt::XWindow > xWindow( pWin->GetComponentInterface(), uno::UNO_QUERY );
-        xFrame->setComponent( xWindow, uno::Reference < frame::XController >() );
+        bool bUpdateAllowed(true);
+        if (pDoc)
+        {
+            comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = pDoc->getEmbeddedObjectContainer();
+            bUpdateAllowed = rEmbeddedObjectContainer.getUserAllowsLinkUpdate();
+        }
+        if (!bUpdateAllowed)
+            return false;
 
-        // we must destroy the IFrame before the parent is destroyed
-        xWindow->addEventListener( this );
+        OUString sReferer;
+        if (pDoc && pDoc->HasName())
+            sReferer = pDoc->GetMedium()->GetName();
 
-        mxFrame = frame::Frame::create( mxContext );
-        uno::Reference < awt::XWindow > xWin( pWin->GetComponentInterface(), uno::UNO_QUERY );
-        mxFrame->initialize( xWin );
-        mxFrame->setName( maFrmDescr.GetName() );
+        uno::Reference<css::awt::XWindow> xParentWindow(xFrame->getContainerWindow());
 
-        uno::Reference < frame::XFramesSupplier > xFramesSupplier( xFrame, uno::UNO_QUERY );
-        if ( xFramesSupplier.is() )
-            mxFrame->setCreator( xFramesSupplier );
+        if (!mxFrame.is())
+        {
+            VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(xParentWindow);
+            VclPtr<IFrameWindow_Impl> pWin = VclPtr<IFrameWindow_Impl>::Create( pParent, maFrmDescr.IsFrameBorderOn() );
+            pWin->SetSizePixel( pParent->GetOutputSizePixel() );
+            pWin->SetBackground();
+            pWin->Show();
 
+            uno::Reference < awt::XWindow > xWindow( pWin->GetComponentInterface(), uno::UNO_QUERY );
+            xFrame->setComponent( xWindow, uno::Reference < frame::XController >() );
+
+            // we must destroy the IFrame before the parent is destroyed
+            xWindow->addEventListener( this );
+
+            mxFrame = frame::Frame::create( mxContext );
+            uno::Reference < awt::XWindow > xWin( pWin->GetComponentInterface(), uno::UNO_QUERY );
+            mxFrame->initialize( xWin );
+            mxFrame->setName( maFrmDescr.GetName() );
+
+            uno::Reference < frame::XFramesSupplier > xFramesSupplier( xFrame, uno::UNO_QUERY );
+            if ( xFramesSupplier.is() )
+                mxFrame->setCreator( xFramesSupplier );
+        }
+
+        uno::Reference<task::XInteractionHandler> xInteractionHandler(task::InteractionHandler::createWithParent(mxContext, xParentWindow));
         uno::Sequence < beans::PropertyValue > aProps{
             comphelper::makePropertyValue("PluginMode", sal_Int16(2)),
-            comphelper::makePropertyValue("ReadOnly", true)
+            comphelper::makePropertyValue("ReadOnly", true),
+            comphelper::makePropertyValue("InteractionHandler", xInteractionHandler),
+            comphelper::makePropertyValue("Referer", sReferer)
         };
         uno::Reference < frame::XDispatch > xDisp = mxFrame->queryDispatch( aTargetURL, "_self", 0 );
         if ( xDisp.is() )

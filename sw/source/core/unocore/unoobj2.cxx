@@ -39,6 +39,7 @@
 #include <textboxhelper.hxx>
 #include <ndtxt.hxx>
 #include <unocrsr.hxx>
+#include <unotextcursor.hxx>
 #include <swundo.hxx>
 #include <rootfrm.hxx>
 #include <ftnidx.hxx>
@@ -155,12 +156,9 @@ void CollectFrameAtNode( const SwNode& rNd,
     }
     else
     {
-        const SwFrameFormats& rFormats = *rDoc.GetSpzFrameFormats();
-        const size_t nSize = rFormats.size();
-        for ( size_t i = 0; i < nSize; i++)
+        for(sw::SpzFrameFormat* pSpz: *rDoc.GetSpzFrameFormats())
         {
-            const SwFrameFormat* pFormat = rFormats[ i ];
-            const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
+            const SwFormatAnchor& rAnchor = pSpz->GetAnchor();
             const SwNode* pAnchorNode;
             if( rAnchor.GetAnchorId() == nChkType &&
                 nullptr != (pAnchorNode = rAnchor.GetAnchorNode()) &&
@@ -172,7 +170,7 @@ void CollectFrameAtNode( const SwNode& rNd,
                 const sal_Int32 nIndex = rAnchor.GetAnchorContentOffset();
                 sal_uInt32 nOrder = rAnchor.GetOrder();
 
-                rFrames.emplace_back(nIndex, nOrder, std::make_unique<sw::FrameClient>(const_cast<SwFrameFormat*>(pFormat)));
+                rFrames.emplace_back(nIndex, nOrder, std::make_unique<sw::FrameClient>(pSpz));
             }
         }
         std::sort(rFrames.begin(), rFrames.end(), FrameClientSortListLess());
@@ -1093,67 +1091,71 @@ bool XTextRangeToSwPaM( SwUnoInternalPaM & rToFill,
 {
     bool bRet = false;
 
-    SwXTextRange* pRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
-    OTextCursorHelper* pCursor = dynamic_cast<OTextCursorHelper*>(xTextRange.get());
-    SwXTextPortion* pPortion = dynamic_cast<SwXTextPortion*>(xTextRange.get());
-    SwXText* pText = dynamic_cast<SwXText*>(xTextRange.get());
-    SwXParagraph* pPara = dynamic_cast<SwXParagraph*>(xTextRange.get());
     SwXHeadFootText* pHeadText
-        = eMode == TextRangeMode::AllowTableNode ? dynamic_cast<SwXHeadFootText*>(pText) : nullptr;
+        = eMode == TextRangeMode::AllowTableNode ? dynamic_cast<SwXHeadFootText*>(xTextRange.get()) : nullptr;
 
     // if it's a text then create a temporary cursor there and re-use
     // the pCursor variable
     // #i108489#: Reference in outside scope to keep cursor alive
-    uno::Reference< text::XTextCursor > xTextCursor;
+    rtl::Reference< SwXTextCursor > xTextCursor;
+    OTextCursorHelper* pCursor;
     if (pHeadText)
     {
         // if it is a header / footer text, and eMode == TextRangeMode::AllowTableNode
         // then set the cursor to the beginning of the text
         // if it is started with a table then set into the table
-        xTextCursor.set(pHeadText->CreateTextCursor(true));
+        xTextCursor = pHeadText->CreateTextCursor(true);
         xTextCursor->gotoEnd(true);
-        pCursor = dynamic_cast<OTextCursorHelper*>(xTextCursor.get());
-        assert(pCursor && "cant must succeed");
+        pCursor = xTextCursor.get();
         pCursor->GetPaM()->Normalize();
     }
-    else
-    if (pText)
+    else if (SwXText* pText = dynamic_cast<SwXText*>(xTextRange.get()))
     {
-        xTextCursor.set( pText->CreateCursor() );
+        xTextCursor = pText->createXTextCursor();
         xTextCursor->gotoEnd(true);
-        pCursor = dynamic_cast<OTextCursorHelper*>(xTextCursor.get());
-        assert(pCursor && "cant must succeed");
+        pCursor = xTextCursor.get();
     }
+    else
+    {
+        pCursor = dynamic_cast<OTextCursorHelper*>(xTextRange.get());
+    }
+
+    SwXTextRange* pRange = dynamic_cast<SwXTextRange*>(xTextRange.get());
     if(pRange && &pRange->GetDoc() == &rToFill.GetDoc())
     {
         bRet = pRange->GetPositions(rToFill, eMode);
     }
+    else if (SwXParagraph* pPara = dynamic_cast<SwXParagraph*>(xTextRange.get()))
+    {
+        bRet = pPara->SelectPaM(rToFill);
+    }
     else
     {
-        if (pPara)
+        SwDoc* pDoc = nullptr;
+        const SwPaM* pUnoCursor = nullptr;
+        if (pCursor)
         {
-            bRet = pPara->SelectPaM(rToFill);
+            pDoc = pCursor->GetDoc();
+            pUnoCursor = pCursor->GetPaM();
         }
-        else
+        else if (SwXTextPortion* pPortion = dynamic_cast<SwXTextPortion*>(xTextRange.get()))
         {
-            SwDoc* const pDoc = pCursor ? pCursor->GetDoc()
-                : (pPortion ? &pPortion->GetCursor().GetDoc() : nullptr);
-            const SwPaM* const pUnoCursor = pCursor ? pCursor->GetPaM()
-                : (pPortion ? &pPortion->GetCursor() : nullptr);
-            if (pUnoCursor && pDoc == &rToFill.GetDoc())
+            pDoc = &pPortion->GetCursor().GetDoc();
+            pUnoCursor = &pPortion->GetCursor();
+        }
+        if (pUnoCursor && pDoc == &rToFill.GetDoc())
+        {
+            OSL_ENSURE(!pUnoCursor->IsMultiSelection(),
+                    "what to do about rings?");
+            bRet = true;
+            *rToFill.GetPoint() = *pUnoCursor->GetPoint();
+            if (pUnoCursor->HasMark())
             {
-                OSL_ENSURE(!pUnoCursor->IsMultiSelection(),
-                        "what to do about rings?");
-                bRet = true;
-                *rToFill.GetPoint() = *pUnoCursor->GetPoint();
-                if (pUnoCursor->HasMark())
-                {
-                    rToFill.SetMark();
-                    *rToFill.GetMark() = *pUnoCursor->GetMark();
-                }
-                else
-                    rToFill.DeleteMark();
+                rToFill.SetMark();
+                *rToFill.GetMark() = *pUnoCursor->GetMark();
             }
+            else
+                rToFill.DeleteMark();
         }
     }
     return bRet;

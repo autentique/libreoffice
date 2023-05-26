@@ -105,7 +105,7 @@ static bool lcl_IsItemSet(const SwContentNode & rNode, sal_uInt16 which)
     return bResult;
 }
 
-SdrObject* SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
+rtl::Reference<SdrObject> SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
                                 bool bInsInPage )
 {
     // #i52858# - method name changed
@@ -141,7 +141,7 @@ SdrObject* SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
     SdrLayerID nLayerIdForClone = rObj.GetLayer();
     if ( dynamic_cast<const SwFlyDrawObj*>( pObj.get() ) ==  nullptr &&
          dynamic_cast<const SwVirtFlyDrawObj*>( pObj.get() ) ==  nullptr &&
-         !isType<SdrObject>(pObj.get()) )
+         pObj->GetObjIdentifier() != SdrObjKind::NewFrame )
     {
         if ( getIDocumentDrawModelAccess().IsVisibleLayerId( nLayerIdForClone ) )
         {
@@ -150,7 +150,7 @@ SdrObject* SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
     }
     pObj->SetLayer( nLayerIdForClone );
 
-    return pObj.get();
+    return pObj;
 }
 
 SwFlyFrameFormat* SwDoc::MakeFlySection_( const SwPosition& rAnchPos,
@@ -501,7 +501,7 @@ SwPosFlyFrames SwDoc::GetAllFlyFormats( const SwPaM* pCmpRange, bool bDrawAlso,
     SwPosFlyFrames aRetval;
 
     // collect all anchored somehow to paragraphs
-    for( auto pFly : *GetSpzFrameFormats() )
+    for(sw::SpzFrameFormat* pFly: *GetSpzFrameFormats())
     {
         bool bDrawFormat = bDrawAlso && RES_DRAWFRMFMT == pFly->Which();
         bool bFlyFormat = RES_FLYFRMFMT == pFly->Which();
@@ -1350,14 +1350,11 @@ static OUString lcl_GetUniqueFlyName(const SwDoc& rDoc, TranslateId pDefStrId, s
     OUString aName(SwResId(pDefStrId));
     sal_Int32 nNmLen = aName.getLength();
 
-    const SwFrameFormats& rFormats = *rDoc.GetSpzFrameFormats();
-
     std::vector<unsigned int> aUsedNums;
-    aUsedNums.reserve(rFormats.size());
+    aUsedNums.reserve(rDoc.GetSpzFrameFormats()->size());
 
-    for( SwFrameFormats::size_type n = 0; n < rFormats.size(); ++n )
+    for(sw::SpzFrameFormat* pFlyFormat: *rDoc.GetSpzFrameFormats())
     {
-        const SwFrameFormat* pFlyFormat = rFormats[ n ];
         if (eType != pFlyFormat->Which())
             continue;
         if (eType == RES_DRAWFRMFMT)
@@ -1372,7 +1369,7 @@ static OUString lcl_GetUniqueFlyName(const SwDoc& rDoc, TranslateId pDefStrId, s
     }
 
     // All numbers are flagged accordingly, so determine the right one
-    SwFrameFormats::size_type nNum = first_available_number(aUsedNums) + 1;
+    auto nNum = first_available_number(aUsedNums) + 1;
     return aName + OUString::number(nNum);
 }
 
@@ -1577,7 +1574,7 @@ bool SwDoc::IsInHeaderFooter( const SwNode& rIdx ) const
         // get up by using the Anchor
 #if OSL_DEBUG_LEVEL > 0
         std::vector<const SwFrameFormat*> checkFormats;
-        for( auto pFormat : *GetSpzFrameFormats() )
+        for(sw::SpzFrameFormat* pFormat: *GetSpzFrameFormats())
         {
             const SwNodeIndex* pIdx = pFormat->GetContent().GetContentIdx();
             if( pIdx && pFlyNd == &pIdx->GetNode() )

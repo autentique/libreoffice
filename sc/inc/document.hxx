@@ -2036,7 +2036,6 @@ public:
     SC_DLLPUBLIC SCROW          FirstVisibleRow(SCROW nStartRow, SCROW nEndRow, SCTAB nTab) const;
     SC_DLLPUBLIC SCROW          LastVisibleRow(SCROW nStartRow, SCROW nEndRow, SCTAB nTab) const;
     SCROW                       CountVisibleRows(SCROW nStartRow, SCROW nEndRow, SCTAB nTab) const;
-    SCCOL                       CountVisibleCols(SCROW nStartCol, SCROW nEndCol, SCTAB nTab) const;
 
     SC_DLLPUBLIC bool           RowFiltered(SCROW nRow, SCTAB nTab, SCROW* pFirstRow = nullptr, SCROW* pLastRow = nullptr) const;
     bool                        HasFilteredRows(SCROW nStartRow, SCROW nEndRow, SCTAB nTab) const;
@@ -2691,7 +2690,7 @@ private:
     bool    HasPartOfMerged( const ScRange& rRange );
 
 public:
-    ScTable* FetchTable( SCTAB nTab );
+    SC_DLLPUBLIC ScTable* FetchTable( SCTAB nTab );
     const ScTable* FetchTable( SCTAB nTab ) const;
 
     ScRefCellValue GetRefCellValue( const ScAddress& rPos );

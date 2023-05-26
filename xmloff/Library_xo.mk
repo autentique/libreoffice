@@ -302,6 +302,8 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/text/XMLChangeImportContext \
     xmloff/source/text/XMLChangeInfoContext \
     xmloff/source/text/XMLChangedRegionImportContext \
+    xmloff/source/text/XMLComplexColorContext \
+    xmloff/source/text/XMLComplexColorExport \
     xmloff/source/text/XMLFootnoteBodyImportContext \
     xmloff/source/text/XMLFootnoteConfigurationImportContext \
     xmloff/source/text/XMLFootnoteImportContext \
@@ -340,8 +342,6 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/text/XMLTextCharStyleNamesElementExport \
     xmloff/source/text/XMLTextColumnsContext \
     xmloff/source/text/XMLTextColumnsExport \
-    xmloff/source/text/XMLThemeColorContext \
-    xmloff/source/text/XMLThemeColorExport \
     xmloff/source/text/XMLTextFrameContext \
     xmloff/source/text/XMLTextFrameHyperlinkContext \
     xmloff/source/text/XMLTextHeaderFooterContext \

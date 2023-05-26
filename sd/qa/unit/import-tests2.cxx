@@ -1275,7 +1275,6 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf149206)
 {
     // Check that the image is cropped
     createSdImpressDoc("pptx/tdf149206.pptx");
-    uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY);
 
     uno::Reference<beans::XPropertySet> xPropertySet(getShapeFromPage(/*nShape=*/0, /*nPage=*/0));
     text::GraphicCrop aCrop;
@@ -1295,7 +1294,6 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf149785)
 {
     // Without the fix in place, this test would have failed to load the file
     createSdImpressDoc("pptx/tdf149785.pptx");
-    uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY);
 
     const SdrPage* pPage = GetPage(1);
     CPPUNIT_ASSERT_EQUAL(size_t(1), pPage->GetObjCount());
@@ -1305,7 +1303,6 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf149985)
 {
     // Without the fix in place, this test would have failed to load the file
     createSdImpressDoc("pptx/tdf149985.pptx");
-    uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY);
 
     const SdrPage* pPage = GetPage(1);
     CPPUNIT_ASSERT_EQUAL(size_t(1), pPage->GetObjCount());
@@ -1343,8 +1340,10 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf120028)
     double fCharHeight = 0;
     xPropSet->getPropertyValue("CharHeight") >>= fCharHeight;
     CPPUNIT_ASSERT_DOUBLES_EQUAL(13.5, fCharHeight, 1E-12);
-    // 13.5 * 90% is approx. 12.1 (the correct scaled font size)
-    CPPUNIT_ASSERT_EQUAL(uno::Any(sal_Int16(90)), xShape->getPropertyValue("TextFitToSizeScale"));
+
+    double fTextSclale = 0.0;
+    xShape->getPropertyValue("TextFitToSizeScale") >>= fTextSclale;
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(92.0, fTextSclale, 1E1);
 }
 
 CPPUNIT_TEST_FIXTURE(SdImportTest2, testDescriptionImport)
@@ -1845,11 +1844,9 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf149961AutofitIndentation)
         const SvxNumBulletItem* pNumFmt = aEdit.GetParaAttribs(0).GetItem(EE_PARA_NUMBULLET);
         CPPUNIT_ASSERT(pNumFmt);
 
-        // Without the accompanying fix in place, this test would have failed with:
-        // - Expected: 12700
-        // - Actual  : 3175
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(12700), pNumFmt->GetNumRule().GetLevel(0).GetAbsLSpace());
-        CPPUNIT_ASSERT_EQUAL(sal_Int32(-12700),
+        // Spacing doesn't change when it is scaled
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(3175), pNumFmt->GetNumRule().GetLevel(0).GetAbsLSpace());
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(-3175),
                              pNumFmt->GetNumRule().GetLevel(0).GetFirstLineOffset());
     }
 }
@@ -1870,6 +1867,26 @@ CPPUNIT_TEST_FIXTURE(SdImportTest2, testTdf149588TransparentSolidFill)
     // - Expected: Color: R:99 G:99 B:99 A   51  (T:204)
     // - Actual  : Color: R:99 G:99 B:99 A: 255  (T:  0)
     CPPUNIT_ASSERT_EQUAL(Color(ColorTransparency, 0xCC636363), nCharColor);
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest2, testOverflowBehaviorClip)
+{
+    createSdImpressDoc("odp/style-overflow-behavior-clip.fodp");
+    {
+        uno::Reference<beans::XPropertySet> xPropSet(getShapeFromPage(0, 0));
+        // Without the accompanying fix in place, this test would have failed with:
+        // - Expected: 1
+        // - Actual  : 0
+        CPPUNIT_ASSERT_EQUAL(true,
+                             xPropSet->getPropertyValue("TextClipVerticalOverflow").get<bool>());
+    }
+
+    saveAndReload("impress8");
+    {
+        uno::Reference<beans::XPropertySet> xPropSet(getShapeFromPage(0, 0));
+        CPPUNIT_ASSERT_EQUAL(true,
+                             xPropSet->getPropertyValue("TextClipVerticalOverflow").get<bool>());
+    }
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

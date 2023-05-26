@@ -66,10 +66,22 @@ static OUString getCacheFolder()
 
 static void writeToLog(SvStream& stream, const char* key, const char* value)
 {
-    stream.WriteCharPtr(key);
-    stream.WriteCharPtr(": ");
-    stream.WriteCharPtr(value);
+    stream.WriteOString(key);
+    stream.WriteOString(": ");
+    stream.WriteOString(value);
     stream.WriteChar('\n');
+}
+
+OUString readLog()
+{
+    SvFileStream logFile(getCacheFolder() + "/skia.log", StreamMode::READ);
+
+    OUString sResult;
+    OString sLine;
+    while (logFile.ReadLine(sLine))
+        sResult += OStringToOUString(sLine, RTL_TEXTENCODING_UTF8) + "\n";
+
+    return sResult;
 }
 
 uint32_t vendorId = 0;

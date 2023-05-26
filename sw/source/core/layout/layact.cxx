@@ -549,6 +549,7 @@ void SwLayAction::InternalAction(OutputDevice* pRenderContext)
         const bool bTakeShortcut = !IsIdle() && !IsComplete() && IsShortCut(pPage);
 
         m_pRoot->DeleteEmptySct();
+        m_pRoot->DeleteEmptyFlys();
         if (lcl_isLayoutLooping()) return;
 
         if (!bTakeShortcut)
@@ -1681,6 +1682,12 @@ bool SwLayAction::FormatContent(SwPageFrame *const pPage)
                 pObj->InvalidateObjPos();
                 ::Notify_Background(pObj->GetDrawObj(), pPage,
                     pObj->GetObjRect(), PrepareHint::FlyFrameLeave, false);
+                // tdf#148897 in case the fly moves back to this page before
+                // being positioned again, the SwFlyNotify / ::Notify() could
+                // conclude that it didn't move at all and not call
+                // NotifyBackground(); note: pObj->SetObjTop(FAR_AWAY) results
+                // in wrong positions, use different approach!
+                pObj->SetForceNotifyNewBackground(true);
             }
             if (!moved.empty())
             {
@@ -2351,10 +2358,11 @@ SwLayIdle::SwLayIdle( SwRootFrame *pRt, SwViewShellImp *pI ) :
                 bool bUnlock = false;
                 if ( pViewImp->HasPaintRegion() )
                 {
+                    SAL_INFO("sw.idle", "Disappointing full document invalidation");
                     pViewImp->DeletePaintRegion();
 
                     // Cause a repaint with virtual device.
-                    rSh.LockPaint();
+                    rSh.LockPaint(LockPaintReason::SwLayIdle);
                     bUnlock = true;
                 }
 

@@ -68,6 +68,7 @@
 #include <ndindex.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <osl/diagnose.h>
+#include <o3tl/string_view.hxx>
 
 #include <wrtsh.hxx>
 #include <view.hxx>
@@ -86,32 +87,40 @@ SwTwips GetFlyAnchorBottom(SwFlyFrame* pFly, const SwFrame& rAnchor)
 {
     SwRectFnSet aRectFnSet(pFly);
 
+    const SwPageFrame* pPage = rAnchor.FindPageFrame();
+    if (!pPage)
+    {
+        return 0;
+    }
+
+    const SwFrame* pBody = pPage->FindBodyCont();
+    if (!pBody)
+    {
+        return 0;
+    }
+
     const IDocumentSettingAccess& rIDSA = pFly->GetFrameFormat().getIDocumentSettingAccess();
     bool bLegacy = rIDSA.get(DocumentSettingId::TAB_OVER_MARGIN);
     if (bLegacy)
     {
         // Word <= 2010 style: the fly can overlap with the bottom margin / footer area in case the
         // fly height fits the body height and the fly bottom fits the page.
-        const SwPageFrame* pPage = rAnchor.FindPageFrame();
-        if (!pPage)
-        {
-            return 0;
-        }
-
-        const SwFrame* pBody = pPage->FindBodyCont();
-        if (!pBody)
-        {
-            return 0;
-        }
-
         // See if the fly height would fit at least the page height, ignoring the vertical offset.
         SwTwips nFlyHeight = aRectFnSet.GetHeight(pFly->getFrameArea());
         SwTwips nPageHeight = aRectFnSet.GetHeight(pPage->getFramePrintArea());
+        SwTwips nFlyTop = aRectFnSet.GetTop(pFly->getFrameArea());
+        SwTwips nBodyTop = aRectFnSet.GetTop(pBody->getFrameArea());
+        if (nFlyTop < nBodyTop)
+        {
+            // Fly frame overlaps with the top margin area, ignore that part of the fly frame for
+            // top/height purposes.
+            nFlyHeight -= nBodyTop - nFlyTop;
+            nFlyTop = nBodyTop;
+        }
         if (nFlyHeight <= nPageHeight)
         {
             // Yes, it would fit: allow overlap if there is no problematic vertical offset.
             SwTwips nDeadline = aRectFnSet.GetBottom(pPage->getFrameArea());
-            SwTwips nFlyTop = aRectFnSet.GetTop(pFly->getFrameArea());
             SwTwips nBodyHeight = aRectFnSet.GetHeight(pBody->getFramePrintArea());
             if (nDeadline - nFlyTop > nBodyHeight)
             {
@@ -124,13 +133,7 @@ SwTwips GetFlyAnchorBottom(SwFlyFrame* pFly, const SwFrame& rAnchor)
     }
 
     // Word >= 2013 style: the fly has to stay inside the body frame.
-    const SwFrame* pAnchorUpper = rAnchor.GetUpper();
-    if (!pAnchorUpper)
-    {
-        return 0;
-    }
-
-    return aRectFnSet.GetPrtBottom(*pAnchorUpper);
+    return aRectFnSet.GetPrtBottom(*pBody);
 }
 }
 
@@ -659,6 +662,27 @@ bool SwFlyFrame::IsFlySplitAllowed() const
         return false;
     }
 
+    const IDocumentSettingAccess& rIDSA = GetFormat()->getIDocumentSettingAccess();
+    if (rIDSA.get(DocumentSettingId::DO_NOT_BREAK_WRAPPED_TABLES))
+    {
+        return false;
+    }
+
+    if (FindFooterOrHeader())
+    {
+        // Adding a new page would not increase the header/footer area.
+        return false;
+    }
+
+    const SwFrame* pFlyAnchor = GetAnchorFrame();
+    if (pFlyAnchor && pFlyAnchor->FindColFrame())
+    {
+        // No split in multi-column sections, so GetFlyAnchorBottom() can assume that our innermost
+        // body frame and the page's body frame is the same.
+        // This is also consistent with the Word behavior.
+        return false;
+    }
+
     return GetFormat()->GetFlySplit().GetValue();
 }
 
@@ -945,6 +969,15 @@ void SwFlyFrame::UpdateAttr_( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                 pNewFormatFrameSize = const_cast<SwFormatFrameSize*>(static_cast<const SwFormatFrameSize*>(pNew));
             else if (nWhich == RES_FMT_CHG)
                 pOldFormatChg = const_cast<SwFormatChg*>(static_cast<const SwFormatChg*>(pOld));
+            else if (nWhich == RES_FLY_SPLIT)
+            {
+                // If the fly frame has a table lower, invalidate that, so it joins its follow tab
+                // frames and re-splits according to the new fly split rule.
+                if (Lower() && Lower()->IsTabFrame())
+                {
+                    Lower()->InvalidateAll_();
+                }
+            }
 
             if (aURL.GetMap() && (pNewFormatFrameSize || pOldFormatChg))
             {
@@ -1653,7 +1686,27 @@ void CalcContent( SwLayoutFrame *pLay, bool bNoColl )
                         // anchored objects.
                         //pAnchoredObj->InvalidateObjPos();
                         SwRect aRect( pAnchoredObj->GetObjRect() );
-                        if ( !SwObjectFormatter::FormatObj( *pAnchoredObj, pFrame, pPageFrame ) )
+
+                        SwFrame* pAnchorFrame = pFrame;
+                        SwPageFrame* pAnchorPageFrame = pPageFrame;
+                        if (SwFlyFrame* pFlyFrame = pAnchoredObj->DynCastFlyFrame())
+                        {
+                            if (pFlyFrame->IsFlySplitAllowed())
+                            {
+                                // Split flys are at-para anchored, but the follow fly's anchor char
+                                // frame is not the master frame but can be also a follow of pFrame.
+                                SwTextFrame* pAnchorCharFrame = pFlyFrame->FindAnchorCharFrame();
+                                if (pAnchorCharFrame)
+                                {
+                                    // Found an anchor char frame, update the anchor frame and the
+                                    // anchor page frame accordingly.
+                                    pAnchorFrame = pAnchorCharFrame;
+                                    pAnchorPageFrame = pAnchorCharFrame->FindPageFrame();
+                                }
+                            }
+                        }
+
+                        if ( !SwObjectFormatter::FormatObj( *pAnchoredObj, pAnchorFrame, pAnchorPageFrame ) )
                         {
                             bRestartLayoutProcess = true;
                             break;
@@ -1996,7 +2049,7 @@ bool SwFlyFrame::IsShowUnfloatButton(SwWrtShell* pWrtSh) const
         if (pLower->IsTextFrame())
         {
             const SwTextFrame* pTextFrame = static_cast<const SwTextFrame*>(pLower);
-            if (!pTextFrame->GetText().trim().isEmpty())
+            if (!o3tl::trim(pTextFrame->GetText()).empty())
                 return false;
         }
         pLower = pLower->GetNext();
@@ -2728,12 +2781,12 @@ Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
         if ( rSz.GetHeightPercent() && rSz.GetHeightPercent() != SwFormatFrameSize::SYNCED )
             aRet.setHeight( nRelHeight * rSz.GetHeightPercent() / 100 );
 
-        if ( rSz.GetWidthPercent() == SwFormatFrameSize::SYNCED )
+        if ( rSz.GetHeight() && rSz.GetWidthPercent() == SwFormatFrameSize::SYNCED )
         {
             aRet.setWidth( aRet.Width() * ( aRet.Height()) );
             aRet.setWidth( aRet.Width() / ( rSz.GetHeight()) );
         }
-        else if ( rSz.GetHeightPercent() == SwFormatFrameSize::SYNCED )
+        else if ( rSz.GetWidth() && rSz.GetHeightPercent() == SwFormatFrameSize::SYNCED )
         {
             aRet.setHeight( aRet.Height() * ( aRet.Width()) );
             aRet.setHeight( aRet.Height() / ( rSz.GetWidth()) );
@@ -3063,6 +3116,33 @@ const SwFlyFrameFormat * SwFlyFrame::GetFormat() const
 SwFlyFrameFormat * SwFlyFrame::GetFormat()
 {
     return static_cast< SwFlyFrameFormat * >( GetDep() );
+}
+
+void SwFlyFrame::dumpAsXml(xmlTextWriterPtr writer) const
+{
+    (void)xmlTextWriterStartElement(writer, reinterpret_cast<const xmlChar*>("fly"));
+    dumpAsXmlAttributes(writer);
+
+    (void)xmlTextWriterStartElement(writer, BAD_CAST("infos"));
+    dumpInfosAsXml(writer);
+    (void)xmlTextWriterEndElement(writer);
+    const SwSortedObjs* pAnchored = GetDrawObjs();
+    if (pAnchored && pAnchored->size() > 0)
+    {
+        (void)xmlTextWriterStartElement(writer, BAD_CAST("anchored"));
+
+        for (SwAnchoredObject* pObject : *pAnchored)
+        {
+            pObject->dumpAsXml(writer);
+        }
+
+        (void)xmlTextWriterEndElement(writer);
+    }
+    dumpChildrenAsXml(writer);
+
+    SwAnchoredObject::dumpAsXml(writer);
+
+    (void)xmlTextWriterEndElement(writer);
 }
 
 void SwFlyFrame::Calc(vcl::RenderContext* pRenderContext) const

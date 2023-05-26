@@ -70,7 +70,9 @@
 #include <vcl/weld.hxx>
 #include <o3tl/char16_t2wchar_t.hxx>
 #include <unotools/tempfile.hxx>
+#include <unotools/useroptions.hxx>
 
+#include <sfx2/objsh.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <sfx2/strings.hrc>
 #include <sfx2/sfxresid.hxx>
@@ -1732,6 +1734,38 @@ bool SfxStoringHelper::FinishGUIStoreModel(::comphelper::SequenceAsHashMap::cons
 
     DocumentSettingsGuard aSettingsGuard( aModelData.GetModel(), aModelData.IsRecommendReadOnly(), nStoreMode & EXPORT_REQUESTED );
 
+    // Treat attempted PDF export like a print: update document print statistics
+    if ((nStoreMode & PDFEXPORT_REQUESTED) && SfxViewShell::Current())
+    {
+        SfxObjectShell* pDocShell = SfxViewShell::Current()->GetObjectShell();
+        const bool bWasEnableSetModified = pDocShell && pDocShell->IsEnableSetModified();
+        bool bResetESM = false;
+
+        if (bWasEnableSetModified
+            && !officecfg::Office::Common::Print::PrintingModifiesDocument::get())
+        {
+            pDocShell->EnableSetModified(false); // don't let export mark document as modified
+            bResetESM = true;
+        }
+
+        uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
+            aModelData.GetModel(), uno::UNO_QUERY_THROW);
+        uno::Reference<document::XDocumentProperties> xDocProps(xDPS->getDocumentProperties());
+        xDocProps->setPrintDate(DateTime(DateTime::SYSTEM).GetUNODateTime());
+
+        OUString sPrintedBy(SfxResId(STR_SFX_FILTERNAME_PDF));
+        if (pDocShell && pDocShell->IsUseUserData())
+        {
+            const OUString& sFullName = SvtUserOptions().GetFullName();
+            if (!sFullName.isEmpty())
+                sPrintedBy += ": " + sFullName;
+        }
+        xDocProps->setPrintedBy(sPrintedBy);
+
+        if (bResetESM)
+            pDocShell->EnableSetModified(true);
+    }
+
     OSL_ENSURE( aModelData.GetMediaDescr().find( OUString( "Password" ) ) == aModelData.GetMediaDescr().end(), "The Password property of MediaDescriptor should not be used here!" );
     if ( officecfg::Office::Common::Save::Document::EditProperty::get()
       && ( !aModelData.GetStorable()->hasLocation()
@@ -1809,8 +1843,7 @@ bool SfxStoringHelper::FinishGUIStoreModel(::comphelper::SequenceAsHashMap::cons
         if ( SfxViewShell* pShell = SfxViewShell::Current() )
         {
             OUString sURL = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
-            pShell->libreOfficeKitViewCallback( LOK_CALLBACK_EXPORT_FILE,
-                OUStringToOString(sURL, RTL_TEXTENCODING_UTF8).getStr() );
+            pShell->libreOfficeKitViewCallback( LOK_CALLBACK_EXPORT_FILE, sURL.toUtf8() );
         }
     }
 

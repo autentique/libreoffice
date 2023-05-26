@@ -15,6 +15,7 @@
 #include <rtl/ustring.hxx>
 #include <docmodel/theme/ThemeColorType.hxx>
 #include <docmodel/theme/ThemeColor.hxx>
+#include <docmodel/color/ComplexColor.hxx>
 #include <tools/color.hxx>
 
 typedef struct _xmlTextWriter* xmlTextWriterPtr;
@@ -29,11 +30,13 @@ class DOCMODEL_DLLPUBLIC ColorSet
 public:
     ColorSet(OUString const& rName);
 
+    void setName(OUString const& rName) { maName = rName; }
+
     void add(model::ThemeColorType Type, Color aColorData);
 
     const OUString& getName() const { return maName; }
 
-    Color resolveColor(model::ThemeColor const& rThemeColor) const;
+    Color resolveColor(model::ComplexColor const& rComplexColor) const;
 
     Color getColor(model::ThemeColorType eType) const;
 

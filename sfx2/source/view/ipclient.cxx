@@ -19,7 +19,7 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/awt/XWindowPeer.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/UnreachableStateException.hpp>
@@ -359,7 +359,7 @@ void SAL_CALL SfxInPlaceClient_Impl::activatingInplace()
         }
 
         OString str = (m_bNegativeX ? lcl_negateRectX(aRect) : aRect).toString() + ", \"INPLACE\"";
-        pViewShell->libreOfficeKitViewCallback( LOK_CALLBACK_GRAPHIC_SELECTION, str.getStr() );
+        pViewShell->libreOfficeKitViewCallback( LOK_CALLBACK_GRAPHIC_SELECTION, str );
     }
 
 }
@@ -707,8 +707,8 @@ void SfxInPlaceClient::SetObject( const uno::Reference < embed::XEmbeddedObject 
 {
     if ( m_xImp->m_xObject.is() && rObject != m_xImp->m_xObject )
     {
-        DBG_ASSERT( GetObject()->getClientSite() == static_cast<cppu::OWeakObject*>(m_xImp.get()), "Wrong ClientSite!" );
-        if ( GetObject()->getClientSite() == static_cast<cppu::OWeakObject*>(m_xImp.get()) )
+        DBG_ASSERT( GetObject()->getClientSite() == getXWeak(m_xImp.get()), "Wrong ClientSite!" );
+        if ( GetObject()->getClientSite() == getXWeak(m_xImp.get()) )
         {
             if ( GetObject()->getCurrentState() != embed::EmbedStates::LOADED )
                 SetObjectState( embed::EmbedStates::RUNNING );

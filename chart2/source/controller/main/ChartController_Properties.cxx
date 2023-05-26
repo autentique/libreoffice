@@ -47,6 +47,7 @@
 #include <ChartModel.hxx>
 #include <ColorPerPointHelper.hxx>
 #include <DataSeries.hxx>
+#include <DataSeriesProperties.hxx>
 #include <DiagramHelper.hxx>
 #include <Diagram.hxx>
 #include <ControllerLockGuard.hxx>
@@ -71,6 +72,7 @@ namespace chart
 {
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
+using namespace ::chart::DataSeriesProperties;
 using ::com::sun::star::uno::Reference;
 
 namespace
@@ -157,7 +159,7 @@ wrapper::ItemConverter* createItemConverter(
                 ExplicitIncrementData aExplicitIncrement;
                 if( pExplicitValueProvider )
                     pExplicitValueProvider->getExplicitValuesForAxis(
-                        uno::Reference< XAxis >( xObjectProperties, uno::UNO_QUERY ),
+                        dynamic_cast< Axis* >( xObjectProperties.get() ),
                         aExplicitScale, aExplicitIncrement );
 
                 pItemConverter =  new wrapper::AxisItemConverter(
@@ -204,7 +206,7 @@ wrapper::ItemConverter* createItemConverter(
                 rtl::Reference< DataSeries > xSeries = ObjectIdentifier::getDataSeriesForCID( aObjectCID, xChartModel );
                 rtl::Reference< ChartType > xChartType = ChartModelHelper::getChartTypeOfSeries( xChartModel, xSeries );
 
-                rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xChartModel );
+                rtl::Reference< Diagram > xDiagram = xChartModel->getFirstChartDiagram();
                 sal_Int32 nDimensionCount = xDiagram->getDimension();
                 if( !ChartTypeHelper::isSupportingAreaProperties( xChartType, nDimensionCount ) )
                     eMapTo = wrapper::GraphicObjectType::LineDataPoint;
@@ -220,7 +222,8 @@ wrapper::ItemConverter* createItemConverter(
                     nPointIndex = o3tl::toInt32(aParticleID);
                     bool bVaryColorsByPoint = false;
                     if( xSeries.is() &&
-                        (xSeries->getPropertyValue("VaryColorsByPoint") >>= bVaryColorsByPoint) &&
+                        // "VaryColorsByPoint"
+                        (xSeries->getFastPropertyValue(PROP_DATASERIES_VARY_COLORS_BY_POINT) >>= bVaryColorsByPoint) &&
                         bVaryColorsByPoint )
                     {
                         if( !ColorPerPointHelper::hasPointOwnColor( xSeries, nPointIndex, xObjectProperties ) )
@@ -384,14 +387,14 @@ OUString lcl_getAxisCIDForCommand( std::string_view rDispatchCommand, const rtl:
         nDimensionIndex=1; bMainAxis=false;
     }
 
-    rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xChartModel );
+    rtl::Reference< Diagram > xDiagram = xChartModel->getFirstChartDiagram();
     rtl::Reference< Axis > xAxis = AxisHelper::getAxis( nDimensionIndex, bMainAxis, xDiagram );
     return ObjectIdentifier::createClassifiedIdentifierForObject( xAxis, xChartModel );
 }
 
 OUString lcl_getGridCIDForCommand( std::string_view rDispatchCommand, const rtl::Reference<::chart::ChartModel>& xChartModel )
 {
-    rtl::Reference< Diagram > xDiagram = ChartModelHelper::findDiagram( xChartModel );
+    rtl::Reference< Diagram > xDiagram = xChartModel->getFirstChartDiagram();
 
     if( rDispatchCommand == "DiagramGridAll")
         return ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_GRID, u"ALLELEMENTS" );

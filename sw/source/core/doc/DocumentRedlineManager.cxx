@@ -457,6 +457,30 @@ namespace
         if ( !pBox )
             return;
 
+        // tracked column deletion
+
+        const SvxPrintItem *pHasBoxTextChangesOnlyProp =
+                pBox->GetFrameFormat()->GetAttrSet().GetItem<SvxPrintItem>(RES_PRINT);
+        // empty table cell with property "HasTextChangesOnly" = false
+        if ( pHasBoxTextChangesOnlyProp && !pHasBoxTextChangesOnlyProp->GetValue() )
+        {
+            SwCursor aCursor( *pPos, nullptr );
+            if ( pBox->IsEmpty() )
+            {
+                // TODO check the other cells of the column
+                // before removing the column
+                pPos->GetDoc().DeleteCol( aCursor );
+                return;
+            }
+            else
+            {
+                SvxPrintItem aHasTextChangesOnly(RES_PRINT, false);
+                pPos->GetDoc().SetBoxAttr( aCursor, aHasTextChangesOnly );
+            }
+        }
+
+        // tracked row deletion
+
         const SwTableLine* pLine = pBox->GetUpper();
         const SvxPrintItem *pHasTextChangesOnlyProp =
                 pLine->GetFrameFormat()->GetAttrSet().GetItem<SvxPrintItem>(RES_PRINT);
@@ -484,6 +508,21 @@ namespace
         const SwTableBox* pBox = pPos->GetNode().GetTableBox();
         if ( !pBox )
             return;
+
+        // tracked column deletion
+
+        const SvxPrintItem *pHasBoxTextChangesOnlyProp =
+                pBox->GetFrameFormat()->GetAttrSet().GetItem<SvxPrintItem>(RES_PRINT);
+        // table cell property "HasTextChangesOnly" is set and its value is false
+        if ( bRejectDeletion && pHasBoxTextChangesOnlyProp &&
+                !pHasBoxTextChangesOnlyProp->GetValue() )
+        {
+            SvxPrintItem aUnsetTracking(RES_PRINT, true);
+            SwCursor aCursor( *pPos, nullptr );
+            pPos->GetDoc().SetBoxAttr( aCursor, aUnsetTracking );
+        }
+
+        // tracked row deletion
 
         const SwTableLine* pLine = pBox->GetUpper();
         const SvxPrintItem *pHasTextChangesOnlyProp =
@@ -2330,9 +2369,9 @@ DocumentRedlineManager::AppendRedline(SwRangeRedline* pNewRedl, bool const bCall
                     {
                         if ( aSttIdx.GetNode().IsTableNode() )
                         {
-                            SvxPrintItem aNotTracked(RES_PRINT, false);
+                            SvxPrintItem aHasTextChangesOnly(RES_PRINT, false);
                             SwCursor aCursor( SwPosition(aSttIdx), nullptr );
-                            m_rDoc.SetRowNotTracked( aCursor, aNotTracked, /*bAll=*/true );
+                            m_rDoc.SetRowNotTracked( aCursor, aHasTextChangesOnly, /*bAll=*/true );
                         }
                         ++aSttIdx;
                     }

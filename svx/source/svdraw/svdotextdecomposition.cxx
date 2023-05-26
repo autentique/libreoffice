@@ -1103,19 +1103,21 @@ void SdrTextObj::impDecomposeBlockTextPrimitive(
         }
     }
 
+    const double fFreeVerticalSpace(aAnchorTextRange.getHeight() - aOutlinerScale.getY());
+    bool bClipVerticalTextOverflow = fFreeVerticalSpace < 0
+                                     && GetObjectItemSet().Get(SDRATTR_TEXT_CLIPVERTOVERFLOW).GetValue();
     // correct vertical translation using the now known text size
-    if(SDRTEXTVERTADJUST_CENTER == eVAdj || SDRTEXTVERTADJUST_BOTTOM == eVAdj)
+    if((SDRTEXTVERTADJUST_CENTER == eVAdj || SDRTEXTVERTADJUST_BOTTOM == eVAdj)
+       && !bClipVerticalTextOverflow)
     {
-        const double fFree(aAnchorTextRange.getHeight() - aOutlinerScale.getY());
-
         if(SDRTEXTVERTADJUST_CENTER == eVAdj)
         {
-            aAdjustTranslate.setY(fFree / 2.0);
+            aAdjustTranslate.setY(fFreeVerticalSpace / 2.0);
         }
 
         if(SDRTEXTVERTADJUST_BOTTOM == eVAdj)
         {
-            aAdjustTranslate.setY(fFree);
+            aAdjustTranslate.setY(fFreeVerticalSpace);
         }
     }
 
@@ -1159,6 +1161,8 @@ void SdrTextObj::impDecomposeBlockTextPrimitive(
 
     // create ClipRange (if needed)
     basegfx::B2DRange aClipRange;
+    if(bClipVerticalTextOverflow)
+        aClipRange = {0, 0, std::numeric_limits<double>::max(), aAnchorTextRange.getHeight()};
 
     // now break up text primitives.
     impTextBreakupHandler aConverter(rOutliner);
@@ -1226,7 +1230,7 @@ void SdrTextObj::impDecomposeStretchTextPrimitive(
     // to layout without mirroring
     const double fScaleX(fabs(aScale.getX()) / aOutlinerScale.getX());
     const double fScaleY(fabs(aScale.getY()) / aOutlinerScale.getY());
-    rOutliner.SetGlobalCharStretching(fScaleX * 100.0, fScaleY * 100.0);
+    rOutliner.setGlobalScale(fScaleX * 100.0, fScaleY * 100.0, 100.0, 100.0);
 
     // When mirroring in X and Y,
     // move the null point which was top left to bottom right.

@@ -667,6 +667,21 @@ OUString GetUndoComment(SwUndoId eId)
         case SwUndoId::UPDATE_FIELD:
             pId = STR_UPDATE_FIELD;
             break;
+        case SwUndoId::UPDATE_FIELDS:
+            pId = STR_UPDATE_FIELDS;
+            break;
+        case SwUndoId::DELETE_FIELDS:
+            pId = STR_DELETE_FIELDS;
+            break;
+        case SwUndoId::UPDATE_SECTIONS:
+            pId = STR_UPDATE_SECTIONS;
+            break;
+        case SwUndoId::CHANGE_THEME:
+            pId = STR_UNDO_CHANGE_THEME_COLORS;
+            break;
+        case SwUndoId::DELETE_SECTIONS:
+            pId = STR_DELETE_SECTIONS;
+            break;
     }
 
     assert(pId);
@@ -970,10 +985,10 @@ void SwUndoSaveContent::DelContentIndex( const SwPosition& rMark,
     if( DelContentType::Fly & nDelContentType )
     {
         sal_uInt16 nChainInsPos = m_pHistory ? m_pHistory->Count() : 0;
-        const SwFrameFormats& rSpzArr = *rDoc.GetSpzFrameFormats();
+        const sw::SpzFrameFormats& rSpzArr = *rDoc.GetSpzFrameFormats();
         if( !rSpzArr.empty() )
         {
-            SwFrameFormat* pFormat;
+            sw::SpzFrameFormat* pFormat;
             const SwFormatAnchor* pAnchor;
             size_t n = rSpzArr.size();
             const SwPosition* pAPos;

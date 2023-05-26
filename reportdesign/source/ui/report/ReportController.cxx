@@ -146,13 +146,13 @@
 #define RPTUI_ID_ULSPACE    TypedWhichId<SvxULSpaceItem>(XATTR_FILL_FIRST - 7)
 #define RPTUI_ID_PAGE       TypedWhichId<SvxPageItem>(XATTR_FILL_FIRST - 6)
 #define RPTUI_ID_SIZE       TypedWhichId<SvxSizeItem>(XATTR_FILL_FIRST - 5)
-#define RPTUI_ID_PAGE_MODE  XATTR_FILL_FIRST - 4
-#define RPTUI_ID_START      XATTR_FILL_FIRST - 3
-#define RPTUI_ID_END        XATTR_FILL_FIRST - 2
+#define RPTUI_ID_PAGE_MODE  TypedWhichId<SfxUInt16Item>(XATTR_FILL_FIRST - 4)
+#define RPTUI_ID_START      TypedWhichId<SfxUInt16Item>(XATTR_FILL_FIRST - 3)
+#define RPTUI_ID_END        TypedWhichId<SfxUInt16Item>(XATTR_FILL_FIRST - 2)
 #define RPTUI_ID_BRUSH      TypedWhichId<SvxBrushItem>(XATTR_FILL_FIRST - 1)
 /// Note that we deliberately overlap an existing item id, so that we can have contiguous item ids for
 /// the static defaults.
-#define RPTUI_ID_METRIC     XATTR_FILL_LAST
+#define RPTUI_ID_METRIC     TypedWhichId<SfxUInt16Item>(XATTR_FILL_LAST)
 
 static_assert((RPTUI_ID_METRIC - RPTUI_ID_LRSPACE) == 28, "Item ids are not contiguous");
 
@@ -297,8 +297,8 @@ void OReportController::disposing()
     }
     if ( m_xGroupsFloater )
     {
-        SvtViewOptions aDlgOpt(EViewType::Window, OStringToOUString(m_xGroupsFloater->get_help_id(), RTL_TEXTENCODING_UTF8));
-        aDlgOpt.SetWindowState(OStringToOUString(m_xGroupsFloater->getDialog()->get_window_state(vcl::WindowDataMask::All), RTL_TEXTENCODING_ASCII_US));
+        SvtViewOptions aDlgOpt(EViewType::Window, m_xGroupsFloater->get_help_id());
+        aDlgOpt.SetWindowState(m_xGroupsFloater->getDialog()->get_window_state(vcl::WindowDataMask::All));
         if (m_xGroupsFloater->getDialog()->get_visible())
             m_xGroupsFloater->response(RET_CANCEL);
         m_xGroupsFloater.reset();
@@ -2373,8 +2373,8 @@ void OReportController::openPageDialog(const uno::Reference<report::XSection>& _
 
     const ::Color aNullLineCol(COL_DEFAULT_SHAPE_STROKE); // #i121448# Use defined default color
     const ::Color aNullFillCol(COL_DEFAULT_SHAPE_FILLING); // #i121448# Use defined default color
-    // XGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
-    const XGradient aNullGrad;
+    // basegfx::BGradient() default already creates [COL_BLACK, COL_WHITE] as defaults
+    const basegfx::BGradient aNullGrad;
     const XHatch aNullHatch(aNullLineCol);
 
     std::vector<SfxPoolItem*> pDefaults
@@ -2542,9 +2542,9 @@ void OReportController::openSortingAndGroupingDialog()
     if (!m_xGroupsFloater)
     {
         m_xGroupsFloater = std::make_shared<OGroupsSortingDialog>(getFrameWeld(), !isEditable(), this);
-        SvtViewOptions aDlgOpt(EViewType::Window, OStringToOUString(m_xGroupsFloater->get_help_id(), RTL_TEXTENCODING_UTF8));
+        SvtViewOptions aDlgOpt(EViewType::Window, m_xGroupsFloater->get_help_id());
         if ( aDlgOpt.Exists() )
-            m_xGroupsFloater->getDialog()->set_window_state(OUStringToOString(aDlgOpt.GetWindowState(), RTL_TEXTENCODING_ASCII_US));
+            m_xGroupsFloater->getDialog()->set_window_state(aDlgOpt.GetWindowState());
     }
     if (isUiVisible())
     {

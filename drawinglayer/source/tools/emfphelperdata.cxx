@@ -1255,7 +1255,9 @@ namespace emfplushelper
                     {
                         // Silent MSVC warning C4701: potentially uninitialized local variable 'brushIndexOrColor' used
                         sal_uInt32 brushIndexOrColor = 999;
-                        sal_Int32 rectangles;
+                        ::basegfx::B2DPolyPolygon polyPolygon;
+                        sal_uInt32 rectangles;
+                        float x, y, width, height;
                         const bool isColor = (flags & 0x8000);
                         ::basegfx::B2DPolygon polygon;
 
@@ -1270,11 +1272,9 @@ namespace emfplushelper
                             SAL_INFO("drawinglayer.emf", "EMF+\t DrawRects");
                         }
 
-                        rMS.ReadInt32(rectangles);
-
-                        for (int i = 0; i < rectangles; i++)
+                        rMS.ReadUInt32(rectangles);
+                        for (sal_uInt32 i = 0; i < rectangles; i++)
                         {
-                            float x, y, width, height;
                             ReadRectangle(rMS, x, y, width, height, bool(flags & 0x4000));
                             polygon.clear();
                             polygon.append(Map(x, y));
@@ -1284,13 +1284,12 @@ namespace emfplushelper
                             polygon.setClosed(true);
 
                             SAL_INFO("drawinglayer.emf", "EMF+\t\t rectangle: " << x << ", "<< y << " " << width << "x" << height);
-
-                            ::basegfx::B2DPolyPolygon polyPolygon(polygon);
-                            if (type == EmfPlusRecordTypeFillRects)
-                                EMFPPlusFillPolygon(polyPolygon, isColor, brushIndexOrColor);
-                            else
-                                EMFPPlusDrawPolygon(polyPolygon, flags & 0xff);
+                            polyPolygon.append(polygon);
                         }
+                        if (type == EmfPlusRecordTypeFillRects)
+                            EMFPPlusFillPolygon(polyPolygon, isColor, brushIndexOrColor);
+                        else
+                            EMFPPlusDrawPolygon(polyPolygon, flags & 0xff);
                         break;
                     }
                     case EmfPlusRecordTypeFillPolygon:
@@ -1340,46 +1339,39 @@ namespace emfplushelper
                     {
                         sal_uInt32 aCount;
                         float x1, y1, x2, y2, x3, y3, x4, y4;
-                        ::basegfx::B2DPoint aStartPoint, aControlPointA, aControlPointB, aEndPoint;
                         ::basegfx::B2DPolygon aPolygon;
                         rMS.ReadUInt32(aCount);
                         SAL_INFO("drawinglayer.emf", "EMF+\t DrawBeziers slot: " << (flags & 0xff));
                         SAL_INFO("drawinglayer.emf", "EMF+\t Number of points: " << aCount);
-                        SAL_WARN_IF((aCount - 1) % 3 != 0, "drawinglayer.emf", "EMF+\t Bezier Draw not support number of points other than 4, 7, 10, 13, 16...");
+                        SAL_WARN_IF((aCount - 1) % 3 != 0, "drawinglayer.emf",
+                                    "EMF+\t Bezier Draw not support number of points other than 4, 7, "
+                                    "10, 13, 16...");
 
                         if (aCount < 4)
                         {
-                            SAL_WARN("drawinglayer.emf", "EMF+\t Bezier Draw does not support less than 4 points. Number of points: " << aCount);
+                            SAL_WARN("drawinglayer.emf", "EMF+\t Bezier Draw does not support less "
+                                                         "than 4 points. Number of points: "
+                                                             << aCount);
                             break;
                         }
 
                         ReadPoint(rMS, x1, y1, flags);
                         // We need to add first starting point
-                        aStartPoint = Map(x1, y1);
-                        aPolygon.append(aStartPoint);
-
+                        aPolygon.append(Map(x1, y1));
+                        SAL_INFO("drawinglayer.emf",
+                                 "EMF+\t Bezier starting point: " << x1 << "," << y1);
                         for (sal_uInt32 i = 4; i <= aCount; i += 3)
                         {
                             ReadPoint(rMS, x2, y2, flags);
                             ReadPoint(rMS, x3, y3, flags);
                             ReadPoint(rMS, x4, y4, flags);
 
-                            SAL_INFO("drawinglayer.emf", "EMF+\t Bezier points: " << x1 << "," << y1 << " " << x2 << "," << y2 << " " << x3 << "," << y3 << " " << x4 << "," << y4);
-
-                            aStartPoint = Map(x1, y1);
-                            aControlPointA = Map(x2, y2);
-                            aControlPointB = Map(x3, y3);
-                            aEndPoint = Map(x4, y4);
-
-                            ::basegfx::B2DCubicBezier cubicBezier(aStartPoint, aControlPointA, aControlPointB, aEndPoint);
-                            cubicBezier.adaptiveSubdivideByDistance(aPolygon, 10.0);
-
-                            EMFPPlusDrawPolygon(::basegfx::B2DPolyPolygon(aPolygon), flags & 0xff);
-
-                            // The ending coordinate of one Bezier curve is the starting coordinate of the next.
-                            x1 = x4;
-                            y1 = y4;
+                            SAL_INFO("drawinglayer.emf",
+                                     "EMF+\t Bezier points: " << x2 << "," << y2 << " " << x3 << ","
+                                                              << y3 << " " << x4 << "," << y4);
+                            aPolygon.appendBezierSegment(Map(x2, y2), Map(x3, y3), Map(x4, y4));
                         }
+                        EMFPPlusDrawPolygon(::basegfx::B2DPolyPolygon(aPolygon), flags & 0xff);
                         break;
                     }
                     case EmfPlusRecordTypeDrawClosedCurve:

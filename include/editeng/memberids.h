@@ -169,6 +169,7 @@
 #define MID_BACK_COLOR_R_G_B    8
 #define MID_BACK_COLOR_TRANSPARENCY 9
 #define MID_SHADING_VALUE       10
+#define MID_BACKGROUND_COMPLEX_COLOR 11
 
 //SvxFormatBreakItem
 #define MID_BREAK_BEFORE        0
@@ -189,8 +190,8 @@
 #define MID_COLOR_TINT_OR_SHADE 5
 #define MID_COLOR_LUM_MOD       6
 #define MID_COLOR_LUM_OFF       7
-#define MID_COLOR_THEME_REFERENCE 8
-#define MID_COLOR_THEME_REFERENCE_JSON 9
+#define MID_COMPLEX_COLOR_JSON  8
+#define MID_COMPLEX_COLOR       9
 
 
 #endif

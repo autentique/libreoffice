@@ -42,6 +42,7 @@
 #include <i18nlangtag/languagetag.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <basegfx/range/b2drange.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 
 #include <numeric>
 #include <string_view>
@@ -53,6 +54,7 @@
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
 #include <com/sun/star/awt/Gradient.hpp>
+#include <com/sun/star/awt/Gradient2.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
@@ -126,7 +128,7 @@
 #include <editeng/flditem.hxx>
 #include <editeng/escapementitem.hxx>
 #include <editeng/unonrule.hxx>
-#include <docmodel/uno/UnoThemeColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <svx/svdoashp.hxx>
 #include <svx/svdomedia.hxx>
 #include <svx/svdtrans.hxx>
@@ -150,15 +152,6 @@ using ::sax_fastparser::FastSerializerHelper;
 
 namespace
 {
-/// Extracts start or end alpha information from a transparency gradient.
-sal_Int32 GetAlphaFromTransparenceGradient(const awt::Gradient& rGradient, bool bStart)
-{
-    // Our alpha is a gray color value.
-    sal_uInt8 nRed = ::Color(ColorTransparency, bStart ? rGradient.StartColor : rGradient.EndColor).GetRed();
-    // drawingML alpha is a percentage on a 0..100000 scale.
-    return (255 - nRed) * oox::drawingml::MAX_PERCENT / 255;
-}
-
 const char* g_aPredefinedClrNames[] = {
     "dk1",
     "lt1",
@@ -194,6 +187,12 @@ bool URLTransformer::isExternalURL(const OUString& rURL) const
     return bExternal;
 }
 
+GraphicExportCache& GraphicExportCache::get()
+{
+    static GraphicExportCache staticGraphicExportCache;
+    return staticGraphicExportCache;
+}
+
 static css::uno::Any getLineDash( const css::uno::Reference<css::frame::XModel>& xModel, const OUString& rDashName )
     {
         css::uno::Reference<css::lang::XMultiServiceFactory> xFact(xModel, css::uno::UNO_QUERY);
@@ -213,7 +212,7 @@ static css::uno::Any getLineDash( const css::uno::Reference<css::frame::XModel>&
 
 namespace
 {
-void WriteGradientPath(const awt::Gradient& rGradient, const FSHelperPtr& pFS, const bool bCircle)
+void WriteGradientPath(const basegfx::BGradient& rBGradient, const FSHelperPtr& pFS, const bool bCircle)
 {
     pFS->startElementNS(XML_a, XML_path, XML_path, bCircle ? "circle" : "rect");
 
@@ -223,13 +222,13 @@ void WriteGradientPath(const awt::Gradient& rGradient, const FSHelperPtr& pFS, c
     // edge of the tile rectangle and 100% means the center of it.
     rtl::Reference<sax_fastparser::FastAttributeList> pAttributeList(
         sax_fastparser::FastSerializerHelper::createAttrList());
-    sal_Int32 nLeftPercent = rGradient.XOffset;
+    sal_Int32 nLeftPercent = rBGradient.GetXOffset();
     pAttributeList->add(XML_l, OString::number(nLeftPercent * PER_PERCENT));
-    sal_Int32 nTopPercent = rGradient.YOffset;
+    sal_Int32 nTopPercent = rBGradient.GetYOffset();
     pAttributeList->add(XML_t, OString::number(nTopPercent * PER_PERCENT));
-    sal_Int32 nRightPercent = 100 - rGradient.XOffset;
+    sal_Int32 nRightPercent = 100 - rBGradient.GetXOffset();
     pAttributeList->add(XML_r, OString::number(nRightPercent * PER_PERCENT));
-    sal_Int32 nBottomPercent = 100 - rGradient.YOffset;
+    sal_Int32 nBottomPercent = 100 - rBGradient.GetYOffset();
     pAttributeList->add(XML_b, OString::number(nBottomPercent * PER_PERCENT));
     pFS->singleElementNS(XML_a, XML_fillToRect, pAttributeList);
 
@@ -238,13 +237,9 @@ void WriteGradientPath(const awt::Gradient& rGradient, const FSHelperPtr& pFS, c
 }
 
 // not thread safe
-std::stack<sal_Int32> DrawingML::mnImageCounter;
-std::stack<sal_Int32> DrawingML::mnWdpImageCounter;
-std::stack<std::map<OUString, OUString>> DrawingML::maWdpCache;
 sal_Int32 DrawingML::mnDrawingMLCount = 0;
 sal_Int32 DrawingML::mnVmlCount = 0;
 sal_Int32 DrawingML::mnChartCount = 0;
-std::stack<std::unordered_map<BitmapChecksum, OUString>> DrawingML::maExportGraphics;
 
 sal_Int16 DrawingML::GetScriptType(const OUString& rStr)
 {
@@ -275,24 +270,6 @@ void DrawingML::ResetMlCounters()
     mnDrawingMLCount = 0;
     mnVmlCount = 0;
     mnChartCount = 0;
-}
-
-void DrawingML::PushExportGraphics()
-{
-    mnImageCounter.push(1);
-    maExportGraphics.emplace();
-
-    mnWdpImageCounter.push(1);
-    maWdpCache.emplace();
-}
-
-void DrawingML::PopExportGraphics()
-{
-    mnImageCounter.pop();
-    maExportGraphics.pop();
-
-    mnWdpImageCounter.pop();
-    maWdpCache.pop();
 }
 
 bool DrawingML::GetProperty( const Reference< XPropertySet >& rXPropertySet, const OUString& aName )
@@ -348,7 +325,7 @@ OString getColorStr(const ::Color nColor)
 
         sBuf.append(sColor);
 
-        sColor = sBuf.getStr();
+        sColor = sBuf.toString();
     }
     return sColor;
 }
@@ -495,44 +472,51 @@ void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
 
     // OOXML has no separate transparence gradient but uses transparency in the gradient stops.
     // So we merge transparency and color and use gradient fill in such case.
-    awt::Gradient aTransparenceGradient;
+    basegfx::BGradient aTransparenceGradient;
+    OUString sFillTransparenceGradientName;
     bool bNeedGradientFill(false);
-    if (GetProperty(rXPropSet, "FillTransparenceGradient"))
+
+    if (GetProperty(rXPropSet, "FillTransparenceGradientName")
+        && (mAny >>= sFillTransparenceGradientName)
+        && !sFillTransparenceGradientName.isEmpty()
+        && GetProperty(rXPropSet, "FillTransparenceGradient"))
     {
-        mAny >>= aTransparenceGradient;
-        if (aTransparenceGradient.StartColor != aTransparenceGradient.EndColor)
-            bNeedGradientFill = true;
-        else if (aTransparenceGradient.StartColor != 0)
-            nAlpha = GetAlphaFromTransparenceGradient(aTransparenceGradient, true);
+        aTransparenceGradient = basegfx::BGradient(mAny);
+        basegfx::BColor aSingleColor;
+        bNeedGradientFill = !aTransparenceGradient.GetColorStops().isSingleColor(aSingleColor);
+
+        // we no longer need to 'guess' if FillTransparenceGradient is used by
+        // comparing it's 1st color to COL_BLACK after having tested that the
+        // FillTransparenceGradientName is set
+        if (!bNeedGradientFill)
+        {
+            // Our alpha is a gray color value.
+            const sal_uInt8 nRed(aSingleColor.getRed() * 255.0);
+
+            // drawingML alpha is a percentage on a 0..100000 scale.
+            nAlpha = (255 - nRed) * oox::drawingml::MAX_PERCENT / 255;
+        }
     }
 
     // write XML
     if (bNeedGradientFill)
     {
-        awt::Gradient aPseudoColorGradient;
-        aPseudoColorGradient.XOffset = aTransparenceGradient.XOffset;
-        aPseudoColorGradient.YOffset = aTransparenceGradient.YOffset;
-        aPseudoColorGradient.StartIntensity = 100;
-        aPseudoColorGradient.EndIntensity = 100;
-        aPseudoColorGradient.Angle = aTransparenceGradient.Angle;
-        aPseudoColorGradient.Border = aTransparenceGradient.Border;
-        aPseudoColorGradient.Style = aTransparenceGradient.Style;
-        aPseudoColorGradient.StartColor = nFillColor;
-        aPseudoColorGradient.EndColor = nFillColor;
-        aPseudoColorGradient.StepCount = aTransparenceGradient.StepCount;
+        // no longer create copy/PseudoColorGradient, use new API of
+        // WriteGradientFill to express fix fill color
         mpFS->startElementNS(XML_a, XML_gradFill, XML_rotWithShape, "0");
-        WriteGradientFill(aPseudoColorGradient, aTransparenceGradient);
+        WriteGradientFill(nullptr, nFillColor, &aTransparenceGradient);
         mpFS->endElementNS( XML_a, XML_gradFill );
     }
     else if ( nFillColor != nOriginalColor )
     {
         // the user has set a different color for the shape
-        if (!WriteSchemeColor(u"FillColorThemeReference", rXPropSet))
+        if (!WriteSchemeColor(u"FillComplexColor", rXPropSet))
         {
             WriteSolidFill(::Color(ColorTransparency, nFillColor & 0xffffff), nAlpha);
         }
     }
-    else if ( !sColorFillScheme.isEmpty() )
+    // tdf#91332 LO doesn't export the actual theme.xml in XLSX.
+    else if ( !sColorFillScheme.isEmpty() && GetDocumentType() != DOCUMENT_XLSX )
     {
         // the shape had a scheme color and the user didn't change it
         WriteSolidFill( sColorFillScheme, aTransformations, nAlpha );
@@ -550,19 +534,18 @@ bool DrawingML::WriteSchemeColor(OUString const& rPropertyName, const uno::Refer
     if (!xPropertySet->getPropertySetInfo()->hasPropertyByName(rPropertyName))
         return false;
 
-    uno::Reference<util::XThemeColor> xThemeColor;
-    xPropertySet->getPropertyValue(rPropertyName) >>= xThemeColor;
-    if (!xThemeColor.is())
+    uno::Reference<util::XComplexColor> xComplexColor;
+    xPropertySet->getPropertyValue(rPropertyName) >>= xComplexColor;
+    if (!xComplexColor.is())
         return false;
 
-    model::ThemeColor aThemeColor;
-    model::theme::setFromXThemeColor(aThemeColor, xThemeColor);
-    if (aThemeColor.getType() == model::ThemeColorType::Unknown)
+    auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+    if (aComplexColor.getSchemeType() == model::ThemeColorType::Unknown)
         return false;
-    const char* pColorName = g_aPredefinedClrNames[sal_Int16(aThemeColor.getType())];
+    const char* pColorName = g_aPredefinedClrNames[sal_Int16(aComplexColor.getSchemeType())];
     mpFS->startElementNS(XML_a, XML_solidFill);
     mpFS->startElementNS(XML_a, XML_schemeClr, XML_val, pColorName);
-    for (auto const& rTransform : aThemeColor.getTransformations())
+    for (auto const& rTransform : aComplexColor.getTransformations())
     {
         switch (rTransform.meType)
         {
@@ -584,13 +567,12 @@ bool DrawingML::WriteSchemeColor(OUString const& rPropertyName, const uno::Refer
     }
     // Alpha is actually not contained in maTransformations although possible (as of Mar 2023).
     sal_Int16 nAPITransparency(0);
-    if ((rPropertyName == u"FillColorThemeReference"
-         && GetProperty(xPropertySet, "FillTransparence"))
-        || (rPropertyName == u"LineColorThemeReference"
-            && GetProperty(xPropertySet, "LineTransparence"))
-        || (rPropertyName == u"CharColorThemeReference"
-            && GetProperty(xPropertySet, "CharTransparence")))
+    if ((rPropertyName == u"FillComplexColor" && GetProperty(xPropertySet, "FillTransparence"))
+        || (rPropertyName == u"LineComplexColor" && GetProperty(xPropertySet, "LineTransparence"))
+        || (rPropertyName == u"CharComplexColor" && GetProperty(xPropertySet, "CharTransparence")))
+    {
         mAny >>= nAPITransparency;
+    }
     if (nAPITransparency != 0)
         mpFS->singleElementNS(XML_a, XML_alpha, XML_val,
                               OString::number(MAX_PERCENT - (PER_PERCENT * nAPITransparency)));
@@ -601,10 +583,12 @@ bool DrawingML::WriteSchemeColor(OUString const& rPropertyName, const uno::Refer
     return true;
 }
 
-void DrawingML::WriteGradientStop(sal_uInt16 nStop, ::Color nColor, sal_Int32 nAlpha)
+void DrawingML::WriteGradientStop(double fOffset, const basegfx::BColor& rColor, const basegfx::BColor& rAlpha)
 {
-    mpFS->startElementNS(XML_a, XML_gs, XML_pos, OString::number(nStop * 1000));
-    WriteColor(nColor, nAlpha);
+    mpFS->startElementNS(XML_a, XML_gs, XML_pos, OString::number(basegfx::fround(fOffset * 100000)));
+    WriteColor(
+        ::Color(rColor),
+        basegfx::fround((1.0 - rAlpha.luminance()) * oox::drawingml::MAX_PERCENT));
     mpFS->endElementNS( XML_a, XML_gs );
 }
 
@@ -615,30 +599,16 @@ void DrawingML::WriteGradientStop(sal_uInt16 nStop, ::Color nColor, sal_Int32 nA
         | ( ( ( ( ( nColor & 0xff0000 ) >> 8 ) * nIntensity ) / 100 ) << 8 ));
 }
 
-bool DrawingML::EqualGradients( awt::Gradient aGradient1, awt::Gradient aGradient2 )
-{
-    return aGradient1.Style == aGradient2.Style &&
-            aGradient1.StartColor == aGradient2.StartColor &&
-            aGradient1.EndColor == aGradient2.EndColor &&
-            aGradient1.Angle == aGradient2.Angle &&
-            aGradient1.Border == aGradient2.Border &&
-            aGradient1.XOffset == aGradient2.XOffset &&
-            aGradient1.YOffset == aGradient2.YOffset &&
-            aGradient1.StartIntensity == aGradient2.StartIntensity &&
-            aGradient1.EndIntensity == aGradient2.EndIntensity &&
-            aGradient1.StepCount == aGradient2.StepCount;
-}
-
 void DrawingML::WriteGradientFill( const Reference< XPropertySet >& rXPropSet )
 {
-    awt::Gradient aGradient;
     if (!GetProperty(rXPropSet, "FillGradient"))
         return;
 
-    aGradient = *o3tl::doAccess<awt::Gradient>(mAny);
+    // use BGradient constructor directly, it will take care of Gradient/Gradient2
+    basegfx::BGradient aGradient(mAny);
 
     // get InteropGrabBag and search the relevant attributes
-    awt::Gradient aOriginalGradient;
+    basegfx::BGradient aOriginalGradient;
     Sequence< PropertyValue > aGradientStops;
     if ( GetProperty( rXPropSet, "InteropGrabBag" ) )
     {
@@ -648,13 +618,14 @@ void DrawingML::WriteGradientFill( const Reference< XPropertySet >& rXPropSet )
             if( rProp.Name == "GradFillDefinition" )
                 rProp.Value >>= aGradientStops;
             else if( rProp.Name == "OriginalGradFill" )
-                rProp.Value >>= aOriginalGradient;
+                // use BGradient constructor directly, it will take care of Gradient/Gradient2
+                aOriginalGradient = basegfx::BGradient(rProp.Value);
     }
 
     // check if an ooxml gradient had been imported and if the user has modified it
     // Gradient grab-bag depends on theme grab-bag, which is implemented
     // only for DOCX.
-    if( EqualGradients( aOriginalGradient, aGradient ) && GetDocumentType() == DOCUMENT_DOCX)
+    if (aOriginalGradient == aGradient && GetDocumentType() == DOCUMENT_DOCX)
     {
         // If we have no gradient stops that means original gradient were defined by a theme.
         if( aGradientStops.hasElements() )
@@ -666,33 +637,39 @@ void DrawingML::WriteGradientFill( const Reference< XPropertySet >& rXPropSet )
     }
     else
     {
-        awt::Gradient aTransparenceGradient;
         mpFS->startElementNS(XML_a, XML_gradFill, XML_rotWithShape, "0");
+
+        basegfx::BGradient aTransparenceGradient;
+        basegfx::BGradient* pTransparenceGradient(nullptr);
+        double fTransparency(0.0);
         OUString sFillTransparenceGradientName;
+
         if (GetProperty(rXPropSet, "FillTransparenceGradientName")
             && (mAny >>= sFillTransparenceGradientName)
-            && !sFillTransparenceGradientName.isEmpty())
+            && !sFillTransparenceGradientName.isEmpty()
+            && GetProperty(rXPropSet, "FillTransparenceGradient"))
         {
-            if (GetProperty(rXPropSet, "FillTransparenceGradient"))
-                aTransparenceGradient = *o3tl::doAccess<awt::Gradient>(mAny);
+            // TransparenceGradient is only used when name is not empty
+            aTransparenceGradient = basegfx::BGradient(mAny);
+            pTransparenceGradient = &aTransparenceGradient;
         }
         else if (GetProperty(rXPropSet, "FillTransparence"))
         {
-            // currently only StartColor and EndColor are evaluated in WriteGradientFill()
-            sal_Int32 nTransparency = 0;
+            // no longer create PseudoTransparencyGradient, use new API of
+            // WriteGradientFill to express fix transparency
+            sal_Int32 nTransparency(0);
             mAny >>= nTransparency;
-            // convert percent to gray color
-            nTransparency = nTransparency * 255/100;
-            const sal_Int32 aGrayColor = static_cast<sal_Int32>( nTransparency | nTransparency << 8 | nTransparency << 16 );
-            aTransparenceGradient.StartColor = aGrayColor;
-            aTransparenceGradient.EndColor = aGrayColor;
+            // nTransparency is [0..100]%
+            fTransparency = nTransparency * 0.01;
         }
-        WriteGradientFill(aGradient, aTransparenceGradient);
+
+        WriteGradientFill(&aGradient, 0, pTransparenceGradient, fTransparency);
+
         mpFS->endElementNS(XML_a, XML_gradFill);
     }
 }
 
-void DrawingML::WriteGrabBagGradientFill( const Sequence< PropertyValue >& aGradientStops, awt::Gradient rGradient )
+void DrawingML::WriteGrabBagGradientFill( const Sequence< PropertyValue >& aGradientStops, const basegfx::BGradient& rBGradient )
 {
     // write back the original gradient
     mpFS->startElementNS(XML_a, XML_gsLst);
@@ -723,7 +700,7 @@ void DrawingML::WriteGrabBagGradientFill( const Sequence< PropertyValue >& aGrad
                 rProp.Value >>= aTransformations;
         }
         // write stop
-        mpFS->startElementNS(XML_a, XML_gs, XML_pos, OString::number(nPos * 100000.0).getStr());
+        mpFS->startElementNS(XML_a, XML_gs, XML_pos, OString::number(nPos * 100000.0));
         if( sSchemeClr.isEmpty() )
         {
             // Calculate alpha value (see oox/source/drawingml/color.cxx : getTransparency())
@@ -738,104 +715,177 @@ void DrawingML::WriteGrabBagGradientFill( const Sequence< PropertyValue >& aGrad
     }
     mpFS->endElementNS( XML_a, XML_gsLst );
 
-    switch (rGradient.Style)
+    switch (rBGradient.GetGradientStyle())
     {
         default:
+        {
+            const sal_Int16 nAngle(rBGradient.GetAngle());
             mpFS->singleElementNS(
                 XML_a, XML_lin, XML_ang,
-                OString::number(((3600 - rGradient.Angle + 900) * 6000) % 21600000));
+                OString::number(((3600 - static_cast<sal_Int32>(nAngle) + 900) * 6000) % 21600000));
             break;
+        }
         case awt::GradientStyle_RADIAL:
-            WriteGradientPath(rGradient, mpFS, true);
+        {
+            WriteGradientPath(rBGradient, mpFS, true);
             break;
+        }
     }
 }
 
-void DrawingML::WriteGradientFill(awt::Gradient rGradient, awt::Gradient rTransparenceGradient,
-                                  const uno::Reference<beans::XPropertySet>& rXPropSet)
+void DrawingML::WriteGradientFill(
+    const basegfx::BGradient* pColorGradient, sal_Int32 nFixColor,
+    const basegfx::BGradient* pTransparenceGradient, double fFixTransparence)
 {
-    sal_Int32 nStartAlpha;
-    sal_Int32 nEndAlpha;
-    if( rXPropSet.is() && GetProperty(rXPropSet, "FillTransparence") )
+    basegfx::BColorStops aColorStops;
+    basegfx::BColorStops aAlphaStops;
+    basegfx::BColor aSingleColor(::Color(ColorTransparency, nFixColor).getBColor());
+    basegfx::BColor aSingleAlpha(fFixTransparence);
+    const basegfx::BGradient* pGradient(pColorGradient);
+
+    if (nullptr != pColorGradient)
     {
-        sal_Int32 nTransparency = 0;
-        mAny >>= nTransparency;
-        nStartAlpha = nEndAlpha = (MAX_PERCENT - (PER_PERCENT * nTransparency));
+        // extract and correct/process ColorStops
+        basegfx::utils::prepareColorStops(*pColorGradient, aColorStops, aSingleColor);
     }
-    else
+
+    if (nullptr != pTransparenceGradient)
     {
-        nStartAlpha = GetAlphaFromTransparenceGradient(rTransparenceGradient, true);
-        nEndAlpha = GetAlphaFromTransparenceGradient(rTransparenceGradient, false);
+        // remember basic Gradient definition to use
+        if (nullptr == pGradient)
+        {
+            pGradient = pTransparenceGradient;
+        }
+
+        // extract and correct/process AlphaStops
+        basegfx::utils::prepareColorStops(*pTransparenceGradient, aAlphaStops, aSingleAlpha);
     }
-    switch( rGradient.Style )
+
+    // synchronize ColorStops and AlphaStops as preparation to export
+    // so also gradients 'coupled' indirectly using the 'FillTransparenceGradient'
+    // method (at import time) will be exported again
+    basegfx::utils::synchronizeColorStops(aColorStops, aAlphaStops, aSingleColor, aSingleAlpha);
+
+    if (aColorStops.size() != aAlphaStops.size() || nullptr == pGradient)
     {
-        default:
+        // this is an error - synchronizeColorStops above *has* to create that
+        // state, see description there (!)
+        // also an error - see comment in header - is to give neither pColorGradient
+        // nor pTransparenceGradient
+        assert(false && "oox::WriteGradientFill: non-synchronized gradients (!)");
+        return;
+    }
+
+    bool bRadialOrEllipticalOrRectOrSquare(false);
+    bool bLinear(false);
+    bool bAxial(false);
+
+    switch (pGradient->GetGradientStyle())
+    {
         case awt::GradientStyle_LINEAR:
         {
-            mpFS->startElementNS(XML_a, XML_gsLst);
-            WriteGradientStop(rGradient.Border, ColorWithIntensity(rGradient.StartColor, rGradient.StartIntensity),
-                              nStartAlpha);
-            WriteGradientStop(100, ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                              nEndAlpha);
-            mpFS->endElementNS( XML_a, XML_gsLst );
-            mpFS->singleElementNS(
-                XML_a, XML_lin, XML_ang,
-                OString::number(((3600 - rGradient.Angle + 900) * 6000) % 21600000));
+            // remember being linear, nothing else to be done
+            bLinear = true;
             break;
         }
-
         case awt::GradientStyle_AXIAL:
         {
-            mpFS->startElementNS(XML_a, XML_gsLst);
-            WriteGradientStop(0, ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                              nEndAlpha);
-            if (rGradient.Border > 0 && rGradient.Border < 100)
+            // we need to 'double' the gradient to make it appear as what we call
+            // 'axial', but also scale and mirror in doing so
+            basegfx::BColorStops aNewColorStops;
+            basegfx::BColorStops aNewAlphaStops;
+
+            // add mirrored gradients, scaled to [0.0 .. 0.5]
+            basegfx::BColorStops::const_reverse_iterator aRevCurrColor(aColorStops.rbegin());
+            basegfx::BColorStops::const_reverse_iterator aRevCurrAlpha(aAlphaStops.rbegin());
+
+            while (aRevCurrColor != aColorStops.rend() && aRevCurrAlpha != aAlphaStops.rend())
             {
-                WriteGradientStop(rGradient.Border/2,
-                                  ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                                  nEndAlpha);
+                aNewColorStops.emplace_back((1.0 - aRevCurrColor->getStopOffset()) * 0.5, aRevCurrColor->getStopColor());
+                aNewAlphaStops.emplace_back((1.0 - aRevCurrAlpha->getStopOffset()) * 0.5, aRevCurrAlpha->getStopColor());
+                aRevCurrColor++;
+                aRevCurrAlpha++;
             }
-            WriteGradientStop(50, ColorWithIntensity(rGradient.StartColor, rGradient.StartIntensity),
-                              nStartAlpha);
-            if (rGradient.Border > 0 && rGradient.Border < 100)
+
+            basegfx::BColorStops::const_iterator aCurrColor(aColorStops.begin());
+            basegfx::BColorStops::const_iterator aCurrAlpha(aAlphaStops.begin());
+
+            if (basegfx::fTools::equalZero(aCurrColor->getStopOffset()))
             {
-                WriteGradientStop(100 - rGradient.Border/2,
-                                  ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                                  nEndAlpha);
+                // Caution: do not add 1st entry again, that would be double since it was
+                // already added as last element of the inverse run above. But only if
+                // the gradient has a start entry for 0.0 aka StartColor, else it is correct.
+                // Since aColorStops and aAlphaStops are already synched (see
+                // synchronizeColorStops above), testing one of them is sufficient here.
+                aCurrColor++;
+                aCurrAlpha++;
             }
-            WriteGradientStop(100, ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                              nEndAlpha);
-            mpFS->endElementNS(XML_a, XML_gsLst);
-            mpFS->singleElementNS(
-                XML_a, XML_lin, XML_ang,
-                OString::number(((3600 - rGradient.Angle + 900) * 6000) % 21600000));
+
+            // add non-mirrored gradients, translated and scaled to [0.5 .. 1.0]
+            while (aCurrColor != aColorStops.end() && aCurrAlpha != aAlphaStops.end())
+            {
+                aNewColorStops.emplace_back((aCurrColor->getStopOffset() * 0.5) + 0.5, aCurrColor->getStopColor());
+                aNewAlphaStops.emplace_back((aCurrAlpha->getStopOffset() * 0.5) + 0.5, aCurrAlpha->getStopColor());
+                aCurrColor++;
+                aCurrAlpha++;
+            }
+
+            aColorStops = aNewColorStops;
+            aAlphaStops = aNewAlphaStops;
+
+            // remember being axial
+            bAxial = true;
             break;
         }
-
-        case awt::GradientStyle_RADIAL:
-        case awt::GradientStyle_ELLIPTICAL:
-        case awt::GradientStyle_RECT:
-        case awt::GradientStyle_SQUARE:
+        default:
+        // case awt::GradientStyle_RADIAL:
+        // case awt::GradientStyle_ELLIPTICAL:
+        // case awt::GradientStyle_RECT:
+        // case awt::GradientStyle_SQUARE:
         {
-            mpFS->startElementNS(XML_a, XML_gsLst);
-            WriteGradientStop(0, ColorWithIntensity(rGradient.EndColor, rGradient.EndIntensity),
-                              nEndAlpha);
-            if (rGradient.Border > 0 && rGradient.Border < 100)
-            {
-                // Map border to an additional gradient stop, which has the
-                // same color as the final stop.
-                WriteGradientStop(100 - rGradient.Border,
-                                  ColorWithIntensity(rGradient.StartColor, rGradient.StartIntensity),
-                                  nStartAlpha);
-            }
-            WriteGradientStop(100,
-                              ColorWithIntensity(rGradient.StartColor, rGradient.StartIntensity),
-                              nStartAlpha);
-            mpFS->endElementNS(XML_a, XML_gsLst);
+            // all these types need the gradients to be mirrored
+            aColorStops.reverseColorStops();
+            aAlphaStops.reverseColorStops();
 
-            WriteGradientPath(rGradient, mpFS, rGradient.Style == awt::GradientStyle_RADIAL || rGradient.Style == awt::GradientStyle_ELLIPTICAL);
+            bRadialOrEllipticalOrRectOrSquare = true;
             break;
         }
+    }
+
+    // export GradientStops (with alpha)
+    mpFS->startElementNS(XML_a, XML_gsLst);
+
+    basegfx::BColorStops::const_iterator aCurrColor(aColorStops.begin());
+    basegfx::BColorStops::const_iterator aCurrAlpha(aAlphaStops.begin());
+
+    while (aCurrColor != aColorStops.end() && aCurrAlpha != aAlphaStops.end())
+    {
+        WriteGradientStop(
+            aCurrColor->getStopOffset(),
+            aCurrColor->getStopColor(),
+            aCurrAlpha->getStopColor());
+        aCurrColor++;
+        aCurrAlpha++;
+    }
+
+    mpFS->endElementNS( XML_a, XML_gsLst );
+
+    if (bLinear || bAxial)
+    {
+        // cases where gradient rotation has to be exported
+        const sal_Int16 nAngle(pGradient->GetAngle());
+        mpFS->singleElementNS(
+            XML_a, XML_lin, XML_ang,
+            OString::number(((3600 - static_cast<sal_Int32>(nAngle) + 900) * 6000) % 21600000));
+    }
+
+    if (bRadialOrEllipticalOrRectOrSquare)
+    {
+        // cases where gradient path has to be exported
+        const bool bCircle(pGradient->GetGradientStyle() == awt::GradientStyle_RADIAL ||
+            pGradient->GetGradientStyle() == awt::GradientStyle_ELLIPTICAL);
+
+        WriteGradientPath(*pGradient, mpFS, bCircle);
     }
 }
 
@@ -1043,15 +1093,16 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
     mpFS->startElementNS( XML_a, XML_ln,
                           XML_cap, cap,
                           XML_w, sax_fastparser::UseIf(OString::number(nEmuLineWidth),
-                              nLineWidth == 0 || (nLineWidth > 1 && nStyleLineWidth != nLineWidth)) );
+                              nLineWidth == 0 || GetDocumentType() == DOCUMENT_XLSX    // tdf#119565 LO doesn't export the actual theme.xml in XLSX.
+                                  || (nLineWidth > 1 && nStyleLineWidth != nLineWidth)));
 
     if( bColorSet )
     {
         if( nColor != nOriginalColor )
         {
             // the user has set a different color for the line
-            if (!WriteSchemeColor(u"LineColorThemeReference", rXPropSet))
-                    WriteSolidFill(nColor, nColorAlpha);
+            if (!WriteSchemeColor(u"LineComplexColor", rXPropSet))
+                WriteSolidFill(nColor, nColorAlpha);
         }
         else if( !sColorFillScheme.isEmpty() )
         {
@@ -1211,7 +1262,9 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
     {
         LineJoint eLineJoint = mAny.get<LineJoint>();
 
-        if( aStyleLineJoint == LineJoint_NONE || aStyleLineJoint != eLineJoint )
+        // tdf#119565 LO doesn't export the actual theme.xml in XLSX.
+        if (aStyleLineJoint == LineJoint_NONE || GetDocumentType() == DOCUMENT_XLSX
+            || aStyleLineJoint != eLineJoint)
         {
             // style-defined line joint does not exist, or is different from the shape's joint
             switch( eLineJoint )
@@ -1247,29 +1300,137 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
 
 const char* DrawingML::GetComponentDir() const
 {
-    switch ( meDocumentType )
-    {
-        case DOCUMENT_DOCX: return "word";
-        case DOCUMENT_PPTX: return "ppt";
-        case DOCUMENT_XLSX: return "xl";
-    }
-
-    return "unknown";
+    return getComponentDir(meDocumentType);
 }
 
 const char* DrawingML::GetRelationCompPrefix() const
 {
-    switch ( meDocumentType )
-    {
-        case DOCUMENT_DOCX: return "";
-        case DOCUMENT_PPTX:
-        case DOCUMENT_XLSX: return "../";
-    }
-
-    return "unknown";
+    return getRelationCompPrefix(meDocumentType);
 }
 
-OUString DrawingML::WriteImage( const Graphic& rGraphic , bool bRelPathToMedia )
+OUString GraphicExport::writeBlip(Graphic const& rGraphic, std::vector<model::BlipEffect> const& rEffects, bool bRelPathToMedia)
+{
+    OUString sRelId;
+
+    sRelId = writeToStorage(rGraphic, bRelPathToMedia);
+
+    mpFS->startElementNS(XML_a, XML_blip, FSNS(XML_r, XML_embed), sRelId);
+
+    for (auto const& rEffect : rEffects)
+    {
+        switch (rEffect.meType)
+        {
+            case model::BlipEffectType::AlphaBiLevel:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaBiLevel, XML_thresh, OString::number(rEffect.mnThreshold));
+            }
+            break;
+            case model::BlipEffectType::AlphaCeiling:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaCeiling);
+            }
+            break;
+            case model::BlipEffectType::AlphaFloor:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaFloor);
+            }
+            break;
+            case model::BlipEffectType::AlphaInverse:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaInv);
+                // TODO: export rEffect.maColor1
+            }
+            break;
+            case model::BlipEffectType::AlphaModulate:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaMod);
+                // TODO
+            }
+            break;
+            case model::BlipEffectType::AlphaModulateFixed:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaModFix, XML_amt, OString::number(rEffect.mnAmount));
+            }
+            break;
+            case model::BlipEffectType::AlphaReplace:
+            {
+                mpFS->singleElementNS(XML_a, XML_alphaRepl, XML_a, OString::number(rEffect.mnAlpha));
+            }
+            break;
+            case model::BlipEffectType::BiLevel:
+            {
+                mpFS->singleElementNS(XML_a, XML_biLevel, XML_thresh, OString::number(rEffect.mnThreshold));
+            }
+            break;
+            case model::BlipEffectType::Blur:
+            {
+                mpFS->singleElementNS(XML_a, XML_blur,
+                    XML_rad, OString::number(rEffect.mnRadius),
+                    XML_grow, rEffect.mbGrow ? "1" : "0");
+            }
+            break;
+            case model::BlipEffectType::ColorChange:
+            {
+                mpFS->startElementNS(XML_a, XML_clrChange, XML_useA, rEffect.mbUseAlpha ? "1" : "0");
+                mpFS->endElementNS(XML_a, XML_clrChange);
+            }
+            break;
+            case model::BlipEffectType::ColorReplace:
+            {
+                mpFS->startElementNS(XML_a, XML_clrRepl);
+                mpFS->endElementNS(XML_a, XML_clrRepl);
+            }
+            break;
+            case model::BlipEffectType::DuoTone:
+            {
+                mpFS->startElementNS(XML_a, XML_duotone);
+                mpFS->endElementNS(XML_a, XML_duotone);
+            }
+            break;
+            case model::BlipEffectType::FillOverlay:
+            {
+                mpFS->singleElementNS(XML_a, XML_fillOverlay);
+            }
+            break;
+            case model::BlipEffectType::Grayscale:
+            {
+                mpFS->singleElementNS(XML_a, XML_grayscl);
+            }
+            break;
+            case model::BlipEffectType::HSL:
+            {
+                mpFS->singleElementNS(XML_a, XML_hsl,
+                    XML_hue, OString::number(rEffect.mnHue),
+                    XML_sat, OString::number(rEffect.mnSaturation),
+                    XML_lum, OString::number(rEffect.mnLuminance));
+            }
+            break;
+            case model::BlipEffectType::Luminance:
+            {
+                mpFS->singleElementNS(XML_a, XML_lum,
+                    XML_bright, OString::number(rEffect.mnBrightness),
+                    XML_contrast, OString::number(rEffect.mnContrast));
+            }
+            break;
+            case model::BlipEffectType::Tint:
+            {
+                mpFS->singleElementNS(XML_a, XML_tint,
+                    XML_hue, OString::number(rEffect.mnHue),
+                    XML_amt, OString::number(rEffect.mnAmount));
+            }
+            break;
+
+            default:
+                break;
+        }
+    }
+
+    mpFS->endElementNS(XML_a, XML_blip);
+
+    return sRelId;
+}
+
+OUString GraphicExport::writeToStorage(const Graphic& rGraphic , bool bRelPathToMedia)
 {
     GfxLink aLink = rGraphic.GetGfxLink ();
     BitmapChecksum aChecksum = rGraphic.GetChecksum();
@@ -1279,12 +1440,8 @@ OUString DrawingML::WriteImage( const Graphic& rGraphic , bool bRelPathToMedia )
     OUString sPath;
 
     // tdf#74670 tdf#91286 Save image only once
-    if (!maExportGraphics.empty())
-    {
-        auto aIterator = maExportGraphics.top().find(aChecksum);
-        if (aIterator != maExportGraphics.top().end())
-            sPath = aIterator->second;
-    }
+    GraphicExportCache& rGraphicExportCache = GraphicExportCache::get();
+    sPath = rGraphicExportCache.findExportGraphics(aChecksum);
 
     if (sPath.isEmpty())
     {
@@ -1369,10 +1526,11 @@ OUString DrawingML::WriteImage( const Graphic& rGraphic , bool bRelPathToMedia )
             }
         }
 
-        Reference<XOutputStream> xOutStream = mpFB->openFragmentStream(
+        sal_Int32 nImageCount = rGraphicExportCache.nextImageCount();
+        Reference<XOutputStream> xOutStream = mpFilterBase->openFragmentStream(
             OUStringBuffer()
-                .appendAscii(GetComponentDir())
-                .append("/media/image" + OUString::number(mnImageCounter.top()))
+                .appendAscii(getComponentDir(meDocumentType))
+                .append("/media/image" + OUString::number(nImageCount))
                 .appendAscii(pExtension)
                 .makeStringAndClear(),
             sMediaType);
@@ -1384,23 +1542,28 @@ OUString DrawingML::WriteImage( const Graphic& rGraphic , bool bRelPathToMedia )
         if (bRelPathToMedia)
             sRelationCompPrefix = "../";
         else
-            sRelationCompPrefix = GetRelationCompPrefix();
+            sRelationCompPrefix = getRelationCompPrefix(meDocumentType);
         sPath = OUStringBuffer()
                     .appendAscii(sRelationCompPrefix.getStr())
                     .appendAscii(sRelPathToMedia.getStr())
-                    .append(static_cast<sal_Int32>(mnImageCounter.top()++))
+                    .append(nImageCount)
                     .appendAscii(pExtension)
                     .makeStringAndClear();
 
-        if (!maExportGraphics.empty())
-            maExportGraphics.top()[aChecksum] = sPath;
+        rGraphicExportCache.addExportGraphics(aChecksum, sPath);
     }
 
-    sRelId = mpFB->addRelation( mpFS->getOutputStream(),
+    sRelId = mpFilterBase->addRelation( mpFS->getOutputStream(),
                                 oox::getRelationship(Relationship::IMAGE),
                                 sPath );
 
     return sRelId;
+}
+
+OUString DrawingML::WriteImage( const Graphic& rGraphic , bool bRelPathToMedia )
+{
+    GraphicExport exporter(mpFS, mpFB, meDocumentType);
+    return exporter.writeToStorage(rGraphic, bRelPathToMedia);
 }
 
 void DrawingML::WriteMediaNonVisualProperties(const css::uno::Reference<css::drawing::XShape>& xShape)
@@ -1425,6 +1588,11 @@ void DrawingML::WriteMediaNonVisualProperties(const css::uno::Reference<css::dra
 #else
     OUString aMimeType("none");
 #endif
+    if (aMimeType.startsWith("audio/"))
+    {
+        eMediaType = Relationship::AUDIO;
+    }
+    else
     if (aMimeType == "application/vnd.sun.star.media")
     {
         // try to set something better
@@ -1463,14 +1631,15 @@ void DrawingML::WriteMediaNonVisualProperties(const css::uno::Reference<css::dra
 
     if (bEmbed)
     {
+        sal_Int32  nImageCount = GraphicExportCache::get().nextImageCount();
+
+        OUString sFileName = OUStringBuffer()
+            .appendAscii(GetComponentDir())
+            .append("/media/media" + OUString::number(nImageCount) + aExtension)
+            .makeStringAndClear();
+
         // copy the video stream
-        Reference<XOutputStream> xOutStream = mpFB->openFragmentStream(OUStringBuffer()
-                                                                       .appendAscii(GetComponentDir())
-                                                                       .append("/media/media" +
-                                                                            OUString::number(mnImageCounter.top()) +
-                                                                            aExtension)
-                                                                       .makeStringAndClear(),
-                                                                       aMimeType);
+        Reference<XOutputStream> xOutStream = mpFB->openFragmentStream(sFileName, aMimeType);
 
         uno::Reference<io::XInputStream> xInputStream(pMediaObj->GetInputStream());
         comphelper::OStorageHelper::CopyInputToOutput(xInputStream, xOutStream);
@@ -1479,7 +1648,7 @@ void DrawingML::WriteMediaNonVisualProperties(const css::uno::Reference<css::dra
 
         // create the relation
         OUString aPath = OUStringBuffer().appendAscii(GetRelationCompPrefix())
-                                         .append("media/media" + OUString::number(mnImageCounter.top()++) + aExtension)
+                                         .append("media/media" + OUString::number(nImageCount) + aExtension)
                                          .makeStringAndClear();
         aVideoFileRelId = mpFB->addRelation(mpFS->getOutputStream(), oox::getRelationship(eMediaType), aPath);
         aMediaRelId = mpFB->addRelation(mpFS->getOutputStream(), oox::getRelationship(Relationship::MEDIA), aPath);
@@ -2460,7 +2629,7 @@ void DrawingML::WriteRunProperties( const Reference< XPropertySet >& rRun, bool 
                 else
                 {
                     color.SetAlpha(255);
-                    if (!WriteSchemeColor(u"CharColorThemeReference", rXPropSet))
+                    if (!WriteSchemeColor(u"CharComplexColor", rXPropSet))
                         WriteSolidFill(color, nTransparency);
                 }
                 mpFS->endElementNS(XML_a, XML_ln);
@@ -2473,7 +2642,7 @@ void DrawingML::WriteRunProperties( const Reference< XPropertySet >& rRun, bool 
             {
                 color.SetAlpha(255);
                 // TODO: special handle embossed/engraved
-                if (!WriteSchemeColor(u"CharColorThemeReference", rXPropSet))
+                if (!WriteSchemeColor(u"CharComplexColor", rXPropSet))
                 {
                     WriteSolidFill(color, nTransparency);
                 }
@@ -2831,7 +3000,7 @@ void DrawingML::WriteRun( const Reference< XTextRange >& rRun,
         {
             mpFS->startElementNS(XML_a, XML_br);
             mpFS->singleElementNS(XML_a, XML_rPr, XML_sz,
-                                  OString::number(nFontSize * 100).getStr());
+                                  OString::number(nFontSize * 100));
             mpFS->endElementNS(XML_a, XML_br);
         }
         else
@@ -3200,7 +3369,7 @@ void DrawingML::WriteLinespacing(const LineSpacing& rSpacing, float fFirstCharHe
     }
 }
 
-bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagraph, const Reference<XPropertySet>& rXShapePropSet, float fFirstCharHeight, sal_Int32 nElement)
+bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagraph, float fFirstCharHeight, sal_Int32 nElement)
 {
     Reference< XPropertySet > rXPropSet( rParagraph, UNO_QUERY );
     Reference< XPropertyState > rXPropState( rParagraph, UNO_QUERY );
@@ -3294,24 +3463,6 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
     if (GetProperty(rXPropSet, "ParaTabStopDefaultDistance"))
         mAny >>= nParaDefaultTabSize;
 
-    // for autofitted textboxes, scale the indents
-    if (GetProperty(rXShapePropSet, "TextFitToSize") && mAny.get<TextFitToSizeType>() == TextFitToSizeType_AUTOFIT)
-    {
-        SvxShapeText* pTextShape = dynamic_cast<SvxShapeText*>(rXShapePropSet.get());
-        if (pTextShape)
-        {
-            SdrTextObj* pTextObject = DynCastSdrTextObj(pTextShape->GetSdrObject());
-            if (pTextObject)
-            {
-                const auto nFontScaleY = pTextObject->GetFontScaleY();
-                nLeftMargin = nLeftMargin * nFontScaleY / 100;
-                nLineIndentation = nLineIndentation * nFontScaleY / 100;
-                nParaLeftMargin = nParaLeftMargin * nFontScaleY / 100;
-                nParaFirstLineIndent = nParaFirstLineIndent * nFontScaleY / 100;
-            }
-        }
-    }
-
     if (nParaLeftMargin) // For Paragraph
         mpFS->startElementNS( XML_a, nElement,
                            XML_lvl, sax_fastparser::UseIf(OString::number(nLevel), nLevel > 0),
@@ -3401,7 +3552,7 @@ void DrawingML::WriteLstStyles(const css::uno::Reference<css::text::XTextContent
             fFirstCharHeight = xFirstRunPropSet->getPropertyValue("CharHeight").get<float>();
 
         mpFS->startElementNS(XML_a, XML_lstStyle);
-        if( !WriteParagraphProperties(rParagraph, rXShapePropSet, fFirstCharHeight, XML_lvl1pPr) )
+        if( !WriteParagraphProperties(rParagraph, fFirstCharHeight, XML_lvl1pPr) )
             mpFS->startElementNS(XML_a, XML_lvl1pPr);
         WriteRunProperties(xFirstRunPropSet, false, XML_defRPr, true, rbOverridingCharHeight,
                            rnCharHeight, GetScriptType(rRun->getString()), rXShapePropSet);
@@ -3443,7 +3594,7 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
                     rnCharHeight = 100 * fFirstCharHeight;
                     rbOverridingCharHeight = true;
                 }
-                WriteParagraphProperties(rParagraph, rXShapePropSet, fFirstCharHeight, XML_pPr);
+                WriteParagraphProperties(rParagraph, fFirstCharHeight, XML_pPr);
                 bPropertiesWritten = true;
             }
             WriteRun( run, rbOverridingCharHeight, rnCharHeight, rXShapePropSet);
@@ -3881,6 +4032,11 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
             }
         }
 
+        if (!sVertOverflow && GetProperty(rXPropSet, "TextClipVerticalOverflow") && mAny.get<bool>())
+        {
+            sVertOverflow = "clip";
+        }
+
         mpFS->startElementNS( (nXmlNamespace ? nXmlNamespace : XML_a), XML_bodyPr,
                                XML_numCol, sax_fastparser::UseIf(OString::number(nCols), nCols > 0),
                                XML_spcCol, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nColSpacing)), nCols > 0 && nColSpacing >= 0),
@@ -3994,16 +4150,29 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
             {
                 const sal_Int32 MAX_SCALE_VAL = 100000;
                 sal_Int32 nFontScale = MAX_SCALE_VAL;
+                sal_Int32 nSpacingReduction = 0;
                 SvxShapeText* pTextShape = dynamic_cast<SvxShapeText*>(rXIface.get());
                 if (pTextShape)
                 {
                     SdrTextObj* pTextObject = DynCastSdrTextObj(pTextShape->GetSdrObject());
                     if (pTextObject)
-                        nFontScale = pTextObject->GetFontScaleY() * 1000;
+                    {
+                        nFontScale = sal_Int32(pTextObject->GetFontScale() * 1000.0);
+                        nSpacingReduction = sal_Int32((100.0 - pTextObject->GetSpacingScale()) * 1000.0);
+                    }
                 }
 
-                mpFS->singleElementNS(XML_a, XML_normAutofit, XML_fontScale,
-                    sax_fastparser::UseIf(OString::number(nFontScale), nFontScale < MAX_SCALE_VAL && nFontScale > 0));
+                bool bExportFontScale = false;
+                if (nFontScale < MAX_SCALE_VAL && nFontScale > 0)
+                    bExportFontScale = true;
+
+                bool bExportSpaceReduction = false;
+                if (nSpacingReduction < MAX_SCALE_VAL && nSpacingReduction > 0)
+                    bExportSpaceReduction = true;
+
+                mpFS->singleElementNS(XML_a, XML_normAutofit,
+                    XML_fontScale, sax_fastparser::UseIf(OString::number(nFontScale), bExportFontScale),
+                    XML_lnSpcReduction, sax_fastparser::UseIf(OString::number(nSpacingReduction), bExportSpaceReduction));
             }
             else
             {
@@ -4091,7 +4260,7 @@ void DrawingML::WriteText(const Reference<XInterface>& rXIface, bool bBodyPr, bo
         if( aAny >>= xParagraph )
         {
             mpFS->startElementNS(XML_a, XML_p);
-            WriteParagraphProperties(xParagraph, rXPropSet, nCharHeight, XML_pPr);
+            WriteParagraphProperties(xParagraph, nCharHeight, XML_pPr);
             sal_Int16 nDummy = -1;
             WriteRunProperties(rXPropSet, false, XML_endParaRPr, false,
                                bOverridingCharHeight, nCharHeight, nDummy, rXPropSet);
@@ -5124,20 +5293,20 @@ sax_fastparser::FSHelperPtr DrawingML::CreateOutputStream (
     const OUString& sFullStream,
     std::u16string_view sRelativeStream,
     const Reference< XOutputStream >& xParentRelation,
-    const char* sContentType,
-    const char* sRelationshipType,
+    const OUString& sContentType,
+    const OUString& sRelationshipType,
     OUString* pRelationshipId )
 {
     OUString sRelationshipId;
     if (xParentRelation.is())
-        sRelationshipId = GetFB()->addRelation( xParentRelation, OUString::createFromAscii( sRelationshipType), sRelativeStream );
+        sRelationshipId = GetFB()->addRelation( xParentRelation, sRelationshipType, sRelativeStream );
     else
-        sRelationshipId = GetFB()->addRelation( OUString::createFromAscii( sRelationshipType ), sRelativeStream );
+        sRelationshipId = GetFB()->addRelation( sRelationshipType, sRelativeStream );
 
     if( pRelationshipId )
         *pRelationshipId = sRelationshipId;
 
-    sax_fastparser::FSHelperPtr p = GetFB()->openFragmentStreamWithSerializer( sFullStream, OUString::createFromAscii( sContentType ) );
+    sax_fastparser::FSHelperPtr p = GetFB()->openFragmentStreamWithSerializer( sFullStream, sContentType );
 
     return p;
 }
@@ -5150,19 +5319,35 @@ void DrawingML::WriteFill(const Reference<XPropertySet>& xPropSet, const awt::Si
     xPropSet->getPropertyValue( "FillStyle" ) >>= aFillStyle;
 
     // map full transparent background to no fill
-    if ( aFillStyle == FillStyle_SOLID && GetProperty( xPropSet, "FillTransparence" ) )
+    if (aFillStyle == FillStyle_SOLID)
     {
-        sal_Int16 nVal = 0;
-        xPropSet->getPropertyValue( "FillTransparence" ) >>= nVal;
-        if ( nVal == 100 )
-            aFillStyle = FillStyle_NONE;
-    }
-    if (aFillStyle == FillStyle_SOLID && GetProperty( xPropSet, "FillTransparenceGradient"))
-    {
-        awt::Gradient aTransparenceGradient;
-        mAny >>= aTransparenceGradient;
-        if (aTransparenceGradient.StartColor == 0xffffff && aTransparenceGradient.EndColor == 0xffffff)
-            aFillStyle = FillStyle_NONE;
+        OUString sFillTransparenceGradientName;
+
+        if (GetProperty(xPropSet, "FillTransparenceGradientName")
+            && (mAny >>= sFillTransparenceGradientName)
+            && !sFillTransparenceGradientName.isEmpty()
+            && GetProperty(xPropSet, "FillTransparenceGradient"))
+        {
+            // check if a fully transparent TransparenceGradient is used
+            // use BGradient constructor & tooling here now
+            const basegfx::BGradient aTransparenceGradient(mAny);
+            basegfx::BColor aSingleColor;
+            const bool bSingleColor(aTransparenceGradient.GetColorStops().isSingleColor(aSingleColor));
+            const bool bCompletelyTransparent(bSingleColor && basegfx::fTools::equal(aSingleColor.luminance(), 1.0));
+
+            if (bCompletelyTransparent)
+            {
+                aFillStyle = FillStyle_NONE;
+            }
+        }
+        else if ( GetProperty( xPropSet, "FillTransparence" ) )
+        {
+            // check if a fully transparent FillTransparence is used
+            sal_Int16 nVal = 0;
+            xPropSet->getPropertyValue( "FillTransparence" ) >>= nVal;
+            if ( nVal == 100 )
+                aFillStyle = FillStyle_NONE;
+        }
     }
 
     bool bUseBackground(false);
@@ -5301,91 +5486,91 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
                 {
                     sal_Int64 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_blurRad, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_blurRad, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "dir" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_dir, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_dir, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "dist" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_dist, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_dist, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "kx" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_kx, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_kx, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "ky" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_ky, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_ky, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "rotWithShape" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_rotWithShape, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_rotWithShape, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "sx" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_sx, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_sx, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "sy" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_sy, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_sy, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "rad" )
                 {
                     sal_Int64 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_rad, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_rad, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "endA" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_endA, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_endA, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "endPos" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_endPos, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_endPos, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "fadeDir" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_fadeDir, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_fadeDir, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "stA" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_stA, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_stA, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "stPos" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_stPos, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_stPos, OString::number( nVal ) );
                 }
                 else if( rOuterShdwProp.Name == "grow" )
                 {
                     sal_Int32 nVal = 0;
                     rOuterShdwProp.Value >>= nVal;
-                    aOuterShdwAttrList->add( XML_grow, OString::number( nVal ).getStr() );
+                    aOuterShdwAttrList->add( XML_grow, OString::number( nVal ) );
                 }
             }
         }
@@ -5674,13 +5859,13 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
         {
             float fVal = 0;
             rEffectProp.Value >>= fVal;
-            aCameraAttrList->add( XML_fov, OString::number( fVal * 60000 ).getStr() );
+            aCameraAttrList->add( XML_fov, OString::number( fVal * 60000 ) );
         }
         else if( rEffectProp.Name == "zoom" )
         {
             float fVal = 1;
             rEffectProp.Value >>= fVal;
-            aCameraAttrList->add( XML_zoom, OString::number( fVal * 100000 ).getStr() );
+            aCameraAttrList->add( XML_zoom, OString::number( fVal * 100000 ) );
         }
         else if( rEffectProp.Name == "rotLat" ||
                 rEffectProp.Name == "rotLon" ||
@@ -5694,7 +5879,7 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
                 nToken = XML_lon;
             else if( rEffectProp.Name == "rotRev" )
                 nToken = XML_rev;
-            aCameraRotationAttrList->add( nToken, OString::number( nVal ).getStr() );
+            aCameraRotationAttrList->add( nToken, OString::number( nVal ) );
             bCameraRotationPresent = true;
         }
     }
@@ -5727,7 +5912,7 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
                 nToken = XML_lon;
             else if( rLightRigProp.Name == "rotRev" )
                 nToken = XML_rev;
-            aLightRigRotationAttrList->add( nToken, OString::number( nVal ).getStr() );
+            aLightRigRotationAttrList->add( nToken, OString::number( nVal ) );
             bLightRigRotationPresent = true;
         }
     }
@@ -5786,7 +5971,7 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
                 nToken = XML_contourW;
             else if( rShape3DProp.Name == "z" )
                 nToken = XML_z;
-            aShape3DAttrList->add( nToken, OString::number( nVal ).getStr() );
+            aShape3DAttrList->add( nToken, OString::number( nVal ) );
         }
         else if( rShape3DProp.Name == "prstMaterial" )
         {
@@ -5830,7 +6015,7 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
                         nToken = XML_w;
                     else if( rBevelProp.Name == "h" )
                         nToken = XML_h;
-                    aBevelAttrList->add( nToken, OString::number( nVal ).getStr() );
+                    aBevelAttrList->add( nToken, OString::number( nVal ) );
                 }
                 else  if( rBevelProp.Name == "prst" )
                 {
@@ -5934,7 +6119,7 @@ void DrawingML::WriteArtisticEffect( const Reference< XPropertySet >& rXPropSet 
         {
             sal_Int32 nVal = 0;
             rAttr.Value >>= nVal;
-            aAttrList->add( nToken, OString::number( nVal ).getStr() );
+            aAttrList->add( nToken, OString::number( nVal ) );
         }
         else if( rAttr.Name == "OriginalGraphic" )
         {
@@ -5971,33 +6156,28 @@ void DrawingML::WriteArtisticEffect( const Reference< XPropertySet >& rXPropSet 
 
 OString DrawingML::WriteWdpPicture( const OUString& rFileId, const Sequence< sal_Int8 >& rPictureData )
 {
-    if (!maWdpCache.empty())
-    {
-        std::map<OUString, OUString>::iterator aCachedItem = maWdpCache.top().find(rFileId);
-        if (aCachedItem != maWdpCache.top().end())
-            return OUStringToOString(aCachedItem->second, RTL_TEXTENCODING_UTF8);
-    }
+    auto& rGraphicExportCache = GraphicExportCache::get();
 
-    OUString sFileName = "media/hdphoto" + OUString::number( mnWdpImageCounter.top()++ ) + ".wdp";
-    Reference< XOutputStream > xOutStream = mpFB->openFragmentStream( OUStringBuffer()
-                                                                      .appendAscii( GetComponentDir() )
-                                                                      .append( "/" + sFileName )
-                                                                      .makeStringAndClear(),
-                                                                      "image/vnd.ms-photo" );
-    OUString sId;
+    OUString aId = rGraphicExportCache.findWdpID(rFileId);
+    if (!aId.isEmpty())
+        return OUStringToOString(aId, RTL_TEXTENCODING_UTF8);
+
+    sal_Int32 nWdpImageCount = rGraphicExportCache.nextWdpImageCount();
+    OUString sFileName = "media/hdphoto" + OUString::number(nWdpImageCount) + ".wdp";
+    OUString sFragment = OUStringBuffer().appendAscii(GetComponentDir()).append( "/" + sFileName).makeStringAndClear();
+    Reference< XOutputStream > xOutStream = mpFB->openFragmentStream(sFragment, "image/vnd.ms-photo");
     xOutStream->writeBytes( rPictureData );
     xOutStream->closeOutput();
 
-    sId = mpFB->addRelation( mpFS->getOutputStream(),
+    aId = mpFB->addRelation( mpFS->getOutputStream(),
                              oox::getRelationship(Relationship::HDPHOTO),
                              OUStringBuffer()
                              .appendAscii( GetRelationCompPrefix() )
                              .append( sFileName ) );
 
-    if (!maWdpCache.empty())
-        maWdpCache.top()[rFileId] = sId;
+    rGraphicExportCache.addToWdpCache(rFileId, aId);
 
-    return OUStringToOString( sId, RTL_TEXTENCODING_UTF8 );
+    return OUStringToOString(aId, RTL_TEXTENCODING_UTF8);
 }
 
 void DrawingML::WriteDiagram(const css::uno::Reference<css::drawing::XShape>& rXShape, int nDiagramId)
@@ -6044,7 +6224,7 @@ void DrawingML::WriteDiagram(const css::uno::Reference<css::drawing::XShape>& rX
     // generate a unique id
     rtl::Reference<sax_fastparser::FastAttributeList> pDocPrAttrList
         = sax_fastparser::FastSerializerHelper::createAttrList();
-    pDocPrAttrList->add(XML_id, OString::number(nDiagramId).getStr());
+    pDocPrAttrList->add(XML_id, OString::number(nDiagramId));
     OString sName = "Diagram" + OString::number(nDiagramId);
     pDocPrAttrList->add(XML_name, sName);
 

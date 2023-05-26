@@ -1412,7 +1412,6 @@ CPPUNIT_TEST_FIXTURE(SdImportTestSmartArt, testOrgChart2)
 CPPUNIT_TEST_FIXTURE(SdImportTestSmartArt, testTdf131553)
 {
     createSdImpressDoc("pptx/tdf131553.pptx");
-    uno::Reference<drawing::XShape> xGroup(getShapeFromPage(0, 0), uno::UNO_QUERY);
 
     const SdrPage* pPage = GetPage(1);
     const SdrObjGroup* pObjGroup = dynamic_cast<SdrObjGroup*>(pPage->GetObj(0));
@@ -1528,13 +1527,13 @@ CPPUNIT_TEST_FIXTURE(SdImportTestSmartArt, testAutofitSync)
     uno::Reference<drawing::XShape> xMiddle = getChildShape(xDiagram, 2);
     uno::Reference<beans::XPropertySet> xFirstInner(getChildShape(getChildShape(xMiddle, 0), 0),
                                                     uno::UNO_QUERY);
-    sal_Int16 nFirstScale = 0;
+    double nFirstScale = 0;
     CPPUNIT_ASSERT(xFirstInner->getPropertyValue("TextFitToSizeScale") >>= nFirstScale);
-    CPPUNIT_ASSERT_GREATER(static_cast<sal_Int16>(0), nFirstScale);
-    CPPUNIT_ASSERT_LESS(static_cast<sal_Int16>(100), nFirstScale);
+    CPPUNIT_ASSERT_GREATER(0.0, nFirstScale);
+    CPPUNIT_ASSERT_LESS(100.0, nFirstScale);
     uno::Reference<beans::XPropertySet> xSecondInner(getChildShape(getChildShape(xMiddle, 2), 0),
                                                      uno::UNO_QUERY);
-    sal_Int16 nSecondScale = 0;
+    double nSecondScale = 0;
     CPPUNIT_ASSERT(xSecondInner->getPropertyValue("TextFitToSizeScale") >>= nSecondScale);
 
     // Without the accompanying fix in place, this test would have failed with:

@@ -455,6 +455,19 @@ void AquaSalFrame::Show(bool bVisible, bool bNoActivate)
 
     OSX_SALDATA_RUNINMAIN( Show(bVisible, bNoActivate) )
 
+    // tdf#152173 Don't display tooltip windows when application is inactive
+    // Starting with macOS 13 Ventura, inactive applications receive mouse
+    // move events so when LibreOffice is inactive, a mouse move event causes
+    // a tooltip to be displayed. Since the tooltip window is attached to its
+    // parent window (to ensure that the tooltip is above the parent window),
+    // displaying a tooltip pulls the parent window in front of the windows
+    // of all other inactive applications.
+    // Also, don't display tooltips when mousing over non-key windows even if
+    // the application is active as the tooltip window will pull the non-key
+    // window in front of the key window.
+    if (bVisible && (mnStyle & SalFrameStyleFlags::TOOLTIP) && (![NSApp isActive] || (mpParent && ![ mpParent->mpNSWindow isKeyWindow])))
+        return;
+
     mbShown = bVisible;
     if(bVisible)
     {
@@ -1279,6 +1292,20 @@ void AquaSalFrame::UpdateDarkMode()
     }
 }
 
+bool AquaSalFrame::GetUseDarkMode() const
+{
+    if (!mpNSView)
+        return false;
+    bool bUseDarkMode(false);
+    if (@available(macOS 10.14, iOS 13, *))
+    {
+        NSAppearanceName match = [mpNSView.effectiveAppearance bestMatchFromAppearancesWithNames: @[
+                                  NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+        bUseDarkMode = [match isEqualToString: NSAppearanceNameDarkAqua];
+    }
+    return bUseDarkMode;
+}
+
 // on OSX-Aqua the style settings are independent of the frame, so it does
 // not really belong here. Since the connection to the Appearance_Manager
 // is currently done in salnativewidgets.cxx this would be a good place.
@@ -1309,13 +1336,7 @@ SAL_WNODEPRECATED_DECLARATIONS_POP
 
     StyleSettings aStyleSettings = rSettings.GetStyleSettings();
 
-    bool bUseDarkMode(false);
-    if (@available(macOS 10.14, iOS 13, *))
-    {
-        NSAppearanceName match = [mpNSView.effectiveAppearance bestMatchFromAppearancesWithNames: @[
-                                  NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
-        bUseDarkMode = [match isEqualToString: NSAppearanceNameDarkAqua];
-    }
+    bool bUseDarkMode(GetUseDarkMode());
     OUString sThemeName(!bUseDarkMode ? u"sukapura" : u"sukapura_dark");
     aStyleSettings.SetPreferredIconTheme(sThemeName, bUseDarkMode);
 
@@ -1362,6 +1383,10 @@ SAL_WNODEPRECATED_DECLARATIONS_POP
 
     vcl::Font aTooltipFont(getFont([NSFont toolTipsFontOfSize: 0], nDPIY, aAppFont));
     aStyleSettings.SetHelpFont(aTooltipFont);
+
+    Color aAccentColor( getColor( [NSColor controlAccentColor],
+                                   aStyleSettings.GetAccentColor(), mpNSWindow ) );
+    aStyleSettings.SetAccentColor( aAccentColor );
 
     Color aHighlightColor( getColor( [NSColor selectedTextBackgroundColor],
                                       aStyleSettings.GetHighlightColor(), mpNSWindow ) );

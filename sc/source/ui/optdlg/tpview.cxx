@@ -30,15 +30,11 @@
 #include <appoptio.hxx>
 #include <scmod.hxx>
 #include <svl/eitem.hxx>
-#include <svx/colorbox.hxx>
 #include <svtools/unitconv.hxx>
 
 ScTpContentOptions::ScTpContentOptions(weld::Container* pPage, weld::DialogController* pController, const SfxItemSet&  rArgSet)
     : SfxTabPage(pPage, pController, "modules/scalc/ui/tpviewpage.ui", "TpViewPage", &rArgSet)
     , m_xGridLB(m_xBuilder->weld_combo_box("grid"))
-    , m_xColorFT(m_xBuilder->weld_label("color_label"))
-    , m_xColorLB(new ColorListBox(m_xBuilder->weld_menu_button("color"),
-                [this]{ return GetDialogController()->getDialog(); }))
     , m_xBreakCB(m_xBuilder->weld_check_button("break"))
     , m_xGuideLineCB(m_xBuilder->weld_check_button("guideline"))
     , m_xFormulaCB(m_xBuilder->weld_check_button("formula"))
@@ -47,7 +43,6 @@ ScTpContentOptions::ScTpContentOptions(weld::Container* pPage, weld::DialogContr
     , m_xFormulaMarkCB(m_xBuilder->weld_check_button("formulamark"))
     , m_xValueCB(m_xBuilder->weld_check_button("value"))
     , m_xAnchorCB(m_xBuilder->weld_check_button("anchor"))
-    , m_xClipMarkCB(m_xBuilder->weld_check_button("clipmark"))
     , m_xRangeFindCB(m_xBuilder->weld_check_button("rangefind"))
     , m_xObjGrfLB(m_xBuilder->weld_combo_box("objgrf"))
     , m_xDiagramLB(m_xBuilder->weld_combo_box("diagram"))
@@ -77,7 +72,6 @@ ScTpContentOptions::ScTpContentOptions(weld::Container* pPage, weld::DialogContr
     m_xFormulaMarkCB->connect_toggled(aCBHdl);
     m_xValueCB->connect_toggled(aCBHdl);
     m_xAnchorCB->connect_toggled(aCBHdl);
-    m_xClipMarkCB->connect_toggled(aCBHdl);
 
     m_xVScrollCB->connect_toggled(aCBHdl);
     m_xHScrollCB->connect_toggled(aCBHdl);
@@ -88,14 +82,10 @@ ScTpContentOptions::ScTpContentOptions(weld::Container* pPage, weld::DialogContr
     m_xRowColHeaderCB->connect_toggled(aCBHdl);
     m_xSummaryCB->connect_toggled(aCBHdl);
     m_xThemedCursorRB->connect_toggled(aCBHdl);
-
-    m_xColorLB->SetSlotId(SID_ATTR_CHAR_COLOR);
-    m_xColorLB->SetAutoDisplayColor(SC_STD_GRIDCOLOR);
 }
 
 ScTpContentOptions::~ScTpContentOptions()
 {
-    m_xColorLB.reset();
 }
 
 std::unique_ptr<SfxTabPage> ScTpContentOptions::Create( weld::Container* pPage, weld::DialogController* pController,
@@ -113,7 +103,6 @@ bool    ScTpContentOptions::FillItemSet( SfxItemSet* rCoreSet )
         m_xFormulaMarkCB->get_state_changed_from_saved() ||
         m_xValueCB->get_state_changed_from_saved() ||
         m_xAnchorCB->get_state_changed_from_saved() ||
-        m_xClipMarkCB->get_state_changed_from_saved() ||
         m_xObjGrfLB->get_value_changed_from_saved() ||
         m_xDiagramLB->get_value_changed_from_saved() ||
         m_xDrawLB->get_value_changed_from_saved() ||
@@ -123,19 +112,11 @@ bool    ScTpContentOptions::FillItemSet( SfxItemSet* rCoreSet )
         m_xVScrollCB->get_state_changed_from_saved() ||
         m_xTblRegCB->get_state_changed_from_saved() ||
         m_xOutlineCB->get_state_changed_from_saved() ||
-        m_xColorLB->IsValueChangedFromSaved() ||
         m_xBreakCB->get_state_changed_from_saved() ||
         m_xSummaryCB->get_state_changed_from_saved() ||
         m_xThemedCursorRB->get_state_changed_from_saved() ||
         m_xGuideLineCB->get_state_changed_from_saved())
     {
-        NamedColor aNamedColor = m_xColorLB->GetSelectedEntry();
-        if (aNamedColor.first == COL_AUTO)
-        {
-            aNamedColor.first = SC_STD_GRIDCOLOR;
-            aNamedColor.second.clear();
-        }
-        m_xLocalOptions->SetGridColor(aNamedColor.first, aNamedColor.second);
         rCoreSet->Put(ScTpViewItem(*m_xLocalOptions));
         bRet = true;
     }
@@ -165,7 +146,6 @@ void    ScTpContentOptions::Reset( const SfxItemSet* rCoreSet )
     m_xFormulaMarkCB->set_active(m_xLocalOptions->GetOption(VOPT_FORMULAS_MARKS));
     m_xValueCB   ->set_active(m_xLocalOptions->GetOption(VOPT_SYNTAX));
     m_xAnchorCB  ->set_active(m_xLocalOptions->GetOption(VOPT_ANCHOR));
-    m_xClipMarkCB->set_active(m_xLocalOptions->GetOption(VOPT_CLIPMARKS));
 
     m_xObjGrfLB  ->set_active( static_cast<sal_uInt16>(m_xLocalOptions->GetObjMode(VOBJ_TYPE_OLE)) );
     m_xDiagramLB ->set_active( static_cast<sal_uInt16>(m_xLocalOptions->GetObjMode(VOBJ_TYPE_CHART)) );
@@ -201,7 +181,6 @@ void    ScTpContentOptions::Reset( const SfxItemSet* rCoreSet )
     m_xFormulaMarkCB->save_state();
     m_xValueCB->save_state();
     m_xAnchorCB->save_state();
-    m_xClipMarkCB->save_state();
     m_xObjGrfLB->save_value();
     m_xDiagramLB->save_value();
     m_xDrawLB->save_value();
@@ -211,7 +190,6 @@ void    ScTpContentOptions::Reset( const SfxItemSet* rCoreSet )
     m_xTblRegCB->save_state();
     m_xOutlineCB->save_state();
     m_xGridLB->save_value();
-    m_xColorLB->SaveValue();
     m_xBreakCB->save_state();
     m_xGuideLineCB->save_state();
     m_xSummaryCB->save_state();
@@ -256,7 +234,6 @@ IMPL_LINK( ScTpContentOptions, CBHdl, weld::Toggleable&, rBtn, void )
     else if ( m_xFormulaMarkCB.get() == &rBtn )   eOption = VOPT_FORMULAS_MARKS;
     else if ( m_xValueCB.get() == &rBtn )   eOption = VOPT_SYNTAX;
     else if ( m_xAnchorCB.get() == &rBtn )   eOption = VOPT_ANCHOR;
-    else if ( m_xClipMarkCB.get() == &rBtn )   eOption = VOPT_CLIPMARKS;
     else if ( m_xVScrollCB.get()  == &rBtn )   eOption = VOPT_VSCROLL;
     else if ( m_xHScrollCB.get() == &rBtn )   eOption = VOPT_HSCROLL;
     else if ( m_xTblRegCB.get() == &rBtn )   eOption = VOPT_TABCONTROLS;
@@ -278,30 +255,15 @@ void ScTpContentOptions::InitGridOpt()
 
     if ( bGrid || bGridOnTop )
     {
-        m_xColorFT->set_sensitive(true);
-        m_xColorLB->set_sensitive(true);
         if ( !bGridOnTop )
             nSelPos = 0;
         else
             nSelPos = 1;
     }
     else
-    {
-        m_xColorFT->set_sensitive(false);
-        m_xColorLB->set_sensitive(false);
         nSelPos = 2;
-    }
 
     m_xGridLB->set_active (nSelPos);
-
-    //  select grid color entry
-    OUString  aName;
-    Color     aCol    = m_xLocalOptions->GetGridColor( &aName );
-
-    if (aName.trim().isEmpty() && aCol == SC_STD_GRIDCOLOR)
-        aCol = COL_AUTO;
-
-    m_xColorLB->SelectEntry(std::make_pair(aCol, aName));
 }
 
 IMPL_LINK( ScTpContentOptions, GridHdl, weld::ComboBox&, rLb, void )
@@ -310,8 +272,6 @@ IMPL_LINK( ScTpContentOptions, GridHdl, weld::ComboBox&, rLb, void )
     bool    bGrid = ( nSelPos <= 1 );
     bool    bGridOnTop = ( nSelPos == 1 );
 
-    m_xColorFT->set_sensitive(bGrid);
-    m_xColorLB->set_sensitive(bGrid);
     m_xLocalOptions->SetOption( VOPT_GRID, bGrid );
     m_xLocalOptions->SetOption( VOPT_GRID_ONTOP, bGridOnTop );
 }

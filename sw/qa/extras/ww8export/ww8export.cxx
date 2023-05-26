@@ -28,6 +28,7 @@
 #include <com/sun/star/table/TableBorder.hpp>
 #include <com/sun/star/table/TableBorder2.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/text/WrapTextMode.hpp>
 #include <com/sun/star/text/XFormField.hpp>
 #include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/text/XTextFieldsSupplier.hpp>
@@ -577,6 +578,13 @@ DECLARE_WW8EXPORT_TEST(testBnc787942, "bnc787942.doc")
 
     // this is on page 1 in Word
     parseDump("/root/page[1]/body/txt[4]/anchored");
+
+    CPPUNIT_ASSERT_EQUAL(text::WrapTextMode_PARALLEL, getProperty<text::WrapTextMode>(getShape(1), "Surround"));
+}
+
+DECLARE_WW8EXPORT_TEST(testTdf133504_wrapNotBeside, "tdf133504_wrapNotBeside.doc")
+{
+    CPPUNIT_ASSERT_EQUAL(text::WrapTextMode_NONE, getProperty<text::WrapTextMode>(getShape(1), "Surround"));
 }
 
 DECLARE_WW8EXPORT_TEST(testLayoutHanging, "fdo68967.doc")
@@ -689,10 +697,10 @@ DECLARE_WW8EXPORT_TEST(testTdf112535, "tdf112535.doc")
     SwDoc* pDoc = pTextDoc->GetDocShell()->GetDoc();
     CPPUNIT_ASSERT(pDoc->GetSpzFrameFormats());
 
-    SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
+    auto& rFormats = *pDoc->GetSpzFrameFormats();
     CPPUNIT_ASSERT(!rFormats.empty());
 
-    const SwFrameFormat* pFormat = rFormats[0];
+    const auto pFormat = rFormats[0];
     CPPUNIT_ASSERT(pFormat);
 
     // Without the accompanying fix in place, this test would have failed: auto-contour was enabled
@@ -761,10 +769,16 @@ DECLARE_WW8EXPORT_TEST( testTdf105570, "tdf105570.doc" )
     CPPUNIT_ASSERT_EQUAL( sal_uInt16(0), pTableNd->GetTable().GetRowsToRepeat() );
 }
 
-DECLARE_WW8EXPORT_TEST(testTdf112346, "tdf112346.doc")
+CPPUNIT_TEST_FIXTURE(Test, testTdf112346)
 {
-    // This was 1, multi-page table was imported as a floating one.
-    CPPUNIT_ASSERT_EQUAL(0, getShapes());
+    auto verify = [this]() {
+        // Multi-page table was imported as a single page.
+        CPPUNIT_ASSERT_EQUAL(2, getPages());
+    };
+    createSwDoc("tdf112346.doc");
+    verify();
+    reload(mpFilter, "tdf112346.doc");
+    verify();
 }
 
 DECLARE_WW8EXPORT_TEST(testTdf79639, "tdf79639.doc")

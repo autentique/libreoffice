@@ -64,6 +64,11 @@ private:
 
     void FocusIn();
     void ActivateFind(bool bShift);
+
+    // tdf#154269 - respect FindReplaceRememberedSearches expert option
+    sal_uInt16 m_nRememberSize;
+    // tdf#154818 - remember last search string
+    static OUString m_sRememberedSearchString;
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

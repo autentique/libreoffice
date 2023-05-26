@@ -69,6 +69,7 @@ void ScSortParam::Clear()
     aKeyState.bDoSort = false;
     aKeyState.nField = 0;
     aKeyState.bAscending = true;
+    aKeyState.aColorSortMode = ScColorSortMode::None;
 
     // Initialize to default size
     maKeyState.assign( DEFSORT, aKeyState );
@@ -178,6 +179,7 @@ ScSortParam::ScSortParam( const ScSubTotalParam& rSub, const ScSortParam& rOld )
                 key.bDoSort = true;
                 key.nField = rSub.nField[i];
                 key.bAscending = rSub.bAscending;
+                key.aColorSortMode = ScColorSortMode::None;
                 maKeyState.push_back(key);
             }
 
@@ -196,6 +198,7 @@ ScSortParam::ScSortParam( const ScSubTotalParam& rSub, const ScSortParam& rOld )
                 key.bDoSort = true;
                 key.nField = nThisField;
                 key.bAscending = rOld.maKeyState[i].bAscending;
+                key.aColorSortMode = ScColorSortMode::None;
                 maKeyState.push_back(key);
             }
         }
@@ -216,6 +219,7 @@ ScSortParam::ScSortParam( const ScQueryParam& rParam, SCCOL nCol ) :
     aKeyState.bDoSort = true;
     aKeyState.nField = nCol;
     aKeyState.bAscending = true;
+    aKeyState.aColorSortMode = ScColorSortMode::None;
 
     maKeyState.push_back( aKeyState );
 

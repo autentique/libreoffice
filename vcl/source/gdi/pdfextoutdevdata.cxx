@@ -97,6 +97,10 @@ struct GlobalSyncData
     sal_Int32 GetMappedId();
     sal_Int32 GetMappedStructId( sal_Int32 );
 
+    /** the way this appears to work: (only) everything that increments mCurId
+        at recording time must put an item into mParaIds at playback time,
+        so that the mCurId becomes the eventual index into mParaIds.
+     */
     sal_Int32                   mCurId;
     std::vector< sal_Int32 >    mParaIds;
     std::vector< sal_Int32 >    mStructIdMap;
@@ -196,12 +200,15 @@ void GlobalSyncData::PlayGlobalActions( PDFWriter& rWriter )
                 rWriter.Push(PushFlags::MAPMODE);
                 rWriter.SetMapMode(mParaMapModes.front());
                 mParaMapModes.pop_front();
-                mParaIds.push_back(rWriter.CreateScreen(mParaRects.front(), mParaInts.front(), mParaOUStrings.front()));
+                OUString const altText(mParaOUStrings.front());
+                mParaOUStrings.pop_front();
+                OUString const mimeType(mParaOUStrings.front());
+                mParaOUStrings.pop_front();
+                mParaIds.push_back(rWriter.CreateScreen(mParaRects.front(), mParaInts.front(), altText, mimeType));
                 // resolve AnnotIds structural attribute
                 rWriter.SetLinkPropertyID(mParaIds.back(), sal_Int32(mParaIds.size()-1));
                 mParaRects.pop_front();
                 mParaInts.pop_front();
-                mParaOUStrings.pop_front();
                 rWriter.Pop();
             }
             break;
@@ -410,7 +417,14 @@ bool PageSyncData::PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAc
                 std::shared_ptr< PDFWriter::AnyWidget > pControl( mControls.front() );
                 SAL_WARN_IF( !pControl, "vcl", "PageSyncData::PlaySyncPageAct: invalid widget!" );
                 if ( pControl )
-                    rWriter.CreateControl( *pControl );
+                {
+                    sal_Int32 const n = rWriter.CreateControl(*pControl);
+                    // resolve AnnotIds structural attribute
+                    ::std::vector<sal_Int32> const annotIds{ sal_Int32(mpGlobalData->mParaIds.size()) };
+                    rWriter.SetStructureAnnotIds(annotIds);
+                    rWriter.SetLinkPropertyID(n, sal_Int32(mpGlobalData->mParaIds.size()));
+                    mpGlobalData->mParaIds.push_back(n);
+                }
                 mControls.pop_front();
             }
             break;
@@ -693,13 +707,16 @@ sal_Int32 PDFExtOutDevData::CreateLink(const tools::Rectangle& rRect, OUString c
     return mpGlobalSyncData->mCurId++;
 }
 
-sal_Int32 PDFExtOutDevData::CreateScreen(const tools::Rectangle& rRect, OUString const& rAltText, sal_Int32 nPageNr, SdrObject const*const pObj)
+sal_Int32 PDFExtOutDevData::CreateScreen(const tools::Rectangle& rRect,
+        OUString const& rAltText, OUString const& rMimeType,
+        sal_Int32 nPageNr, SdrObject const*const pObj)
 {
     mpGlobalSyncData->mActions.push_back(PDFExtOutDevDataSync::CreateScreen);
     mpGlobalSyncData->mParaRects.push_back(rRect);
     mpGlobalSyncData->mParaMapModes.push_back(mrOutDev.GetMapMode());
     mpGlobalSyncData->mParaInts.push_back(nPageNr);
     mpGlobalSyncData->mParaOUStrings.push_back(rAltText);
+    mpGlobalSyncData->mParaOUStrings.push_back(rMimeType);
     auto const ret(mpGlobalSyncData->mCurId++);
     m_ScreenAnnotations[pObj].push_back(ret);
     return ret;
@@ -849,6 +866,7 @@ void PDFExtOutDevData::CreateControl( const PDFWriter::AnyWidget& rControlType )
 
     std::shared_ptr< PDFWriter::AnyWidget > pClone( rControlType.Clone() );
     mpPageSyncData->mControls.push_back( pClone );
+    mpGlobalSyncData->mCurId++;
 }
 
 void PDFExtOutDevData::BeginGroup()

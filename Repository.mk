@@ -88,7 +88,7 @@ $(eval $(call gb_Helper_register_executables,NONE, \
 ))
 
 $(eval $(call gb_Helper_register_executables_for_install,SDK,sdk, \
-	$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64,$(CPUNAME)),climaker)) \
+	$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64_TRUE,$(CPUNAME)_$(CROSS_COMPILING)),climaker)) \
 	cppumaker \
 	javamaker \
     $(call gb_CondExeSp2bv,sp2bv) \
@@ -144,6 +144,7 @@ $(eval $(call gb_Helper_register_executables_for_install,OOO,brand, \
 	$(call gb_Helper_optional,FUZZERS,qpwfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,slkfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,fodtfuzzer) \
+	$(call gb_Helper_optional,FUZZERS,fodt2pdffuzzer) \
 	$(call gb_Helper_optional,FUZZERS,fodsfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,fodpfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,xlsfuzzer) \
@@ -159,7 +160,8 @@ $(eval $(call gb_Helper_register_executables_for_install,OOO,brand, \
 	$(call gb_Helper_optional,FUZZERS,sftfuzzer) \
 	$(call gb_Helper_optional,FUZZERS,dbffuzzer) \
 	$(call gb_Helper_optional,FUZZERS,webpfuzzer) \
-	$(call gb_Helper_optional,FUZZERS,lockfuzzer) \
+	$(call gb_Helper_optional,FUZZERS,zipfuzzer) \
+	$(call gb_Helper_optional,FUZZERS,svgfuzzer) \
 	soffice_bin \
     $(call gb_CondExeUnopkg, \
         unopkg_bin \
@@ -592,7 +594,7 @@ $(eval $(call gb_Helper_register_libraries,PLAINLIBS_NONE, \
 
 $(eval $(call gb_Helper_register_libraries_for_install,PLAINLIBS_URE,ure, \
 	affine_uno_uno \
-	$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64,$(CPUNAME)),cli_uno)) \
+	$(if $(filter MSC,$(COM)),$(if $(filter-out AARCH64_TRUE,$(CPUNAME)_$(CROSS_COMPILING)),cli_uno)) \
 	i18nlangtag \
 	$(if $(ENABLE_JAVA), \
 		java_uno \
@@ -903,7 +905,7 @@ $(eval $(call gb_Helper_register_packages_for_install,postgresqlsdbc,\
 $(eval $(call gb_Helper_register_packages_for_install,sdk,\
 	odk_share_readme \
 	odk_share_readme_generated \
-	$(if $(filter WNT,$(OS)),$(if $(filter-out AARCH64,$(CPUNAME)),odk_cli)) \
+	$(if $(filter WNT,$(OS)),$(if $(filter-out AARCH64_TRUE,$(CPUNAME)_$(CROSS_COMPILING)),odk_cli)) \
 	odk_config \
 	$(if $(filter WNT,$(OS)),odk_config_win) \
 	odk_docs \

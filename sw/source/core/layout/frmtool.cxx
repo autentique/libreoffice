@@ -691,6 +691,11 @@ void SwFlyNotify::ImplDestroy()
         }
         pFly->ResetNotifyBack();
     }
+    if (pFly->IsForceNotifyNewBackground())
+    {
+        pFly->NotifyBackground(pFly->FindPageFrame(), pFly->GetObjRectWithSpaces(), PrepareHint::FlyFrameArrive);
+        pFly->SetForceNotifyNewBackground(false);
+    }
 
     //Have the size or the position changed,
     //so should the view know this.
@@ -953,11 +958,8 @@ void SwContentNotify::ImplDestroy()
             // the page is known. Thus, this data can be corrected now.
 
             const SwPageFrame *pPage = nullptr;
-            SwFrameFormats *pTable = rDoc.GetSpzFrameFormats();
-
-            for ( size_t i = 0; i < pTable->size(); ++i )
+            for(sw::SpzFrameFormat* pFormat: *rDoc.GetSpzFrameFormats())
             {
-                SwFrameFormat *pFormat = (*pTable)[i];
                 const SwFormatAnchor &rAnch = pFormat->GetAnchor();
                 if ( RndStdIds::FLY_AT_PAGE != rAnch.GetAnchorId() ||
                      rAnch.GetAnchorNode() == nullptr )
@@ -1228,7 +1230,7 @@ void RemoveHiddenObjsOfNode(SwTextNode const& rNode,
     }
 }
 
-void AppendObjsOfNode(SwFrameFormats const*const pTable, SwNodeOffset const nIndex,
+void AppendObjsOfNode(sw::FrameFormats<sw::SpzFrameFormat*> const*const pTable, SwNodeOffset const nIndex,
     SwFrame *const pFrame, SwPageFrame *const pPage, SwDoc *const pDoc,
     std::vector<sw::Extent>::const_iterator const*const pIter,
     std::vector<sw::Extent>::const_iterator const*const pEnd,
@@ -1236,9 +1238,8 @@ void AppendObjsOfNode(SwFrameFormats const*const pTable, SwNodeOffset const nInd
 {
 #if OSL_DEBUG_LEVEL > 0
     std::vector<SwFrameFormat*> checkFormats;
-    for ( size_t i = 0; i < pTable->size(); ++i )
+    for(auto pFormat: *pTable)
     {
-        SwFrameFormat *pFormat = (*pTable)[i];
         const SwFormatAnchor &rAnch = pFormat->GetAnchor();
         if ( rAnch.GetAnchorNode() &&
             IsShown(nIndex, rAnch, pIter, pEnd, pFirstNode, pLastNode))
@@ -1275,7 +1276,7 @@ void AppendObjsOfNode(SwFrameFormats const*const pTable, SwNodeOffset const nInd
 }
 
 
-void AppendObjs(const SwFrameFormats *const pTable, SwNodeOffset const nIndex,
+void AppendObjs(const sw::FrameFormats<sw::SpzFrameFormat*> *const pTable, SwNodeOffset const nIndex,
         SwFrame *const pFrame, SwPageFrame *const pPage, SwDoc *const pDoc)
 {
     if (pFrame->IsTextFrame())
@@ -1378,7 +1379,7 @@ bool IsAnchoredObjShown(SwTextFrame const& rFrame, SwFormatAnchor const& rAnchor
     return ret;
 }
 
-void AppendAllObjs(const SwFrameFormats* pTable, const SwFrame* pSib)
+void AppendAllObjs(const sw::FrameFormats<sw::SpzFrameFormat*>* pTable, const SwFrame* pSib)
 {
     //Connecting of all Objects, which are described in the SpzTable with the
     //layout.
@@ -1514,7 +1515,7 @@ void InsertCnt_( SwLayoutFrame *pLay, SwDoc *pDoc,
     const bool bStartPercent = bPages && !nEndIndex;
 
     SwPageFrame *pPage = pLay->FindPageFrame();
-    const SwFrameFormats *pTable = pDoc->GetSpzFrameFormats();
+    sw::SpzFrameFormats* pTable = pDoc->GetSpzFrameFormats();
     SwFrame       *pFrame = nullptr;
     std::unique_ptr<SwActualSection> pActualSection;
     std::unique_ptr<SwLayHelper> pPageMaker;
@@ -1535,8 +1536,6 @@ void InsertCnt_( SwLayoutFrame *pLay, SwDoc *pDoc,
                 bObjsDirect = false;
         }
     }
-    else
-        pPageMaker = nullptr;
 
     if( pLay->IsInSct() &&
         ( pLay->IsSctFrame() || pLay->GetUpper() ) ) // Hereby will newbies
@@ -1755,6 +1754,9 @@ void InsertCnt_( SwLayoutFrame *pLay, SwDoc *pDoc,
                 nIndex = pNode->EndOfSectionIndex();
             else
             {
+                if (pActualSection)
+                    pActualSection->SetLastPos(pPrv);
+
                 pFrame = pNode->MakeFrame( pLay );
                 pActualSection.reset( new SwActualSection( pActualSection.release(),
                                                 static_cast<SwSectionFrame*>(pFrame), pNode ) );
@@ -1911,33 +1913,30 @@ void InsertCnt_( SwLayoutFrame *pLay, SwDoc *pDoc,
                 }
 
                 // new section frame
-                pFrame = pActualSection->GetSectionNode()->MakeFrame( pLay );
-                pFrame->InsertBehind( pLay, pPrv );
-                static_cast<SwSectionFrame*>(pFrame)->Init();
-
-                // OD 12.08.2003 #i17969# - consider horizontal/vertical layout
-                // for setting position at newly inserted frame
-                lcl_SetPos( *pFrame, *pLay );
-
-                SwSectionFrame* pOuterSectionFrame = pActualSection->GetSectionFrame();
-
-                // a follow has to be appended to the new section frame
-                SwSectionFrame* pFollow = pOuterSectionFrame ? pOuterSectionFrame->GetFollow() : nullptr;
-                if ( pFollow )
+                if (SwSectionFrame* pOuterSectionFrame = pActualSection->GetSectionFrame())
                 {
-                    pOuterSectionFrame->SetFollow( nullptr );
-                    pOuterSectionFrame->InvalidateSize();
-                    static_cast<SwSectionFrame*>(pFrame)->SetFollow( pFollow );
+                    // Splitting moves the trailing content to the next frame
+                    pFrame = pOuterSectionFrame->SplitSect(pActualSection->GetLastPos(), pPrv);
+
+                    // We don't want to leave empty parts back.
+                    if (! pOuterSectionFrame->IsColLocked() &&
+                        ! pOuterSectionFrame->ContainsContent() )
+                    {
+                        pOuterSectionFrame->DelEmpty( true );
+                        SwFrame::DestroyFrame(pOuterSectionFrame);
+                    }
+                }
+                else
+                {
+                    pFrame = pActualSection->GetSectionNode()->MakeFrame( pLay );
+                    pFrame->InsertBehind( pLay, pPrv );
+                    static_cast<SwSectionFrame*>(pFrame)->Init();
+
+                    // OD 12.08.2003 #i17969# - consider horizontal/vertical layout
+                    // for setting position at newly inserted frame
+                    lcl_SetPos( *pFrame, *pLay );
                 }
 
-                // We don't want to leave empty parts back.
-                if (pOuterSectionFrame &&
-                    ! pOuterSectionFrame->IsColLocked() &&
-                    ! pOuterSectionFrame->ContainsContent() )
-                {
-                    pOuterSectionFrame->DelEmpty( true );
-                    SwFrame::DestroyFrame(pOuterSectionFrame);
-                }
                 pActualSection->SetSectionFrame( static_cast<SwSectionFrame*>(pFrame) );
 
                 pLay = static_cast<SwLayoutFrame*>(pFrame);
@@ -2025,7 +2024,7 @@ void MakeFrames( SwDoc *pDoc, SwNode &rSttIdx, SwNode &rEndIdx )
                     pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
     if ( pNd )
     {
-        bool bApres = *pNd < rSttIdx;
+        bool bAfter = *pNd < rSttIdx;
         SwNode2Layout aNode2Layout( *pNd, rSttIdx.GetIndex() );
         sw::FrameMode eMode = sw::FrameMode::Existing;
         ::std::vector<SwFrame*> frames;
@@ -2073,7 +2072,7 @@ void MakeFrames( SwDoc *pDoc, SwNode &rSttIdx, SwNode &rEndIdx )
                 SwFlowFrame *pTmp = SwFlowFrame::CastFlowFrame( pMove );
                 assert(pTmp);
 
-                if ( bApres )
+                if ( bAfter )
                 {
                     // The rest of this page should be empty. Thus, the following one has to move to
                     // the next page (it might also be located in the following column).
@@ -2165,20 +2164,7 @@ void MakeFrames( SwDoc *pDoc, SwNode &rSttIdx, SwNode &rEndIdx )
             }
             else
             {
-                bool bSplit;
-                SwFrame* pPrv = bApres ? pFrame : pFrame->GetPrev();
-                // If the section frame is inserted into another one, it must be split.
-                if( pSct && rSttIdx.IsSectionNode() )
-                {
-                    bSplit = pSct->SplitSect( pFrame, bApres );
-                    if( !bSplit && !bApres )
-                    {
-                        pUpper = pSct->GetUpper();
-                        pPrv = pSct->GetPrev();
-                    }
-                }
-                else
-                    bSplit = false;
+                SwFrame* pPrv = bAfter ? pFrame : pFrame->GetPrev();
 
                 ::InsertCnt_( pUpper, pDoc, rSttIdx.GetIndex(), false,
                               nEndIdx, pPrv, eMode );
@@ -2186,15 +2172,11 @@ void MakeFrames( SwDoc *pDoc, SwNode &rSttIdx, SwNode &rEndIdx )
                 // depend on value of <bAllowMove>
                 if( !isFlyCreationSuppressed )
                 {
-                    const SwFrameFormats *pTable = pDoc->GetSpzFrameFormats();
+                    const sw::SpzFrameFormats* pTable = pDoc->GetSpzFrameFormats();
                     if( !pTable->empty() )
                         AppendAllObjs( pTable, pUpper );
                 }
 
-                // If nothing was added (e.g. a hidden section), the split must be reversed.
-                if( bSplit && pSct && pSct->GetNext()
-                    && pSct->GetNext()->IsSctFrame() )
-                    pSct->MergeNext( static_cast<SwSectionFrame*>(pSct->GetNext()) );
                 if( pFrame->IsInFly() )
                     pFrame->FindFlyFrame()->Invalidate_();
                 if( pFrame->IsInTab() )

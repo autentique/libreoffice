@@ -308,7 +308,6 @@
         <menu:menupopup>
           <menu:menuitem menu:id=".uno:InsertFrameInteract"/>
           <menu:menuitem menu:id=".uno:InsertFrame"/>
-          <menu:menuitem menu:id=".uno:InsertObjectFloatingFrame"/>
         </menu:menupopup>
       </menu:menu>
       <menu:menuitem menu:id=".uno:FontworkGalleryFloater"/>
@@ -745,6 +744,7 @@
         </menu:menupopup>
       </menu:menu>
       <menu:menuitem menu:id=".uno:WordCountDialog"/>
+      <menu:menuitem menu:id=".uno:AccessibilityCheck"/>
       <menu:menuitem menu:id=".uno:AccessibilityCheckOnline"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:Translate"/>
@@ -777,6 +777,7 @@
           <menu:menuitem menu:id=".uno:UpdateAll"/>
           <menu:menuseparator/>
           <menu:menuitem menu:id=".uno:Repaginate"/>
+          <menu:menuitem menu:id=".uno:UpdateSelectedField"/>
           <menu:menuitem menu:id=".uno:UpdateFields"/>
           <menu:menuitem menu:id=".uno:UpdateAllIndexes"/>
           <menu:menuitem menu:id=".uno:UpdateCurIndex"/>

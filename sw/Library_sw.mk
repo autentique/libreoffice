@@ -56,6 +56,7 @@ $(eval $(call gb_Library_use_libraries,sw,\
     comphelper \
     cppu \
     cppuhelper \
+    cui \
     $(call gb_Helper_optional,DBCONNECTIVITY, \
         dbtools) \
     docmodel \
@@ -482,6 +483,7 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/core/undo/unspnd \
     sw/source/core/undo/untbl \
     sw/source/core/undo/untblk \
+    sw/source/core/undo/UndoThemeChange \
     sw/source/core/unocore/SwXTextDefaults \
     sw/source/core/unocore/TextCursorHelper  \
     sw/source/core/unocore/XMLRangeHelper \
@@ -536,7 +538,6 @@ $(eval $(call gb_Library_add_exception_objects,sw,\
     sw/source/filter/basflt/shellio \
     sw/source/filter/html/SwAppletImpl \
     sw/source/filter/html/css1atr \
-    sw/source/filter/html/css1kywd \
     sw/source/filter/html/htmlatr \
     sw/source/filter/html/htmlbas \
     sw/source/filter/html/htmlcss1 \

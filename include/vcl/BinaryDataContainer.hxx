@@ -12,6 +12,9 @@
 
 #include <sal/config.h>
 
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <unotools/tempfile.hxx>
 #include <tools/stream.hxx>
 #include <vcl/dllapi.h>
 
@@ -25,9 +28,11 @@
  */
 class VCL_DLLPUBLIC BinaryDataContainer final
 {
-private:
-    // the binary data
-    std::shared_ptr<std::vector<sal_uInt8>> mpData;
+    struct Impl;
+
+    std::shared_ptr<Impl> mpImpl;
+
+    void ensureSwappedIn() const;
 
 public:
     BinaryDataContainer() = default;
@@ -41,17 +46,27 @@ public:
 
     BinaryDataContainer& operator=(BinaryDataContainer&& rBinaryDataContainer) noexcept = default;
 
-    size_t getSize() const { return mpData ? mpData->size() : 0; }
-    bool isEmpty() const { return !mpData || mpData->empty(); }
-    const sal_uInt8* getData() const { return mpData ? mpData->data() : nullptr; }
-    // Returns the data as a stream open for reading
-    SvMemoryStream getMemoryStream();
+    size_t getSize() const;
+    bool isEmpty() const;
+    const sal_uInt8* getData() const;
+    css::uno::Sequence<sal_Int8> getCopyAsByteSequence() const;
+
+    // Returns the data as a readonly stream open for reading
+    std::shared_ptr<SvStream> getAsStream();
+
+    // Returns the data as a readonly stream open for reading
+    css::uno::Reference<css::io::XInputStream> getAsXInputStream();
+
+    /// writes the contents to the given stream
+    std::size_t writeToStream(SvStream& rStream) const;
+
+    /// return the in-memory size in bytes as of now.
+    std::size_t getSizeBytes() const;
+
+    /// swap out to disk for now
+    void swapOut() const;
 
     size_t calculateHash() const;
-
-    auto cbegin() const { return mpData->cbegin(); }
-
-    auto cend() const { return mpData->cend(); }
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

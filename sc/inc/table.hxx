@@ -33,6 +33,7 @@
 #include "document.hxx"
 #include "drwlayer.hxx"
 #include "SparklineList.hxx"
+#include "SolverSettings.hxx"
 
 #include <algorithm>
 #include <atomic>
@@ -257,6 +258,9 @@ private:
     /** this is touched from formula group threading context */
     std::atomic<bool> bStreamValid;
 
+    // Solver settings in current tab
+    std::shared_ptr<sc::SolverSettings> m_pSolverSettings;
+
     // Default attributes for the unallocated columns.
     ScColumnData    aDefaultColData;
 
@@ -441,6 +445,8 @@ public:
         SCCOL nCol, SCROW nRow, const ScTokenArray& rArray, formula::FormulaGrammar::Grammar eGram );
     void SetFormula(
         SCCOL nCol, SCROW nRow, const OUString& rFormula, formula::FormulaGrammar::Grammar eGram );
+
+    SC_DLLPUBLIC std::shared_ptr<sc::SolverSettings> GetSolverSettings();
 
     /**
      * Takes ownership of pCell
@@ -965,9 +971,11 @@ public:
     SCROW       FirstVisibleRow(SCROW nStartRow, SCROW nEndRow) const;
     SCROW       LastVisibleRow(SCROW nStartRow, SCROW nEndRow) const;
     SCROW       CountVisibleRows(SCROW nStartRow, SCROW nEndRow) const;
+    SCROW       CountHiddenRows(SCROW nStartRow, SCROW nEndRow) const;
     tools::Long GetTotalRowHeight(SCROW nStartRow, SCROW nEndRow, bool bHiddenAsZero = true) const;
 
     SCCOL       CountVisibleCols(SCCOL nStartCol, SCCOL nEndCol) const;
+    SCCOL       CountHiddenCols(SCCOL nStartCol, SCCOL nEndCol) const;
 
     SCCOLROW    LastHiddenColRow(SCCOLROW nPos, bool bCol) const;
 
@@ -981,6 +989,9 @@ public:
     SCROW       FirstNonFilteredRow(SCROW nStartRow, SCROW nEndRow) const;
     SCROW       LastNonFilteredRow(SCROW nStartRow, SCROW nEndRow) const;
     SCROW       CountNonFilteredRows(SCROW nStartRow, SCROW nEndRow) const;
+
+    Color GetCellBackgroundColor(ScAddress aPos) const;
+    Color GetCellTextColor(ScAddress aPos) const;
 
     bool IsManualRowHeight(SCROW nRow) const;
 

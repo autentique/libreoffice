@@ -12,7 +12,23 @@
 #include <sal/config.h>
 #include <oox/dllapi.h>
 #include <oox/core/xmlfilterbase.hxx>
-#include <docmodel/theme/Theme.hxx>
+#include <oox/export/utils.hxx>
+
+namespace model
+{
+class Theme;
+class FontScheme;
+class FormatScheme;
+class EffectStyle;
+class LineStyle;
+class FillStyle;
+class BlipFill;
+class PatternFill;
+class GradientFill;
+class SolidFill;
+class ComplexColor;
+struct Transformation;
+}
 
 namespace oox
 {
@@ -20,17 +36,36 @@ class OOX_DLLPUBLIC ThemeExport
 {
 private:
     oox::core::XmlFilterBase* mpFilterBase;
+    oox::drawingml::DocumentType meDocumentType;
+    sax_fastparser::FSHelperPtr mpFS;
 
 public:
-    ThemeExport(oox::core::XmlFilterBase* pFilterBase);
+    ThemeExport(oox::core::XmlFilterBase* pFilterBase, oox::drawingml::DocumentType eDocumentType);
 
     void write(OUString const& rPath, model::Theme const& rTheme);
 
 private:
-    static bool writeColorSet(sax_fastparser::FSHelperPtr pFS, model::Theme const& rTheme);
-    static bool writeFontScheme(sax_fastparser::FSHelperPtr pFS,
-                                model::FontScheme const& rFontScheme);
-    static bool writeFormatScheme(sax_fastparser::FSHelperPtr pFS);
+    bool writeColorSet(model::Theme const& rTheme);
+    bool writeFontScheme(model::FontScheme const& rFontScheme);
+    bool writeFormatScheme(model::FormatScheme const& rFormatScheme);
+
+    void writeEffectStyle(model::EffectStyle const& rEffectStyle);
+    void writeLineStyle(model::LineStyle const& rLineStyle);
+    void writeBackgroundFillStyle(model::FillStyle const& rFillStyle);
+    void writeFillStyle(model::FillStyle const& rFillStyle);
+    void writeBlipFill(model::BlipFill const& rBlipFill);
+    void writeBlip(model::BlipFill const& rBlipFill);
+    void writePatternFill(model::PatternFill const& rPatternFill);
+    void writeGradientFill(model::GradientFill const& rGradientFill);
+    void writeSolidFill(model::SolidFill const& rSolidFill);
+    void writeComplexColor(model::ComplexColor const& rComplexColor);
+    void writeColorPlaceholder(model::ComplexColor const& rComplexColor);
+    void writeColorSystem(model::ComplexColor const& rComplexColor);
+    void writeColorScheme(model::ComplexColor const& rComplexColor);
+    void writeColorHSL(model::ComplexColor const& rComplexColor);
+    void writeColorCRGB(model::ComplexColor const& rComplexColor);
+    void writeColorRGB(model::ComplexColor const& rComplexColor);
+    void writeColorTransformations(std::vector<model::Transformation> const& rTransformations);
 };
 
 } // end namespace oox

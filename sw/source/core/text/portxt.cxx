@@ -549,6 +549,8 @@ void SwTextPortion::Paint( const SwTextPaintInfo &rInf ) const
         rInf.DrawBackBrush( *this );
         rInf.DrawBorder( *this );
 
+        rInf.DrawCSDFHighlighting(*this);
+
         // do we have to repaint a post it portion?
         if( rInf.OnWin() && mpNextPortion && !mpNextPortion->Width() )
             mpNextPortion->PrePaint( rInf, this );
@@ -590,7 +592,10 @@ TextFrameIndex SwTextPortion::GetSpaceCnt(const SwTextSizeInfo &rInf,
 
     if ( InExpGrp() || PortionType::InputField == GetWhichPor() )
     {
-        if( !IsBlankPortion() && !InNumberGrp() && !IsCombinedPortion() )
+        if (OUString ExpOut;
+            (!IsBlankPortion()
+             || (GetExpText(rInf, ExpOut) && OUStringChar(CH_BLANK) == ExpOut))
+            && !InNumberGrp() && !IsCombinedPortion())
         {
             // OnWin() likes to return a blank instead of an empty string from
             // time to time. We cannot use that here at all, however.
@@ -627,7 +632,10 @@ tools::Long SwTextPortion::CalcSpacing( tools::Long nSpaceAdd, const SwTextSizeI
 
     if ( InExpGrp() || PortionType::InputField == GetWhichPor() )
     {
-        if( !IsBlankPortion() && !InNumberGrp() && !IsCombinedPortion() )
+        if (OUString ExpOut;
+            (!IsBlankPortion()
+             || (GetExpText(rInf, ExpOut) && OUStringChar(CH_BLANK) == ExpOut))
+            && !InNumberGrp() && !IsCombinedPortion())
         {
             // OnWin() likes to return a blank instead of an empty string from
             // time to time. We cannot use that here at all, however.

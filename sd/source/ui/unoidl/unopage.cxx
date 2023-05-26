@@ -76,6 +76,7 @@
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
 #include <docmodel/uno/UnoTheme.hxx>
+#include <docmodel/theme/Theme.hxx>
 #include <o3tl/string_view.hxx>
 
 using ::com::sun::star::animations::XAnimationNode;
@@ -984,8 +985,7 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
             if (aValue >>= xTheme)
             {
                 auto& rUnoTheme = dynamic_cast<UnoTheme&>(*xTheme);
-                std::unique_ptr<model::Theme> pTheme(new model::Theme(rUnoTheme.getTheme()));
-                pPage->getSdrPageProperties().SetTheme(std::move(pTheme));
+                pPage->getSdrPageProperties().SetTheme(rUnoTheme.getTheme());
             }
             break;
         }
@@ -993,8 +993,8 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
         case WID_PAGE_THEME_UNO_REPRESENTATION:
         {
             SdrPage* pPage = GetPage();
-            std::unique_ptr<model::Theme> pTheme = model::Theme::FromAny(aValue);
-            pPage->getSdrPageProperties().SetTheme(std::move(pTheme));
+            std::shared_ptr<model::Theme> pTheme = model::Theme::FromAny(aValue);
+            pPage->getSdrPageProperties().SetTheme(pTheme);
             break;
         }
 
@@ -1316,9 +1316,9 @@ Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
     {
         SdrPage* pPage = GetPage();
         css::uno::Reference<css::util::XTheme> xTheme;
-        auto const& pTheme = pPage->getSdrPageProperties().GetTheme();
+        auto pTheme = pPage->getSdrPageProperties().GetTheme();
         if (pTheme)
-            xTheme = new UnoTheme(*pTheme);
+            xTheme = model::theme::createXTheme(pTheme);
         aAny <<= xTheme;
         break;
     }
@@ -1326,11 +1326,9 @@ Any SAL_CALL SdGenericDrawPage::getPropertyValue( const OUString& PropertyName )
     case WID_PAGE_THEME_UNO_REPRESENTATION:
     {
         SdrPage* pPage = GetPage();
-        auto const& pTheme = pPage->getSdrPageProperties().GetTheme();
+        auto pTheme = pPage->getSdrPageProperties().GetTheme();
         if (pTheme)
-        {
             pTheme->ToAny(aAny);
-        }
         else
         {
             beans::PropertyValues aValues;
@@ -1564,20 +1562,18 @@ void SdGenericDrawPage::getBackground( Any& )
 
 OUString SdGenericDrawPage::getBookmarkURL() const
 {
-    OUStringBuffer aRet;
+    OUString aRet;
     if( SvxFmDrawPage::mpPage )
     {
         OUString aFileName( static_cast<SdPage*>(SvxFmDrawPage::mpPage)->GetFileName() );
         if( !aFileName.isEmpty() )
         {
             const OUString aBookmarkName( SdDrawPage::getPageApiNameFromUiName( static_cast<SdPage*>(SvxFmDrawPage::mpPage)->GetBookmarkName() ) );
-            aRet.append( aFileName );
-            aRet.append( '#' );
-            aRet.append( aBookmarkName );
+            aRet = aFileName + "#" + aBookmarkName;
         }
     }
 
-    return aRet.makeStringAndClear();
+    return aRet;
 }
 
 void SdGenericDrawPage::setBookmarkURL( std::u16string_view rURL )
@@ -2276,17 +2272,17 @@ void SAL_CALL SdDrawPage::setName( const OUString& rName )
         return;
 
     // check if this is the default 'page1234' name
-    OUString aNumber;
-    if(aName.startsWith( sEmptyPageName, &aNumber ))
+    std::u16string_view aNumber;
+    if(o3tl::starts_with(aName, sEmptyPageName, &aNumber ))
     {
         // ok, it maybe is, aNumber is the number part after 'page'
 
         // create the page number
-        sal_Int32 nPageNumber = aNumber.toInt32();
+        sal_Int32 nPageNumber = o3tl::toInt32(aNumber);
 
         // check if there are non number characters in the number part
-        const sal_Int32 nChars = aNumber.getLength();
-        const sal_Unicode* pString = aNumber.getStr();
+        const sal_Int32 nChars = aNumber.size();
+        const sal_Unicode* pString = aNumber.data();
         sal_Int32 nChar;
         for( nChar = 0; nChar < nChars; nChar++, pString++ )
         {
@@ -2819,7 +2815,7 @@ Any SAL_CALL SdMasterPage::getByIndex( sal_Int32 Index )
     return SdGenericDrawPage::getByIndex(Index);
 }
 
-// intern
+// internal
 void SdMasterPage::setBackground( const Any& rValue )
 {
     // we need at least a beans::XPropertySet

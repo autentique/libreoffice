@@ -153,7 +153,6 @@ graphic = image(0).Graphic
 xray graphic.Size
 xray image.AnchorType
 */
-    uno::Reference<text::XTextDocument> textDocument(mxComponent, uno::UNO_QUERY);
     CPPUNIT_ASSERT_EQUAL(1, getShapes());
     uno::Reference<drawing::XShapes> shapes(getShape(1), uno::UNO_QUERY);
     uno::Reference<drawing::XShape> image;
@@ -513,9 +512,10 @@ DECLARE_OOXMLEXPORT_TEST(testTDF91260, "tdf91260.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testFdo74357, "fdo74357.docx")
 {
-    // Floating table wasn't converted to a textframe.
-    // This was 0.
-    CPPUNIT_ASSERT_EQUAL(1, getShapes());
+    // Normal outer table, floating inner table.
+    uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
+    uno::Reference<container::XIndexAccess> xIndexAccess(xTextTablesSupplier->getTextTables(), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2), xIndexAccess->getCount());
 
     // Bottom margin of the first paragraph was too large, causing a layout problem.
     // This was 494.
@@ -722,7 +722,6 @@ DECLARE_OOXMLEXPORT_TEST(testN793998, "n793998.docx")
 
 CPPUNIT_TEST_FIXTURE(Test, testN779642)
 {
-    SwModelTestBase::FlySplitGuard aGuard;
     auto verify = [this]() {
         uno::Reference<text::XTextTablesSupplier> xTextTablesSupplier(mxComponent, uno::UNO_QUERY);
 
@@ -997,7 +996,6 @@ DECLARE_OOXMLEXPORT_TEST(testPageBorderShadow, "page-border-shadow.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testN816593, "n816593.docx")
 {
-    SwModelTestBase::FlySplitGuard aGuard;
     // Two consecutive <w:tbl> without any paragraph in between, but with different tblpPr. In this
     // case we need to have 2 different tables instead of 1
     uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);

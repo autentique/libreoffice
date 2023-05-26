@@ -105,7 +105,7 @@ sal_Int8 SvxHyperURLBox::ExecuteDrop( const ExecuteDropEvent& rEvt )
 SvxHyperlinkTabPageBase::SvxHyperlinkTabPageBase(weld::Container* pParent,
                                                  SvxHpLinkDlg* pDlg,
                                                  const OUString& rUIXMLDescription,
-                                                 const OString& rID,
+                                                 const OUString& rID,
                                                  const SfxItemSet* pItemSet)
   : IconChoicePage(pParent, rUIXMLDescription, rID, pItemSet)
   , mxCbbFrame(xBuilder->weld_combo_box("frame"))
@@ -467,7 +467,7 @@ bool SvxHyperlinkTabPageBase::FillItemSet( SfxItemSet* rOut)
     OUString aStrURL, aStrName, aStrIntName, aStrFrame;
     SvxLinkInsertMode eMode;
 
-    GetCurentItemData ( aStrURL, aStrName, aStrIntName, aStrFrame, eMode);
+    GetCurrentItemData ( aStrURL, aStrName, aStrIntName, aStrFrame, eMode);
     if ( aStrName.isEmpty() ) //automatically create a visible name if the link is created without name
         aStrName = CreateUiNameFromURL(aStrURL);
 
@@ -510,7 +510,7 @@ DeactivateRC SvxHyperlinkTabPageBase::DeactivatePage( SfxItemSet* _pSet)
     OUString aStrURL, aStrName, aStrIntName, aStrFrame;
     SvxLinkInsertMode eMode;
 
-    GetCurentItemData ( aStrURL, aStrName, aStrIntName, aStrFrame, eMode);
+    GetCurrentItemData ( aStrURL, aStrName, aStrIntName, aStrFrame, eMode);
 
     HyperDialogEvent nEvents = GetMacroEvents();
     SvxMacroTableDtor* pTable = GetMacroTable();

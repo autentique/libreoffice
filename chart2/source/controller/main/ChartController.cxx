@@ -58,7 +58,7 @@
 #include <comphelper/servicehelper.hxx>
 #include <BaseCoordinateSystem.hxx>
 
-#include <com/sun/star/awt/XWindowPeer.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <com/sun/star/frame/XController2.hpp>
 #include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XModeChangeBroadcaster.hpp>
@@ -636,7 +636,7 @@ rtl::Reference<::chart::ChartModel> ChartController::getChartModel()
 
 rtl::Reference<::chart::Diagram> ChartController::getFirstDiagram()
 {
-    return ChartModelHelper::findDiagram( getChartModel() );
+    return getChartModel()->getFirstChartDiagram();
 }
 
 uno::Any SAL_CALL ChartController::getViewData()

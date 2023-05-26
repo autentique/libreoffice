@@ -809,8 +809,13 @@ SwView::SwView(SfxViewFrame& _rFrame, SfxViewShell* pOldSh)
 
     bDocSzUpdated = true;
 
-    CreateScrollbar( true );
-    CreateScrollbar( false );
+    static bool bFuzzing = utl::ConfigManager::IsFuzzing();
+
+    if (!bFuzzing)
+    {
+        CreateScrollbar( true );
+        CreateScrollbar( false );
+    }
 
     m_pViewImpl.reset(new SwView_Impl(this));
     SetName("View");
@@ -983,7 +988,7 @@ SwView::SwView(SfxViewFrame& _rFrame, SfxViewShell* pOldSh)
     SAL_WARN_IF(
         officecfg::Office::Common::Undo::Steps::get() <= 0,
         "sw.ui", "/org.openoffice.Office.Common/Undo/Steps <= 0");
-    if (!utl::ConfigManager::IsFuzzing() && 0 < officecfg::Office::Common::Undo::Steps::get())
+    if (!bFuzzing && 0 < officecfg::Office::Common::Undo::Steps::get())
     {
         m_pWrtShell->DoUndo();
     }
@@ -995,7 +1000,8 @@ SwView::SwView(SfxViewFrame& _rFrame, SfxViewShell* pOldSh)
 
     m_bVScrollbarEnabled = aUsrPref.IsViewVScrollBar();
     m_bHScrollbarEnabled = aUsrPref.IsViewHScrollBar();
-    m_pHScrollbar->SetAuto(bBrowse);
+    if (m_pHScrollbar)
+        m_pHScrollbar->SetAuto(bBrowse);
     if( aUsrPref.IsViewHRuler() )
         CreateTab();
     if( aUsrPref.IsViewVRuler() )
@@ -1079,15 +1085,19 @@ SwView::SwView(SfxViewFrame& _rFrame, SfxViewShell* pOldSh)
         rDocSh.EnableSetModified();
     InvalidateBorder();
 
-    if( !m_pHScrollbar->IsScrollbarVisible(true) )
-        ShowHScrollbar( false );
-    if( !m_pVScrollbar->IsScrollbarVisible(true) )
-        ShowVScrollbar( false );
+    if (!bFuzzing)
+    {
+        if (!m_pHScrollbar->IsScrollbarVisible(true))
+            ShowHScrollbar( false );
+        if (!m_pVScrollbar->IsScrollbarVisible(true))
+            ShowVScrollbar( false );
+    }
 
     if (m_pWrtShell->GetViewOptions()->IsShowOutlineContentVisibilityButton())
         m_pWrtShell->InvalidateOutlineContentVisibility();
 
-    GetViewFrame().GetWindow().AddChildEventListener( LINK( this, SwView, WindowChildEventListener ) );
+    if (!bFuzzing)
+        GetViewFrame().GetWindow().AddChildEventListener(LINK(this, SwView, WindowChildEventListener));
 }
 
 SwViewGlueDocShell::SwViewGlueDocShell(SwView& rView, SwDocShell& rDocSh)
@@ -1143,7 +1153,14 @@ SwView::~SwView()
     m_pViewImpl->Invalidate();
     EndListening(GetViewFrame());
     EndListening(*GetDocShell());
+
+    // tdf#155410 speedup shutdown, prevent unnecessary broadcasting during teardown of draw model
+    auto pDrawModel = GetWrtShell().getIDocumentDrawModelAccess().GetDrawModel();
+    const bool bWasLocked = pDrawModel->isLocked();
+    pDrawModel->setLock(true);
     m_pWrtShell.reset(); // reset here so that it is not accessible by the following dtors.
+    pDrawModel->setLock(bWasLocked);
+
     m_pHScrollbar.disposeAndClear();
     m_pVScrollbar.disposeAndClear();
     m_pHRuler.disposeAndClear();
@@ -1201,6 +1218,10 @@ void SwView::WriteUserData( OUString &rUserData, bool bBrowse )
 
 static bool lcl_IsOwnDocument( SwView& rView )
 {
+    if (::officecfg::Office::Common::Load::ViewPositionForAnyUser::get())
+    {
+        return true;
+    }
     uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
         rView.GetDocShell()->GetModel(), uno::UNO_QUERY_THROW);
     uno::Reference<document::XDocumentProperties> xDocProps

@@ -107,6 +107,7 @@ protected:
     int m_nRedlineTableSizeChanged;
     int m_nRedlineTableEntryModified;
     int m_nTrackedChangeIndex;
+    bool m_bFullInvalidateSeen;
     OString m_sHyperlinkText;
     OString m_sHyperlinkLink;
     OString m_aFormFieldButton;
@@ -124,6 +125,7 @@ SwTiledRenderingTest::SwTiledRenderingTest()
     m_nRedlineTableSizeChanged(0),
     m_nRedlineTableEntryModified(0),
     m_nTrackedChangeIndex(-1),
+    m_bFullInvalidateSeen(false),
     m_callbackWrapper(&callback, this)
 {
 }
@@ -194,7 +196,11 @@ void SwTiledRenderingTest::callbackImpl(int nType, const char* pPayload)
                 tools::Rectangle aInvalidation;
                 uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(pPayload));
                 if (std::string_view("EMPTY") == pPayload)
+                {
+                    m_bFullInvalidateSeen = true;
                     return;
+                }
+
                 CPPUNIT_ASSERT(aSeq.getLength() == 4 || aSeq.getLength() == 5);
                 aInvalidation.SetLeft(aSeq[0].toInt32());
                 aInvalidation.SetTop(aSeq[1].toInt32());
@@ -274,8 +280,8 @@ void SwTiledRenderingTest::callbackImpl(int nType, const char* pPayload)
                     std::stringstream aStream(pPayload);
                     boost::property_tree::read_json(aStream, aTree);
                     boost::property_tree::ptree &aChild = aTree.get_child("hyperlink");
-                    m_sHyperlinkText = aChild.get("text", "").c_str();
-                    m_sHyperlinkLink = aChild.get("link", "").c_str();
+                    m_sHyperlinkText = OString(aChild.get("text", ""));
+                    m_sHyperlinkLink = OString(aChild.get("link", ""));
                 }
             }
             break;
@@ -813,7 +819,7 @@ namespace {
                             std::stringstream aStream(pPayload);
                             boost::property_tree::ptree aTree;
                             boost::property_tree::read_json(aStream, aTree);
-                            sRect = aTree.get_child("rectangle").get_value<std::string>().c_str();
+                            sRect = OString(aTree.get_child("rectangle").get_value<std::string>());
                             m_nOwnCursorInvalidatedBy = aTree.get_child("viewId").get_value<int>();
                         }
                         else
@@ -836,7 +842,7 @@ namespace {
                         std::stringstream aStream(pPayload);
                         boost::property_tree::ptree aTree;
                         boost::property_tree::read_json(aStream, aTree);
-                        OString aRect = aTree.get_child("rectangle").get_value<std::string>().c_str();
+                        OString aRect( aTree.get_child("rectangle").get_value<std::string>() );
 
                         uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::fromUtf8(aRect));
                         if (std::string_view("EMPTY") == pPayload)
@@ -1294,6 +1300,48 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testUndoReorderingRedo)
     SfxViewShell::Current()->setLibreOfficeKitViewCallback(nullptr);
 }
 
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testUndoReorderingRedo2)
+{
+    // Create two views.
+    SwXTextDocument* pXTextDocument = createDoc();
+    SwWrtShell* pWrtShell1 = pXTextDocument->GetDocShell()->GetWrtShell();
+    int nView1 = SfxLokHelper::getView();
+    int nView2 = SfxLokHelper::createView();
+    pXTextDocument->initializeForTiledRendering(uno::Sequence<beans::PropertyValue>());
+    SwWrtShell* pWrtShell2 = pXTextDocument->GetDocShell()->GetWrtShell();
+
+    // Type in the first view.
+    SfxLokHelper::setView(nView1);
+    pWrtShell1->SttEndDoc(/*bStt=*/true);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 'f', 0);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 'f', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Type to the same paragraph in the second view.
+    SfxLokHelper::setView(nView2);
+    pWrtShell2->SttEndDoc(/*bStt=*/true);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 's', 0);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 's', 0);
+    Scheduler::ProcessEventsToIdle();
+
+    // Delete in the first view and undo.
+    SfxLokHelper::setView(nView1);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYINPUT, 0, awt::Key::BACKSPACE);
+    pXTextDocument->postKeyEvent(LOK_KEYEVENT_KEYUP, 0, awt::Key::BACKSPACE);
+    Scheduler::ProcessEventsToIdle();
+    dispatchCommand(mxComponent, ".uno:Undo", {});
+    Scheduler::ProcessEventsToIdle();
+
+    // Query the undo state, now that a "delete" is on the redo stack and an "insert" belongs to the
+    // view on the undo stack, so the types are different.
+    SwUndoId nUndoId(SwUndoId::EMPTY);
+    // Without the accompanying fix in place, this test would have failed with:
+    // runtime error: downcast which does not point to an object of type 'const SwUndoInsert'
+    // note: object is of type 'SwUndoDelete'
+    // in an UBSan build.
+    pWrtShell1->GetLastUndoInfo(nullptr, &nUndoId, &pWrtShell1->GetView());
+}
+
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testUndoReorderingMulti)
 {
     // Create two views and a document of 2 paragraphs.
@@ -1639,7 +1687,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testGetViewRenderState)
         aViewOptions.SetOnlineSpell(true);
         pXTextDocument->GetDocShell()->GetWrtShell()->ApplyViewOptions(aViewOptions);
     }
-    CPPUNIT_ASSERT_EQUAL(OString("PS"), pXTextDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(OString("PS;Default"), pXTextDocument->getViewRenderState());
 
     // Create a second view
     SfxLokHelper::createView();
@@ -1652,11 +1700,11 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testGetViewRenderState)
         aViewOptions.SetOnlineSpell(true);
         pXTextDocument->GetDocShell()->GetWrtShell()->ApplyViewOptions(aViewOptions);
     }
-    CPPUNIT_ASSERT_EQUAL(OString("S"), pXTextDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(OString("S;Default"), pXTextDocument->getViewRenderState());
 
     // Switch back to the first view, and check that the options string is the same
     SfxLokHelper::setView(nFirstViewId);
-    CPPUNIT_ASSERT_EQUAL(OString("PS"), pXTextDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(OString("PS;Default"), pXTextDocument->getViewRenderState());
 
     // Switch back to the second view, and change to dark mode
     SfxLokHelper::setView(nSecondViewId);
@@ -1666,16 +1714,111 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testGetViewRenderState)
         uno::Reference<frame::XFrame> xFrame = pView->GetViewFrame().GetFrame().GetFrameInterface();
         uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
             {
-                { "NewTheme", uno::Any(OUString("COLOR_SCHEME_LIBREOFFICE_DARK")) },
+                { "NewTheme", uno::Any(OUString("Dark")) },
             }
         );
         comphelper::dispatchCommand(".uno:ChangeTheme", xFrame, aPropertyValues);
     }
-    CPPUNIT_ASSERT_EQUAL(OString("SD"), pXTextDocument->getViewRenderState());
-
+    CPPUNIT_ASSERT_EQUAL(OString("S;Dark"), pXTextDocument->getViewRenderState());
     // Switch back to the first view, and check that the options string is the same
     SfxLokHelper::setView(nFirstViewId);
-    CPPUNIT_ASSERT_EQUAL(OString("PS"), pXTextDocument->getViewRenderState());
+    CPPUNIT_ASSERT_EQUAL(OString("PS;Default"), pXTextDocument->getViewRenderState());
+}
+
+// Helper function to get a tile to a bitmap and check the pixel color
+static void assertTilePixelColor(SwXTextDocument* pXTextDocument, int nPixelX, int nPixelY, Color aColor)
+{
+    size_t nCanvasSize = 1024;
+    size_t nTileSize = 256;
+    std::vector<unsigned char> aPixmap(nCanvasSize * nCanvasSize * 4, 0);
+    ScopedVclPtrInstance<VirtualDevice> pDevice(DeviceFormat::WITHOUT_ALPHA);
+    pDevice->SetBackground(Wallpaper(COL_TRANSPARENT));
+    pDevice->SetOutputSizePixelScaleOffsetAndLOKBuffer(Size(nCanvasSize, nCanvasSize),
+            Fraction(1.0), Point(), aPixmap.data());
+    pXTextDocument->paintTile(*pDevice, nCanvasSize, nCanvasSize, 0, 0, 15360, 7680);
+    pDevice->EnableMapMode(false);
+    Bitmap aBitmap = pDevice->GetBitmap(Point(0, 0), Size(nTileSize, nTileSize));
+    Bitmap::ScopedReadAccess pAccess(aBitmap);
+    Color aActualColor(pAccess->GetPixel(nPixelX, nPixelY));
+    CPPUNIT_ASSERT_EQUAL(aColor, aActualColor);
+}
+
+// Test that changing the theme in one view doesn't change it in the other view
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testThemeViewSeparation)
+{
+    Color aDarkColor(0x1c, 0x1c, 0x1c);
+    // Add a minimal dark scheme
+    {
+        svtools::EditableColorConfig aColorConfig;
+        svtools::ColorConfigValue aValue;
+        aValue.bIsVisible = true;
+        aValue.nColor = aDarkColor;
+        aColorConfig.SetColorValue(svtools::DOCCOLOR, aValue);
+        aColorConfig.AddScheme(u"Dark");
+    }
+    // Add a minimal light scheme
+    {
+        svtools::EditableColorConfig aColorConfig;
+        svtools::ColorConfigValue aValue;
+        aValue.bIsVisible = true;
+        aValue.nColor = COL_WHITE;
+        aColorConfig.SetColorValue(svtools::DOCCOLOR, aValue);
+        aColorConfig.AddScheme(u"Light");
+    }
+    SwXTextDocument* pXTextDocument = createDoc();
+    int nFirstViewId = SfxLokHelper::getView();
+    ViewCallback aView1;
+    // Set first view to light scheme
+    {
+        SwDoc* pDoc = pXTextDocument->GetDocShell()->GetDoc();
+        SwView* pView = pDoc->GetDocShell()->GetView();
+        uno::Reference<frame::XFrame> xFrame = pView->GetViewFrame().GetFrame().GetFrameInterface();
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Light")) },
+            }
+        );
+        comphelper::dispatchCommand(".uno:ChangeTheme", xFrame, aPropertyValues);
+    }
+    // First view is in light scheme
+    assertTilePixelColor(pXTextDocument, 255, 255, COL_WHITE);
+    // Create second view
+    SfxLokHelper::createView();
+    int nSecondViewId = SfxLokHelper::getView();
+    ViewCallback aView2;
+    // Set second view to dark scheme
+    {
+        SwDoc* pDoc = pXTextDocument->GetDocShell()->GetDoc();
+        SwView* pView = pDoc->GetDocShell()->GetView();
+        uno::Reference<frame::XFrame> xFrame = pView->GetViewFrame().GetFrame().GetFrameInterface();
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Dark")) },
+            }
+        );
+        comphelper::dispatchCommand(".uno:ChangeTheme", xFrame, aPropertyValues);
+    }
+    assertTilePixelColor(pXTextDocument, 255, 255, aDarkColor);
+    // First view still in light scheme
+    SfxLokHelper::setView(nFirstViewId);
+    assertTilePixelColor(pXTextDocument, 255, 255, COL_WHITE);
+    // Second view still in dark scheme
+    SfxLokHelper::setView(nSecondViewId);
+    assertTilePixelColor(pXTextDocument, 255, 255, aDarkColor);
+    // Switch second view back to light scheme
+    {
+        SwDoc* pDoc = pXTextDocument->GetDocShell()->GetDoc();
+        SwView* pView = pDoc->GetDocShell()->GetView();
+        uno::Reference<frame::XFrame> xFrame = pView->GetViewFrame().GetFrame().GetFrameInterface();
+        uno::Sequence<beans::PropertyValue> aPropertyValues = comphelper::InitPropertySequence(
+            {
+                { "NewTheme", uno::Any(OUString("Light")) },
+            }
+        );
+        comphelper::dispatchCommand(".uno:ChangeTheme", xFrame, aPropertyValues);
+    }
+    // Now in light scheme
+    assertTilePixelColor(pXTextDocument, 255, 255, COL_WHITE);
 }
 
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testSetViewGraphicSelection)
@@ -1776,7 +1919,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testRedlineColors)
     // Assert that info about exactly one author is returned.
     tools::JsonWriter aJsonWriter;
     pXTextDocument->getTrackedChangeAuthors(aJsonWriter);
-    std::stringstream aStream(aJsonWriter.extractAsOString().getStr());
+    std::stringstream aStream((std::string(aJsonWriter.finishAndGetAsOString())));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aTree.get_child("authors").size());
@@ -1835,7 +1978,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testCommentInsert)
     ViewCallback aView;
     comphelper::dispatchCommand(".uno:InsertAnnotation", xFrame, aPropertyValues);
     Scheduler::ProcessEventsToIdle();
-    OString aAnchorPos(aView.m_aComment.get_child("anchorPos").get_value<std::string>().c_str());
+    OString aAnchorPos(aView.m_aComment.get_child("anchorPos").get_value<std::string>());
     // Without the accompanying fix in place, this test would have failed with
     // - Expected: 1418, 1418, 0, 0
     // - Actual  : 1418, 1418, 1024, 1024
@@ -3066,17 +3209,17 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButton)
 
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
-        OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+        OString sAction( aTree.get_child("action").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("show"), sAction);
 
-        OString sType = aTree.get_child("type").get_value<std::string>().c_str();
+        OString sType( aTree.get_child("type").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("drop-down"), sType);
 
-        OString sTextArea = aTree.get_child("textArea").get_value<std::string>().c_str();
+        OString sTextArea( aTree.get_child("textArea").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("1538, 1418, 1026, 275"), sTextArea);
 
         boost::property_tree::ptree aItems = aTree.get_child("params").get_child("items");
@@ -3085,15 +3228,15 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButton)
         OStringBuffer aItemList;
         for (auto &item : aItems)
         {
-            aItemList.append(item.second.get_value<std::string>().c_str());
-            aItemList.append(";");
+            aItemList.append(item.second.get_value<std::string>().c_str()
+                + OString::Concat(";"));
         }
         CPPUNIT_ASSERT_EQUAL(OString("2019/2020;2020/2021;2021/2022;2022/2023;2023/2024;2024/2025;"), aItemList.toString());
 
-        OString sSelected = aTree.get_child("params").get_child("selected").get_value<std::string>().c_str();
+        OString sSelected( aTree.get_child("params").get_child("selected").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("1"), sSelected);
 
-        OString sPlaceholder = aTree.get_child("params").get_child("placeholderText").get_value<std::string>().c_str();
+        OString sPlaceholder( aTree.get_child("params").get_child("placeholderText").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("No Item specified"), sPlaceholder);
     }
 
@@ -3102,14 +3245,14 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButton)
 
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
-        OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+        OString sAction( aTree.get_child("action").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("hide"), sAction);
 
-        OString sType = aTree.get_child("type").get_value<std::string>().c_str();
+        OString sType( aTree.get_child("type").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("drop-down"), sType);
     }
 }
@@ -3140,11 +3283,11 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButtonEditing)
     // The item with the index '1' is selected by default
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
-        OString sSelected = aTree.get_child("params").get_child("selected").get_value<std::string>().c_str();
+        OString sSelected( aTree.get_child("params").get_child("selected").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("1"), sSelected);
     }
     m_aFormFieldButton = "";
@@ -3162,11 +3305,11 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButtonEditing)
 
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
-        OString sSelected = aTree.get_child("params").get_child("selected").get_value<std::string>().c_str();
+        OString sSelected( aTree.get_child("params").get_child("selected").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("3"), sSelected);
     }
 }
@@ -3197,11 +3340,11 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButtonNoSelectio
     // None of the items is selected
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
-        OString sSelected = aTree.get_child("params").get_child("selected").get_value<std::string>().c_str();
+        OString sSelected( aTree.get_child("params").get_child("selected").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("-1"), sSelected);
     }
 }
@@ -3209,7 +3352,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButtonNoSelectio
 static void lcl_extractHandleParameters(std::string_view selection, sal_Int32& id, sal_Int32& x, sal_Int32& y)
 {
     OString extraInfo( selection.substr(selection.find("{")) );
-    std::stringstream aStream(extraInfo.getStr());
+    std::stringstream aStream((std::string(extraInfo)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     boost::property_tree::ptree
@@ -3283,14 +3426,14 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownFormFieldButtonNoItem)
     // There is not item specified for the field
     CPPUNIT_ASSERT(!m_aFormFieldButton.isEmpty());
     {
-        std::stringstream aStream(m_aFormFieldButton.getStr());
+        std::stringstream aStream((std::string(m_aFormFieldButton)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
 
         boost::property_tree::ptree aItems = aTree.get_child("params").get_child("items");
         CPPUNIT_ASSERT_EQUAL(size_t(0), aItems.size());
 
-        OString sSelected = aTree.get_child("params").get_child("selected").get_value<std::string>().c_str();
+        OString sSelected( aTree.get_child("params").get_child("selected").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("-1"), sSelected);
     }
 }
@@ -3345,7 +3488,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTableCommentRemoveCallback)
     Scheduler::ProcessEventsToIdle();
 
     //check for comment remove callback
-    OString sAction(aView.m_aComment.get_child("action").get_value<std::string>().c_str());
+    OString sAction(aView.m_aComment.get_child("action").get_value<std::string>());
     CPPUNIT_ASSERT_EQUAL(OString("Remove"), sAction);
 }
 
@@ -3436,6 +3579,21 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testBulletDeleteInvalidation)
     CPPUNIT_ASSERT(!aFirstTextRect.Overlaps(m_aInvalidations));
 }
 
+CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testTdf155349)
+{
+    SwXTextDocument* pXTextDocument = createDoc();
+    SwWrtShell* pWrtShell = pXTextDocument->GetDocShell()->GetWrtShell();
+    Scheduler::ProcessEventsToIdle();
+    setupLibreOfficeKitViewCallback(pWrtShell->GetSfxViewShell());
+    pWrtShell->Insert2("a");
+    Scheduler::ProcessEventsToIdle();
+    pWrtShell->Insert2("b");
+    m_bFullInvalidateSeen = false;
+    Scheduler::ProcessEventsToIdle();
+    // before fix for tdf#155349 the total area got invalidated when changing one line
+    CPPUNIT_ASSERT(!m_bFullInvalidateSeen);
+}
+
 CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testBulletNoNumInvalidation)
 {
     // Given a document with 3 paragraphs: all are bulleted.
@@ -3509,7 +3667,7 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testCondCollCopy)
     // Given a document with a custom Text Body cond style:
     SwXTextDocument* pXTextDocument = createDoc("cond-coll-copy.odt");
     uno::Sequence<beans::PropertyValue> aPropertyValues
-        = { comphelper::makePropertyValue("Style", OUString("Text Body")),
+        = { comphelper::makePropertyValue("Style", OUString("Text body")),
             comphelper::makePropertyValue("FamilyName", OUString("ParagraphStyles")) };
     dispatchCommand(mxComponent, ".uno:StyleApply", aPropertyValues);
     SwWrtShell* pWrtShell = pXTextDocument->GetDocShell()->GetWrtShell();
@@ -3589,17 +3747,17 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testContentControl)
     // Without the accompanying fix in place, this test would have failed, no callback was emitted.
     CPPUNIT_ASSERT(!m_aContentControl.isEmpty());
     {
-        std::stringstream aStream(m_aContentControl.getStr());
+        std::stringstream aStream((std::string(m_aContentControl)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
-        OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+        OString sAction( aTree.get_child("action").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("show"), sAction);
-        OString sRectangles = aTree.get_child("rectangles").get_value<std::string>().c_str();
+        OString sRectangles( aTree.get_child("rectangles").get_value<std::string>() );
         CPPUNIT_ASSERT(!sRectangles.isEmpty());
         // Without the accompanying fix in place, this test would have failed width:
         // uncaught exception of type std::exception (or derived).
         // - No such node (alias)
-        OString sAlias = aTree.get_child("alias").get_value<std::string>().c_str();
+        OString sAlias( aTree.get_child("alias").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("my alias"), sAlias);
     }
 
@@ -3607,10 +3765,10 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testContentControl)
     pWrtShell->SttEndDoc(/*bStt=*/true);
 
     // Then make sure that the callback is emitted again:
-    std::stringstream aStream(m_aContentControl.getStr());
+    std::stringstream aStream((std::string(m_aContentControl)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
-    OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+    OString sAction( aTree.get_child("action").get_value<std::string>() );
     CPPUNIT_ASSERT_EQUAL(OString("hide"), sAction);
 }
 
@@ -3657,12 +3815,12 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDropDownContentControl)
     // Then make sure that the callback is emitted:
     CPPUNIT_ASSERT(!m_aContentControl.isEmpty());
     {
-        std::stringstream aStream(m_aContentControl.getStr());
+        std::stringstream aStream((std::string(m_aContentControl)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
-        OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+        OString sAction( aTree.get_child("action").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("show"), sAction);
-        OString sRectangles = aTree.get_child("rectangles").get_value<std::string>().c_str();
+        OString sRectangles( aTree.get_child("rectangles").get_value<std::string>() );
         CPPUNIT_ASSERT(!sRectangles.isEmpty());
         boost::optional<boost::property_tree::ptree&> oItems = aTree.get_child_optional("items");
         CPPUNIT_ASSERT(oItems);
@@ -3732,10 +3890,10 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testPictureContentControl)
     // Then make sure that the callback is emitted:
     // Without the accompanying fix in place, this test would have failed, no callback was emitted.
     CPPUNIT_ASSERT(!m_aContentControl.isEmpty());
-    std::stringstream aStream(m_aContentControl.getStr());
+    std::stringstream aStream((std::string(m_aContentControl)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
-    OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+    OString sAction( aTree.get_child("action").get_value<std::string>() );
     CPPUNIT_ASSERT_EQUAL(OString("change-picture"), sAction);
 
     // And when replacing the image:
@@ -3784,12 +3942,12 @@ CPPUNIT_TEST_FIXTURE(SwTiledRenderingTest, testDateContentControl)
     // Then make sure that the callback is emitted:
     CPPUNIT_ASSERT(!m_aContentControl.isEmpty());
     {
-        std::stringstream aStream(m_aContentControl.getStr());
+        std::stringstream aStream((std::string(m_aContentControl)));
         boost::property_tree::ptree aTree;
         boost::property_tree::read_json(aStream, aTree);
-        OString sAction = aTree.get_child("action").get_value<std::string>().c_str();
+        OString sAction( aTree.get_child("action").get_value<std::string>() );
         CPPUNIT_ASSERT_EQUAL(OString("show"), sAction);
-        OString sRectangles = aTree.get_child("rectangles").get_value<std::string>().c_str();
+        OString sRectangles( aTree.get_child("rectangles").get_value<std::string>() );
         CPPUNIT_ASSERT(!sRectangles.isEmpty());
         boost::optional<boost::property_tree::ptree&> oDate = aTree.get_child_optional("date");
         CPPUNIT_ASSERT(oDate);

@@ -406,7 +406,7 @@ bool ScValidationData::DoError(weld::Window* pParent, const OUString& rInput,
     }
 
     std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent, eType,
-                                              eStyle, aMessage));
+                                              eStyle, aMessage, SfxViewShell::Current()));
     xBox->set_title(aTitle);
     xBox->SetInstallLOKNotifierHdl(LINK(nullptr, ScValidationData, InstallLOKNotifierHdl));
 
@@ -856,6 +856,7 @@ bool ScValidationData::GetSelectionFromFormula(
     rMatch = -1;
 
     SvNumberFormatter* pFormatter = GetDocument()->GetFormatTable();
+    sal_uInt32 nDestFormat = pDocument->GetNumberFormat(rPos.Col(), rPos.Row(), rPos.Tab());
 
     SCSIZE  nCol, nRow, nCols, nRows, n = 0;
     pValues->GetDimensions( nCols, nRows );
@@ -957,7 +958,7 @@ bool ScValidationData::GetSelectionFromFormula(
                     }
                     else
                     {
-                        pFormatter->GetInputLineString( nMatVal.fVal, 0, aValStr );
+                        pFormatter->GetInputLineString( nMatVal.fVal, nDestFormat, aValStr );
                     }
                 }
 

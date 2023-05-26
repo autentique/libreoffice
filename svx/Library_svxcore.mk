@@ -204,21 +204,16 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/gallery2/galobj \
     svx/source/gallery2/galtheme \
     svx/source/gallery2/GalleryControl \
-    svx/source/gallery2/gallerybinaryengine \
-    svx/source/gallery2/gallerybinaryengineentry \
-    svx/source/gallery2/gallerystoragelocations \
-    svx/source/gallery2/gallerybinarystoragelocations \
     svx/source/gallery2/galleryobjectcollection \
     svx/source/gallery2/galleryfilestorage \
     svx/source/gallery2/galleryfilestorageentry \
-    svx/source/gallery2/galleryobjectstorage \
-    svx/source/gallery2/galleryobjectbinarystorage \
-    svx/source/gallery2/galleryobjectxmlstorage \
+    svx/source/gallery2/gallerystoragelocations \
     svx/source/items/chrtitem \
     svx/source/items/clipfmtitem \
     svx/source/items/customshapeitem \
     svx/source/items/drawitem \
     svx/source/items/e3ditem \
+    svx/source/items/RectangleAlignmentItem \
     svx/source/items/galleryitem \
     svx/source/items/grfitem \
     svx/source/sdr/animation/scheduler \

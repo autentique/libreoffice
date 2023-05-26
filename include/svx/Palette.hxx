@@ -29,12 +29,7 @@
 
 class SvxColorValueSet;
 
-typedef std::pair<Color, OUString> NamedColor;
-
-namespace svx
-{
-/// A color with an optional name and other theming-related properties.
-struct SVXCORE_DLLPUBLIC NamedThemedColor
+struct SVXCORE_DLLPUBLIC NamedColor
 {
     Color m_aColor;
     OUString m_aName;
@@ -42,13 +37,15 @@ struct SVXCORE_DLLPUBLIC NamedThemedColor
     sal_Int16 m_nLumMod = 10000;
     sal_Int16 m_nLumOff = 0;
 
-    static NamedThemedColor FromNamedColor(const NamedColor& rNamedColor);
+    NamedColor() = default;
 
-    NamedColor ToNamedColor() const;
+    NamedColor(Color const& rColor, OUString const& rName)
+        : m_aColor(rColor)
+        , m_aName(rName)
+    {}
 };
-}
 
-typedef std::function<void(const OUString&, const svx::NamedThemedColor&)> ColorSelectFunction;
+typedef std::function<void(const OUString&, const NamedColor&)> ColorSelectFunction;
 
 class Palette
 {

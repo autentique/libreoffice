@@ -49,6 +49,8 @@
 
 #include <workctrl.hxx>
 
+#include <comphelper/lok.hxx>
+
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::frame;
 
@@ -191,7 +193,7 @@ void SwNavigationPI::UsePage()
 }
 
 // Select handler of the toolboxes
-IMPL_LINK(SwNavigationPI, ToolBoxSelectHdl, const OString&, rCommand, void)
+IMPL_LINK(SwNavigationPI, ToolBoxSelectHdl, const OUString&, rCommand, void)
 {
     SwView *pView = GetCreateView();
     if (!pView)
@@ -330,7 +332,7 @@ IMPL_LINK(SwNavigationPI, ToolBoxSelectHdl, const OString&, rCommand, void)
 }
 
 // Click handler of the toolboxes
-IMPL_LINK(SwNavigationPI, ToolBoxClickHdl, const OString&, rCommand, void)
+IMPL_LINK(SwNavigationPI, ToolBoxClickHdl, const OUString&, rCommand, void)
 {
     if (!m_xGlobalToolBox->get_menu_item_active(rCommand))
         return;
@@ -341,7 +343,7 @@ IMPL_LINK(SwNavigationPI, ToolBoxClickHdl, const OString&, rCommand, void)
         m_xGlobalTree->TbxMenuHdl(rCommand, *m_xInsertMenu);
 }
 
-IMPL_LINK(SwNavigationPI, ToolBox6DropdownClickHdl, const OString&, rCommand, void)
+IMPL_LINK(SwNavigationPI, ToolBox6DropdownClickHdl, const OUString&, rCommand, void)
 {
     if (!m_xContent6ToolBox->get_menu_item_active(rCommand))
         return;
@@ -363,7 +365,7 @@ IMPL_LINK(SwNavigationPI, ToolBox6DropdownClickHdl, const OString&, rCommand, vo
     }
 }
 
-IMPL_LINK(SwNavigationPI, DropModeMenuSelectHdl, const OString&, rIdent, void)
+IMPL_LINK(SwNavigationPI, DropModeMenuSelectHdl, const OUString&, rIdent, void)
 {
     if (rIdent == "hyperlink")
         SetRegionDropMode(RegionMode::NONE);
@@ -373,18 +375,18 @@ IMPL_LINK(SwNavigationPI, DropModeMenuSelectHdl, const OString&, rIdent, void)
         SetRegionDropMode(RegionMode::EMBEDDED);
 }
 
-IMPL_LINK(SwNavigationPI, GlobalMenuSelectHdl, const OString&, rIdent, void)
+IMPL_LINK(SwNavigationPI, GlobalMenuSelectHdl, const OUString&, rIdent, void)
 {
     m_xGlobalTree->ExecuteContextMenuAction(rIdent);
 }
 
-IMPL_LINK(SwNavigationPI, ToolBox5DropdownClickHdl, const OString&, rCommand, void)
+IMPL_LINK(SwNavigationPI, ToolBox5DropdownClickHdl, const OUString&, rCommand, void)
 {
     if (!m_xContent5ToolBox->get_menu_item_active(rCommand))
         return;
 
     if (rCommand == "headings")
-        m_xHeadingsMenu->set_active(OString::number(m_xContentTree->GetOutlineLevel()), true);
+        m_xHeadingsMenu->set_active(OUString::number(m_xContentTree->GetOutlineLevel()), true);
 }
 
 // Action-Handler Edit:
@@ -631,7 +633,7 @@ SwNavigationPI::SwNavigationPI(weld::Widget* pParent,
     m_xGlobalTree->set_selection_mode(SelectionMode::Multiple);
 
 //  Handler
-    Link<const OString&, void> aLk = LINK(this, SwNavigationPI, ToolBoxSelectHdl);
+    Link<const OUString&, void> aLk = LINK(this, SwNavigationPI, ToolBoxSelectHdl);
     m_xContent1ToolBox->connect_clicked(aLk);
     m_xContent3ToolBox->connect_clicked(aLk);
     m_xContent5ToolBox->connect_clicked(aLk);
@@ -682,6 +684,15 @@ SwNavigationPI::SwNavigationPI(weld::Widget* pParent,
     m_xDocListBox->set_accessible_name(m_aStatusArr[3]);
 
     m_aExpandedSize = m_xContainer->get_preferred_size();
+
+    if(comphelper::LibreOfficeKit::isActive())
+    {
+        m_xBuilder->weld_container("gridcontent16")->hide();
+        m_xDocListBox->hide();
+        m_xGlobalBox->hide();
+        m_xGlobalToolBox->hide();
+        m_xGlobalTree->HideTree();
+    }
 }
 
 weld::Window* SwNavigationPI::GetFrameWeld() const
@@ -765,12 +776,15 @@ void SwNavigationPI::NotifyItemUpdate(sal_uInt16 nSID, SfxItemState /*eState*/,
     }
     else if (nSID == FN_STAT_PAGE)
     {
-        SwView *pActView = GetCreateView();
-        if(pActView)
+        if(!comphelper::LibreOfficeKit::isActive())
         {
-            SwWrtShell &rSh = pActView->GetWrtShell();
-            m_xEdit->set_max(rSh.GetPageCnt());
-            m_xEdit->set_width_chars(3);
+            SwView *pActView = GetCreateView();
+            if(pActView)
+            {
+                SwWrtShell &rSh = pActView->GetWrtShell();
+                m_xEdit->set_max(rSh.GetPageCnt());
+                m_xEdit->set_width_chars(3);
+            }
         }
     }
 }
@@ -833,7 +847,7 @@ void SwNavigationPI::Notify( SfxBroadcaster& rBrdc, const SfxHint& rHint )
     }
 }
 
-IMPL_LINK( SwNavigationPI, HeadingsMenuSelectHdl, const OString&, rMenuId, void )
+IMPL_LINK( SwNavigationPI, HeadingsMenuSelectHdl, const OUString&, rMenuId, void )
 {
     if (!rMenuId.isEmpty())
         m_xContentTree->SetOutlineLevel(rMenuId.toUInt32());
@@ -1045,6 +1059,12 @@ void SwNavigationPI::SetRegionDropMode(RegionMode nNewMode)
 
 void SwNavigationPI::ToggleTree()
 {
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        m_xGlobalTree->HideTree();
+        return;
+    }
+
     bool bGlobalDoc = IsGlobalDoc();
     if (!IsGlobalMode() && bGlobalDoc)
     {

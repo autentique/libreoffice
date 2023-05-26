@@ -50,6 +50,7 @@ class DataTable;
 class RegressionCurveModel;
 enum class StackMode;
 class Wall;
+enum class ThreeDLookScheme;
 
 enum class DiagramPositioningMode
 {
@@ -105,7 +106,7 @@ public:
         getPropertySetInfo() override;
 
     // ____ XFastPropertySet ____
-    virtual void SAL_CALL setFastPropertyValue( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
+    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
 
     /// make original interface function visible again
     using ::com::sun::star::beans::XFastPropertySet::getFastPropertyValue;
@@ -162,19 +163,15 @@ public:
         std::vector< rtl::Reference< ::chart::BaseCoordinateSystem > >
         tCoordinateSystemContainerType;
 
-    const tCoordinateSystemContainerType & getBaseCoordinateSystems() { return m_aCoordSystems; }
+    tCoordinateSystemContainerType getBaseCoordinateSystems() const;
     void setCoordinateSystems(
         const std::vector< rtl::Reference< ::chart::BaseCoordinateSystem > >& aCoordinateSystems );
 
-    const rtl::Reference< ::chart::Legend > & getLegend2() const { return m_xLegend; }
+    rtl::Reference< ::chart::Legend > getLegend2() const;
     void setLegend(const rtl::Reference< ::chart::Legend > &);
 
     void setDataTable(const rtl::Reference<::chart::DataTable>& xNewDataTable);
-
-    rtl::Reference<::chart::DataTable> const& getDataTableRef() const
-    {
-        return m_xDataTable;
-    };
+    rtl::Reference<::chart::DataTable> getDataTableRef() const;
 
     DiagramPositioningMode getDiagramPositioningMode();
 
@@ -331,6 +328,25 @@ public:
 
     std::vector<rtl::Reference<::chart::RegressionCurveModel> >
         getAllRegressionCurvesNotMeanValueLine();
+
+    double getCameraDistance();
+    void setCameraDistance( double fCameraDistance );
+
+    void getRotation(
+            sal_Int32& rnHorizontalAngleDegree, sal_Int32& rnVerticalAngleDegree );
+    void setRotation(
+            sal_Int32 nHorizontalAngleDegree, sal_Int32 nVerticalYAngleDegree );
+    void getRotationAngle(
+            double& rfXAngleRad, double& rfYAngleRad, double& rfZAngleRad );
+    void setRotationAngle(
+            double fXAngleRad, double fYAngleRad, double fZAngleRad );
+
+    ThreeDLookScheme detectScheme();
+    void setScheme( ThreeDLookScheme aScheme );
+
+    void setDefaultRotation( bool bPieOrDonut );
+
+    void switchRightAngledAxes( bool bRightAngledAxes );
 
 private:
     // ____ XModifyListener ____

@@ -3443,7 +3443,7 @@ css::uno::Reference< XAccessible > SvTreeListBox::CreateAccessible()
         if ( xAccParent.is() )
         {
             // need to be done here to get the vclxwindow later on in the accessible
-            css::uno::Reference< css::awt::XWindowPeer > xHoldAlive(GetComponentInterface());
+            css::uno::Reference< css::awt::XVclWindowPeer > xHoldAlive(GetComponentInterface());
             xAccessible = pImpl->m_aFactoryAccess.getFactory().createAccessibleTreeListBox( *this, xAccParent );
         }
     }
@@ -3523,7 +3523,7 @@ void SvTreeListBox::set_min_width_in_chars(sal_Int32 nChars)
     queue_resize();
 }
 
-bool SvTreeListBox::set_property(const OString &rKey, const OUString &rValue)
+bool SvTreeListBox::set_property(const OUString &rKey, const OUString &rValue)
 {
     if (rKey == "min-width-chars")
     {

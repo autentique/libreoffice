@@ -33,6 +33,7 @@
 
 #include <unotxdoc.hxx>
 #include <docsh.hxx>
+#include <ndtxt.hxx>
 #include <wrtsh.hxx>
 
 class Test : public SwModelTestBase
@@ -70,6 +71,36 @@ CPPUNIT_TEST_FIXTURE(Test, testCellSdtRedline)
     // Without the accompanying fix in place, this test would have failed with an assertion failure,
     // we produced not-well-formed XML on save.
     loadAndSave("cell-sdt-redline.docx");
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf148956_directEndFormatting, "tdf148956_directEndFormatting.docx")
+{
+    SwDoc* pDoc = getSwDoc();
+    SwWrtShell* pWrtShell = pDoc->GetDocShell()->GetWrtShell();
+
+    // pWrtShell->EndPara(/*bSelect=*/true);
+    dispatchCommand(mxComponent, ".uno:GotoEndOfPara", {});
+    if (!isExported())
+    {
+        CPPUNIT_ASSERT_MESSAGE(
+            "Has direct formatting",
+            pWrtShell->GetCursor()->GetPoint()->GetNode().GetTextNode()->GetpSwpHints());
+    }
+    else
+    {
+        CPPUNIT_ASSERT_MESSAGE(
+            "Direct formatting cleared",
+            !pWrtShell->GetCursor()->GetPoint()->GetNode().GetTextNode()->GetpSwpHints());
+    }
+
+    pWrtShell->SttPara(/*bSelect=*/true);
+    dispatchCommand(mxComponent, ".uno:ResetAttributes", {});
+
+    dispatchCommand(mxComponent, ".uno:GotoEndOfPara", {});
+
+    CPPUNIT_ASSERT_MESSAGE(
+        "Direct formatting cleared",
+        !pWrtShell->GetCursor()->GetPoint()->GetNode().GetTextNode()->GetpSwpHints());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTdf147646, "tdf147646_mergedCellNumbering.docx")
@@ -120,6 +151,22 @@ DECLARE_OOXMLEXPORT_TEST(testTdf153042_noTab, "tdf153042_noTab.docx")
     assertXPath(pLayout, "//SwFixPortion", "width", "10");
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testTdf154478)
+{
+    loadAndSave("tdf154478.docx");
+    xmlDocUniquePtr pXmlDoc = parseExport("word/comments.xml");
+
+    OUString aValues[5] = { "Comment1 seen.", "Comment2 seen.", "Comment3 NOTseen.", "Comment4 NOTseen.", "Comment5 NOTseen." };
+    for (size_t i = 1; i < 6; ++i)
+    {
+        OString sPath = "/w:comments/w:comment[" + OString::number(i) + "]/w:p/w:r/w:t";
+
+        // Without the fix in place, this test would have failed with
+        // - In <>, XPath '/w:comments/w:comment[3]/w:p/w:r/w:t' not found
+        assertXPathContent(pXmlDoc, sPath, aValues[i - 1]);
+    }
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testTdf153592_columnBreaks)
 {
     loadAndSave("tdf153592_columnBreaks.docx");
@@ -146,6 +193,41 @@ DECLARE_OOXMLEXPORT_TEST(testTdf146984_anchorInShape, "tdf146984_anchorInShape.d
     assertXPath(pLayout, "//page[2]//anchored", 2);
 }
 
+DECLARE_OOXMLEXPORT_TEST(testTdf127622_framePr, "tdf127622_framePr.docx")
+{
+    // All the paragraphs end up with the same frame definition, so put them all in one frame
+    CPPUNIT_ASSERT_EQUAL(1, getShapes());
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf105035_framePrB, "tdf105035_framePrB.docx")
+{
+    // The paragraphs have different frame definitions, so they must be in separate frames,
+    // and the frames must not overlap - even though their vertical positions are identical.
+    const auto& pLayout = parseLayoutDump();
+    sal_Int32 n1stFlyBottom
+        = getXPath(pLayout, "//page[1]//anchored/fly[1]/infos/bounds", "bottom").toInt32();
+    sal_Int32 n2ndFlyTop
+        = getXPath(pLayout, "//page[1]//anchored/fly[2]/infos/bounds", "top").toInt32();
+    CPPUNIT_ASSERT_GREATER(n1stFlyBottom, n2ndFlyTop); //Top is greater than bottom
+
+    // Impossible layout TODO: the textboxes are in the wrong order.
+    OUString sTextBox1("Preparation of Papers for IEEE TRANSACTIONS and JOURNALS (November 2012)");
+    CPPUNIT_ASSERT_MESSAGE("DID YOU FIX ME? Wow - I didn't think this would be possible!",
+        !getXPathContent(pLayout, "//page[1]//anchored/fly[1]/txt").startsWith(sTextBox1));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf105035_framePrC, "tdf105035_framePrC.docx")
+{
+    // The paragraphs have different frame definitions, so they must be in separate frames,
+    // and the frames DO overlap this time.
+    const auto& pLayout = parseLayoutDump();
+    sal_Int32 n1stFlyTop
+        = getXPath(pLayout, "//page[1]//anchored/fly[1]/infos/bounds", "top").toInt32();
+    sal_Int32 n2ndFlyTop
+        = getXPath(pLayout, "//page[1]//anchored/fly[2]/infos/bounds", "top").toInt32();
+    CPPUNIT_ASSERT_EQUAL(n1stFlyTop, n2ndFlyTop); //both frames start at the same position
+}
+
 DECLARE_OOXMLEXPORT_TEST(testTdf154129_framePr1, "tdf154129_framePr1.docx")
 {
     for (size_t i = 1; i < 4; ++i)
@@ -157,6 +239,66 @@ DECLARE_OOXMLEXPORT_TEST(testTdf154129_framePr1, "tdf154129_framePr1.docx")
         nAnchor = getProperty<sal_Int16>(xTextFrame, "VertOrientRelation");
         CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_FRAME, nAnchor);
     }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf154703_framePr, "tdf154703_framePr.docx")
+{
+    // the frame conversion had been failing, so it imported as plain text only.
+    CPPUNIT_ASSERT_EQUAL(1, getShapes());
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf154703_framePr2, "tdf154703_framePr2.rtf")
+{
+    // framePr frames are always imported as fully transparent
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(100), getProperty<sal_Int16>(getShape(1), "FillTransparence"));
+
+    // as opposed to testLibreOfficeHang (RTF != INVERT_BORDER_SPACING) do not duplicate left/right
+    uno::Reference<text::XTextRange> xTextRange(getShape(1), uno::UNO_QUERY);
+    uno::Reference<text::XText> xText = xTextRange->getText();
+    CPPUNIT_ASSERT_EQUAL(OUString("framePr"), getParagraphOfText(1, xText)->getString());
+    sal_Int32 nFrame = getProperty<sal_Int32>(getShape(1), "LeftBorderDistance");
+    sal_Int32 nPara = getProperty<sal_Int32>(getParagraphOfText(1, xText), "LeftBorderDistance");
+    if (!isExported()) // RTF
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(529), nFrame + nPara);
+    else // DOCX
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(529*2), nFrame + nPara);
+
+    if (!isExported())
+    {
+        // Fill the frame with a red background. It should be transferred on export to the paragraph
+        uno::Reference<beans::XPropertySet> xFrame(getShape(1), uno::UNO_QUERY);
+        xFrame->setPropertyValue("FillColor", uno::Any(COL_RED));
+        xFrame->setPropertyValue("FillTransparence", uno::Any(static_cast<sal_Int32>(0)));
+
+        return;
+    }
+
+    // exported: framed paragraphs without a background should now have a red background
+    xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
+    assertXPath(pXmlDoc, "//w:body/w:p[1]/w:pPr/w:shd", "fill", "800000");
+    assertXPath(pXmlDoc, "//w:body/w:p[2]/w:pPr/w:shd", "fill", "548DD4"); // was blue already, no change
+    assertXPath(pXmlDoc, "//w:body/w:p[3]/w:pPr/w:shd", "fill", "800000");
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf154703_framePrWrapSpacing, "tdf154703_framePrWrapSpacing.docx")
+{
+    CPPUNIT_ASSERT_EQUAL(2, getPages());
+    if (!isExported())
+        return;
+
+    xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
+    // before the fix, this was half of the correct value.
+    assertXPath(pXmlDoc, "//w:body/w:p/w:pPr/w:framePr", "hSpace", "2552");
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf154703_framePrTextDirection, "tdf154703_framePrTextDirection.docx")
+{
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(text::WritingMode2::TB_RL), getProperty<sal_Int16>(getShape(1), "WritingMode"));
+    if (!isExported())
+        return;
+
+    xmlDocUniquePtr pXmlDoc = parseExport("word/document.xml");
+    assertXPath(pXmlDoc, "//w:body/w:p/w:pPr/w:textDirection", "val", "tbRl");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTdf153613_anchoredAfterPgBreak, "tdf153613_anchoredAfterPgBreak.docx")
@@ -369,7 +511,7 @@ DECLARE_OOXMLEXPORT_TEST(testTdf153964_firstIndentAfterBreak14, "tdf153964_first
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf76022_textboxWrap)
 {
-    // Granted, this is an ODT with a bit of an anomoly - tables ignore fly wrapping.
+    // Granted, this is an ODT with a bit of an anomaly - tables ignore fly wrapping.
     createSwDoc("tdf76022_textboxWrap.odt");
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Did you make wrapping sane/interoperable?", 1, getPages());
 
@@ -656,6 +798,24 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf153664)
     // TOF's paragraph style should be exported as "Table of Figures" as that's the default Word style name
     assertXPath(pXmlStyles, "/w:styles/w:style[12]", "styleId", "TableofFigures");
     assertXPath(pXmlStyles, "/w:styles/w:style[@w:styleId='TableofFigures']/w:name", "val", "Table of Figures");
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf124472_hyperlink, "tdf124472.docx")
+{
+    CPPUNIT_ASSERT_EQUAL(OUString("https://www.libreoffice.org/"),
+                         getProperty<OUString>(getRun(getParagraph(1), 1), "HyperLinkURL"));
+    CPPUNIT_ASSERT_EQUAL(OUString("mailto:info@libreoffice.org"),
+                         getProperty<OUString>(getRun(getParagraph(2), 1), "HyperLinkURL"));
+    CPPUNIT_ASSERT_EQUAL(OUString(""),
+                         getProperty<OUString>(getRun(getParagraph(3), 1), "HyperLinkURL"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testTdf135786, "tdf135786.docx")
+{
+    // Empty first line remain, if the section's initial dummy paragraph is not deleted:
+    // - Expected: 2
+    // - Actual  : 3
+    CPPUNIT_ASSERT_EQUAL(2, getParagraphs());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

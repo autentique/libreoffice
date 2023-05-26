@@ -317,13 +317,13 @@ struct EditCursorMessage final {
         else
             return; // happens in testTextBoxInsert test
 
-        uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aVal.c_str()));
+        uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aVal));
         CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aSeq.getLength());
         m_aRefPoint.setX(aSeq[0].toInt32());
         m_aRefPoint.setY(aSeq[1].toInt32());
 
         aVal = aTree.get_child("relrect").get_value<std::string>();
-        aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aVal.c_str()));
+        aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aVal));
         CPPUNIT_ASSERT_EQUAL(sal_Int32(4), aSeq.getLength());
         m_aRelRect.SetLeft(aSeq[0].toInt32());
         m_aRelRect.SetTop(aSeq[1].toInt32());
@@ -369,7 +369,7 @@ struct TextSelectionMessage
         std::string aRefPointString = (nRefDelimStart == std::string::npos) ?
             std::string("0, 0") :
             aStr.substr(nRefDelimStart + 2, aStr.length() - 2 - nRefDelimStart);
-        uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aRefPointString.c_str()));
+        uno::Sequence<OUString> aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aRefPointString));
         CPPUNIT_ASSERT_EQUAL(sal_Int32(2), aSeq.getLength());
         m_aRefPoint.setX(aSeq[0].toInt32());
         m_aRefPoint.setY(aSeq[1].toInt32());
@@ -382,7 +382,7 @@ struct TextSelectionMessage
         {
             std::string aRectString = aRectListString.substr(nStart, nEnd - nStart);
             {
-                aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aRectString.c_str()));
+                aSeq = comphelper::string::convertCommaSeparated(OUString::createFromAscii(aRectString));
                 CPPUNIT_ASSERT_EQUAL(sal_Int32(4), aSeq.getLength());
                 tools::Rectangle aRect;
                 aRect.SetLeft(aSeq[0].toInt32());
@@ -678,7 +678,7 @@ namespace
 void lcl_extractHandleParameters(std::string_view selection, sal_uInt32& id, sal_uInt32& x, sal_uInt32& y)
 {
     OString extraInfo( selection.substr(selection.find("{")) );
-    std::stringstream aStream(extraInfo.getStr());
+    std::stringstream aStream((std::string(extraInfo)));
     boost::property_tree::ptree aTree;
     boost::property_tree::read_json(aStream, aTree);
     boost::property_tree::ptree
@@ -1123,7 +1123,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCommentCallback)
             pTabViewShell->SetCursor(3, 100);
         aArgs = comphelper::InitPropertySequence(
         {
-            {"Id", uno::Any(OUString::createFromAscii(aCommentId.c_str()))},
+            {"Id", uno::Any(OUString::createFromAscii(aCommentId))},
             {"Text", uno::Any(OUString("Edited comment"))},
             {"Author", uno::Any(OUString("LOK User2"))},
         });
@@ -1146,7 +1146,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testCommentCallback)
             pTabViewShell->SetCursor(4, 43);
         aArgs = comphelper::InitPropertySequence(
         {
-            {"Id", uno::Any(OUString::createFromAscii(aCommentId.c_str()))}
+            {"Id", uno::Any(OUString::createFromAscii(aCommentId))}
         });
         dispatchCommand(mxComponent, ".uno:DeleteNote", aArgs);
 
@@ -1825,7 +1825,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetRowColumnHeadersInvalidation)
     aView1.m_aInvalidations.clear();
     tools::JsonWriter aJsonWriter1;
     pModelObj->getRowColumnHeaders(tools::Rectangle(0, 15, 19650, 5400), aJsonWriter1);
-    free(aJsonWriter1.extractData());
+    aJsonWriter1.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
@@ -1836,7 +1836,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetRowColumnHeadersInvalidation)
     aView1.m_aInvalidations.clear();
     tools::JsonWriter aJsonWriter2;
     pModelObj->getRowColumnHeaders(tools::Rectangle(0, 5400, 19650, 9800), aJsonWriter2);
-    free(aJsonWriter2.extractData());
+    aJsonWriter2.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
@@ -1847,7 +1847,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetRowColumnHeadersInvalidation)
     aView1.m_aInvalidations.clear();
     tools::JsonWriter aJsonWriter3;
     pModelObj->getRowColumnHeaders(tools::Rectangle(5400, 5400, 25050, 9800), aJsonWriter3);
-    free(aJsonWriter3.extractData());
+    aJsonWriter3.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
@@ -1921,7 +1921,7 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testRowColumnHeaders)
     SfxLokHelper::setView(nView1);
     tools::JsonWriter aJsonWriter1;
     pModelObj->getRowColumnHeaders(tools::Rectangle(65,723,10410,4695), aJsonWriter1);
-    OString aHeaders1 = aJsonWriter1.extractAsOString();
+    OString aHeaders1 = aJsonWriter1.finishAndGetAsOString();
 
     SfxLokHelper::setView(nView2);
     // 50% zoom
@@ -1929,20 +1929,20 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testRowColumnHeaders)
     pModelObj->setClientZoom(256, 256, 6636, 6636);
     tools::JsonWriter aJsonWriter2;
     pModelObj->getRowColumnHeaders(tools::Rectangle(65,723,10410,4695), aJsonWriter2);
-    OString aHeaders2 = aJsonWriter2.extractAsOString();
+    OString aHeaders2 = aJsonWriter2.finishAndGetAsOString();
 
     // Check vs. view #1
     SfxLokHelper::setView(nView1);
     tools::JsonWriter aJsonWriter3;
     pModelObj->getRowColumnHeaders(tools::Rectangle(65,723,10410,4695), aJsonWriter3);
-    OString aHeaders1_2 = aJsonWriter3.extractAsOString();
+    OString aHeaders1_2 = aJsonWriter3.finishAndGetAsOString();
     CPPUNIT_ASSERT_EQUAL(aHeaders1, aHeaders1_2);
 
     // Check vs. view #2
     SfxLokHelper::setView(nView2);
     tools::JsonWriter aJsonWriter4;
     pModelObj->getRowColumnHeaders(tools::Rectangle(65,723,10410,4695), aJsonWriter4);
-    OString aHeaders2_2 = aJsonWriter4.extractAsOString();
+    OString aHeaders2_2 = aJsonWriter4.finishAndGetAsOString();
     CPPUNIT_ASSERT_EQUAL(aHeaders2, aHeaders2_2);
 
     SfxLokHelper::setView(nView1);
@@ -2047,7 +2047,7 @@ struct SheetDimData
             }
 
             // Get the tree's value for the property key ("sizes"/"hidden"/"filtered").
-            OString aTreeValue = rTree.get<std::string>(rEntry.aKey.getStr()).c_str();
+            OString aTreeValue(rTree.get<std::string>(rEntry.aKey.getStr()));
 
             CPPUNIT_ASSERT_EQUAL(aExpectedEncoding, aTreeValue);
         }
@@ -2075,10 +2075,10 @@ public:
     {
         // Assumes all flags passed to getSheetGeometryData() are true.
         boost::property_tree::ptree aTree;
-        std::stringstream aStream(rJSON.getStr());
+        std::stringstream aStream((std::string(rJSON)));
         boost::property_tree::read_json(aStream, aTree);
 
-        CPPUNIT_ASSERT_EQUAL(OString(".uno:SheetGeometryData"), OString(aTree.get<std::string>("commandName").c_str()));
+        CPPUNIT_ASSERT_EQUAL(OString(".uno:SheetGeometryData"), OString(aTree.get<std::string>("commandName")));
 
         aCols.testPropertyTree(aTree.get_child("columns"), true);
         aRows.testPropertyTree(aTree.get_child("rows"), false);

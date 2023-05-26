@@ -458,16 +458,14 @@ void LinkManager::InsertFileLink(
         return;
 
     OUStringBuffer aBuf(64);
-    aBuf.append(rFileNm);
-    aBuf.append(sfx2::cTokenSeparator);
+    aBuf.append(rFileNm + OUStringChar(sfx2::cTokenSeparator));
 
     if (pRange)
         aBuf.append(*pRange);
 
     if (pFilterNm)
     {
-        aBuf.append(sfx2::cTokenSeparator);
-        aBuf.append(*pFilterNm);
+        aBuf.append(OUStringChar(sfx2::cTokenSeparator) + *pFilterNm);
     }
 
     OUString aCmd = aBuf.makeStringAndClear();
@@ -508,7 +506,7 @@ SotClipboardFormatId LinkManager::RegisterStatusInfoId()
     return nFormat;
 }
 
-bool LinkManager::GetGraphicFromAny(const OUString& rMimeType,
+bool LinkManager::GetGraphicFromAny(std::u16string_view rMimeType,
                                     const css::uno::Any & rValue,
                                     Graphic& rGraphic,
                                     weld::Window* pParentWin)

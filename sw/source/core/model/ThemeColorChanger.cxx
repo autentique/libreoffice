@@ -21,11 +21,13 @@
 #include <DocumentContentOperationsManager.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 #include <IDocumentUndoRedo.hxx>
+#include <UndoThemeChange.hxx>
 
 #include <sal/config.h>
 #include <svx/svdpage.hxx>
 #include <svx/svditer.hxx>
-#include <docmodel/uno/UnoThemeColor.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
+#include <docmodel/theme/Theme.hxx>
 #include <editeng/unoprnms.hxx>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
@@ -71,11 +73,11 @@ public:
                 std::shared_ptr<SfxItemSet> pStyleHandle(rAutoFormatPool.GetStyleHandle());
                 if (const SvxColorItem* pItem = pStyleHandle->GetItemIfSet(RES_CHRATR_COLOR))
                 {
-                    model::ThemeColor const& rThemeColor = pItem->GetThemeColor();
-                    auto eThemeType = rThemeColor.getType();
-                    if (eThemeType != model::ThemeColorType::Unknown)
+                    model::ComplexColor const& rComplexColor = pItem->getComplexColor();
+                    auto eSchemeType = rComplexColor.meSchemeType;
+                    if (eSchemeType != model::ThemeColorType::Unknown)
                     {
-                        Color aNewColor = mrColorSet.resolveColor(rThemeColor);
+                        Color aNewColor = mrColorSet.resolveColor(rComplexColor);
                         auto pNew = pItem->Clone();
                         pNew->SetValue(aNewColor);
 
@@ -121,12 +123,14 @@ void changeColor(SwFormat* pFormat, model::ColorSet const& rColorSet, SwDoc* pDo
     std::unique_ptr<SfxItemSet> pNewSet = rAttrSet.Clone();
 
     SvxColorItem aColorItem(rAttrSet.GetColor());
-    model::ThemeColor const& rThemeColor = aColorItem.GetThemeColor();
-    auto eThemeType = rThemeColor.getType();
+    model::ComplexColor const& rComplexColor = aColorItem.getComplexColor();
+    if (rComplexColor.meType != model::ColorType::Scheme)
+        return;
+    auto eThemeType = rComplexColor.meSchemeType;
     if (eThemeType != model::ThemeColorType::Unknown)
     {
         Color aColor = rColorSet.getColor(eThemeType);
-        aColor = rThemeColor.applyTransformations(aColor);
+        aColor = rComplexColor.applyTransformations(aColor);
         aColorItem.SetValue(aColor);
         pNewSet->Put(aColorItem);
         pDocument->ChgFormat(*pFormat, *pNewSet);
@@ -151,17 +155,21 @@ void ThemeColorChanger::apply(model::ColorSet const& rColorSet)
     pDocument->GetIDocumentUndoRedo().StartUndo(SwUndoId::EMPTY, nullptr);
 
     SdrPage* pPage = pDocument->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
-    model::Theme* pTheme = pPage->getSdrPageProperties().GetTheme().get();
-    if (pTheme)
+
+    auto pTheme = pPage->getSdrPageProperties().GetTheme();
+    if (!pTheme)
     {
-        pTheme->SetColorSet(std::make_unique<model::ColorSet>(rColorSet));
+        pTheme = std::make_shared<model::Theme>("Office");
+        pPage->getSdrPageProperties().SetTheme(pTheme);
     }
-    else
-    {
-        pPage->getSdrPageProperties().SetTheme(std::make_unique<model::Theme>("Office"));
-        pTheme = pPage->getSdrPageProperties().GetTheme().get();
-        pTheme->SetColorSet(std::make_unique<model::ColorSet>(rColorSet));
-    }
+
+    auto pNewColorSet = std::make_shared<model::ColorSet>(rColorSet);
+    auto pOldColorSet = pTheme->getColorSet();
+    pTheme->setColorSet(pNewColorSet);
+
+    auto pUndoThemeChange
+        = std::make_unique<sw::UndoThemeChange>(*pDocument, pOldColorSet, pNewColorSet);
+    pDocument->GetIDocumentUndoRedo().AppendUndo(std::move(pUndoThemeChange));
 
     SfxStyleSheetBasePool* pPool = mpDocSh->GetStyleSheetPool();
     SwDocStyleSheet* pStyle;

@@ -45,7 +45,6 @@
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/text/XTextSectionsSupplier.hpp>
-#include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/document/XDocumentInsertable.hpp>
 
@@ -835,7 +834,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFdo68291)
     uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XTextRange> xText = xTextDocument->getText();
     uno::Reference<text::XTextRange> xEnd = xText->getEnd();
-    paste(u"rtfimport/data/fdo68291-paste.rtf", xEnd);
+    paste(u"rtfimport/data/fdo68291-paste.rtf", "com.sun.star.comp.Writer.RtfFilter", xEnd);
 
     // This was "Standard", causing an unwanted page break on next paste.
     CPPUNIT_ASSERT_EQUAL(uno::Any(),
@@ -1241,7 +1240,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf90260Par)
     uno::Reference<text::XTextDocument> xTextDocument(mxComponent, uno::UNO_QUERY);
     uno::Reference<text::XTextRange> xText = xTextDocument->getText();
     uno::Reference<text::XTextRange> xEnd = xText->getEnd();
-    paste(u"rtfimport/data/tdf90260-par.rtf", xEnd);
+    paste(u"rtfimport/data/tdf90260-par.rtf", "com.sun.star.comp.Writer.RtfFilter", xEnd);
     CPPUNIT_ASSERT_EQUAL(2, getParagraphs());
 }
 
@@ -1352,12 +1351,12 @@ CPPUNIT_TEST_FIXTURE(Test, testClassificatonPaste)
     uno::Reference<text::XTextRange> xEnd = xText->getEnd();
 
     // Not classified source, not classified destination: OK.
-    paste(u"rtfimport/data/classification-no.rtf", xEnd);
+    paste(u"rtfimport/data/classification-no.rtf", "com.sun.star.comp.Writer.RtfFilter", xEnd);
     CPPUNIT_ASSERT_EQUAL(OUString("classification-no"), getParagraph(2)->getString());
 
     // Classified source, not classified destination: nothing should happen.
     OUString aOld = xText->getString();
-    paste(u"rtfimport/data/classification-yes.rtf", xEnd);
+    paste(u"rtfimport/data/classification-yes.rtf", "com.sun.star.comp.Writer.RtfFilter", xEnd);
     CPPUNIT_ASSERT_EQUAL(aOld, xText->getString());
 }
 

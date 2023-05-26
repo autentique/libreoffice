@@ -74,7 +74,6 @@ class ScImportAsciiDlg : public weld::GenericDialogController
     std::unique_ptr<weld::CheckButton> mxCkbEvaluateFormulas;
     std::unique_ptr<weld::CheckButton> mxCkbSkipEmptyCells;
 
-    std::unique_ptr<weld::Label> mxFtType;
     std::unique_ptr<weld::ComboBox> mxLbType;
     std::unique_ptr<weld::Label> mxAltTitle;
 
@@ -82,7 +81,7 @@ class ScImportAsciiDlg : public weld::GenericDialogController
 
 public:
                                 ScImportAsciiDlg(
-                                    weld::Window* pParent, const OUString& aDatName,
+                                    weld::Window* pParent, std::u16string_view aDatName,
                                     SvStream* pInStream, ScImportAsciiCall eCall );
                                 virtual ~ScImportAsciiDlg() override;
 

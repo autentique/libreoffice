@@ -59,6 +59,11 @@
 
 #include <basegfx/utils/zoomtools.hxx>
 
+#include <svx/svdpagv.hxx>
+#include <svx/svdpage.hxx>
+#include <svx/dialog/ThemeDialog.hxx>
+#include <ThemeColorChanger.hxx>
+
 namespace
 {
     void collectUIInformation(const OUString& aZoom)
@@ -874,7 +879,7 @@ void ScTabViewShell::Execute( SfxRequest& rReq )
                     PaintTop();
                     PaintLeft();
                     rBindings.Invalidate( SID_ATTR_ZOOM );
-                    rReq.AppendItem( SvxZoomItem( GetZoomType(), nZoom, nSlot ) );
+                    rReq.AppendItem( SvxZoomItem( GetZoomType(), nZoom, TypedWhichId<SvxZoomItem>(nSlot) ) );
                     rReq.Done();
                 }
             }
@@ -1335,7 +1340,34 @@ void ScTabViewShell::Execute( SfxRequest& rReq )
             SelectionChanged();
         }
         break;
+        case SID_THEME_DIALOG:
+        {
+            MakeDrawLayer();
+            ScTabView* pTabView = GetViewData().GetView();
+            ScDrawView* pView = pTabView->GetScDrawView();
+            SdrPage* pPage = pView->GetSdrPageView()->GetPage();
+            auto const& pTheme = pPage->getSdrPageProperties().GetTheme();
+            if (pTheme)
+            {
+                ScViewData& rViewData = GetViewData();
+                vcl::Window* pWin = rViewData.GetActiveWin();
+                auto pDialog = std::make_shared<svx::ThemeDialog>(pWin ? pWin->GetFrameWeld() : nullptr, pTheme.get());
+                weld::DialogController::runAsync(pDialog, [this, pDialog](sal_uInt32 nResult) {
+                    if (RET_OK != nResult)
+                        return;
 
+                    auto oColorSet = pDialog->getCurrentColorSet();
+                    if (oColorSet)
+                    {
+                        auto& rColorSet = (*oColorSet).get();
+                        sc::ThemeColorChanger aChanger(*GetViewData().GetDocShell());
+                        aChanger.apply(rColorSet);
+                    }
+                });
+            }
+            rReq.Done();
+        }
+        break;
         case SID_OPT_LOCALE_CHANGED :
             {   // locale changed, SYSTEM number formats changed => repaint cell contents
                 PaintGrid();

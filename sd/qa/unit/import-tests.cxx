@@ -52,6 +52,7 @@
 #include <com/sun/star/presentation/XCustomPresentationSupplier.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeParameterPair.hpp>
 #include <com/sun/star/drawing/ConnectorType.hpp>
+#include <com/sun/star/drawing/RectanglePoint.hpp>
 
 #include <stlpool.hxx>
 #include <unotools/syslocaleoptions.hxx>
@@ -124,7 +125,12 @@ CPPUNIT_TEST_FIXTURE(SdImportTest, testDocumentLayout)
             { u"fdo47434.pptx", u"xml/fdo47434_", u"" },
             { u"n758621.ppt", u"xml/n758621_", u"" },
             { u"fdo64586.ppt", u"xml/fdo64586_", u"" },
+
+            // needed to adapt this, the border parameter is no longer
+            // exported with MCGRs due to oox neither needing nor
+            // supporting it with now freely definable gradients
             { u"n819614.pptx", u"xml/n819614_", u"" },
+
             { u"n820786.pptx", u"xml/n820786_", u"" },
             { u"n762695.pptx", u"xml/n762695_", u"" },
             { u"n593612.pptx", u"xml/n593612_", u"" },
@@ -171,9 +177,15 @@ CPPUNIT_TEST_FIXTURE(SdImportTest, testDocumentLayout)
                 = OUStringToOString(createFileURL(aFilesToCompare[i].sDump), RTL_TEXTENCODING_UTF8)
                   + OString::number(j) + ".xml";
 
-            if (nUpdateMe == j)
+            if (nUpdateMe == i) // index was wrong here
             {
-                std::ofstream aStream(aFileName.getStr(),
+                // had to adapt this, std::ofstream annot write to an URL but needs a
+                // filesystem path. Seems as if no one had to adapt any of the cases
+                // for some years :-/
+                OUString sTempFilePath;
+                osl::FileBase::getSystemPathFromFileURL(OUString::fromUtf8(aFileName),
+                                                        sTempFilePath);
+                std::ofstream aStream(sTempFilePath.toUtf8().getStr(),
                                       std::ofstream::out | std::ofstream::binary);
                 aStream << aString;
                 aStream.close();
@@ -188,6 +200,49 @@ CPPUNIT_TEST_FIXTURE(SdImportTest, testDocumentLayout)
             }
         }
     }
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest, testTdf154363)
+{
+    sal_Int32 nGlueId;
+    createSdImpressDoc("pptx/tdf154363.pptx");
+    {
+        uno::Reference<beans::XPropertySet> xConnector1(getShapeFromPage(1, 0), uno::UNO_SET_THROW);
+        uno::Reference<beans::XPropertySet> xConnector2(getShapeFromPage(3, 0), uno::UNO_SET_THROW);
+        nGlueId = xConnector1->getPropertyValue("StartGluePointIndex").get<sal_Int32>();
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nGlueId);
+        nGlueId = xConnector2->getPropertyValue("EndGluePointIndex").get<sal_Int32>();
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nGlueId);
+    }
+
+    saveAndReload("Impress MS PowerPoint 2007 XML");
+    {
+        uno::Reference<beans::XPropertySet> xConnector1(getShapeFromPage(1, 0), uno::UNO_SET_THROW);
+        uno::Reference<beans::XPropertySet> xConnector2(getShapeFromPage(3, 0), uno::UNO_SET_THROW);
+        nGlueId = xConnector1->getPropertyValue("StartGluePointIndex").get<sal_Int32>();
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nGlueId);
+        nGlueId = xConnector2->getPropertyValue("EndGluePointIndex").get<sal_Int32>();
+        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nGlueId);
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(SdImportTest, testTdf153466)
+{
+    createSdImpressDoc("pptx/tdf153466.pptx");
+
+    uno::Reference<drawing::XDrawPagesSupplier> xDoc(mxComponent, uno::UNO_QUERY_THROW);
+    uno::Reference<drawing::XDrawPage> xPage(xDoc->getDrawPages()->getByIndex(0), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xPageSet(xPage, uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySet> xBackground(
+        xPageSet->getPropertyValue("Background").get<uno::Reference<beans::XPropertySet>>());
+
+    com::sun::star::drawing::RectanglePoint aRectanglePoint;
+    xBackground->getPropertyValue("FillBitmapRectanglePoint") >>= aRectanglePoint;
+    CPPUNIT_ASSERT_EQUAL(drawing::RectanglePoint::RectanglePoint_RIGHT_BOTTOM, aRectanglePoint);
+
+    uno::Reference<beans::XPropertySet> xShape(getShapeFromPage(0, 0), uno::UNO_SET_THROW);
+    xShape->getPropertyValue("FillBitmapRectanglePoint") >>= aRectanglePoint;
+    CPPUNIT_ASSERT_EQUAL(drawing::RectanglePoint::RectanglePoint_LEFT_MIDDLE, aRectanglePoint);
 }
 
 CPPUNIT_TEST_FIXTURE(SdImportTest, testTdf152434)

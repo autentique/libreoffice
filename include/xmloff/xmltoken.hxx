@@ -287,6 +287,7 @@ namespace xmloff::token {
         XML_AUTHOR_NAME,
         XML_AUTO,
         XML_AUTO_COMPLETE,
+        XML_AUTO_CREATE_NEW_FRAME,
         XML_AUTO_GROW_HEIGHT,
         XML_AUTO_GROW_WIDTH,
         XML_AUTO_RELOAD,
@@ -1208,6 +1209,7 @@ namespace xmloff::token {
         XML_LINKED_CELL,
         XML_LINK_TO_SOURCE_DATA,
         XML_LIST,
+        XML_MARKER_STYLE_NAME,
         XML_LIST_BLOCK,
         XML_LIST_HEADER,
         XML_LIST_INFO,
@@ -1455,6 +1457,7 @@ namespace xmloff::token {
         XML_OUTLINE_STYLE,
         XML_OUTSET,
         XML_OUTSIDE,
+        XML_OVERFLOW_BEHAVIOR,
         XML_OVERLAP,
         XML_OVERLAY,
         XML_P,
@@ -2570,6 +2573,7 @@ namespace xmloff::token {
         XML_TABULAR_LAYOUT,
         XML_OUTLINE_SUBTOTALS_TOP,
         XML_OUTLINE_SUBTOTALS_BOTTOM,
+        XML_COMPACT_LAYOUT,
         XML_LAYOUT_MODE,
         XML_DATA_PILOT_LAYOUT_INFO,
 
@@ -2755,6 +2759,7 @@ namespace xmloff::token {
 
         XML_SHOW_FILTER_BUTTON,
         XML_DRILL_DOWN_ON_DOUBLE_CLICK,
+        XML_SHOW_DRILL_DOWN_BUTTONS,
         XML_HEADER_GRID_LAYOUT,
         XML_GROUPED_BY,
         XML_DAYS,
@@ -3465,8 +3470,8 @@ namespace xmloff::token {
         XML_MARGIN_GUTTER,
 
         XML_LOCAL_URL,
+        XML_TARGET_TYPE,
         XML_TARGET_URL,
-        XML_USE_TARGET_URL,
 
         // Math ml
         XML_DIR,
@@ -3484,20 +3489,21 @@ namespace xmloff::token {
         XML_LINKED_STYLE_NAME,
 
         XML_THEME,
-        XML_CHAR_COLOR_THEME_REFERENCE,
-        XML_FILL_COLOR_THEME_REFERENCE,
-        XML_DK1,
-        XML_LT1,
-        XML_DK2,
-        XML_LT2,
+        XML_THEME_COLORS,
+        XML_THEME_TYPE,
+        XML_CHAR_COMPLEX_COLOR,
+        XML_FILL_COMPLEX_COLOR,
+        XML_DARK1,
+        XML_LIGHT1,
+        XML_DARK2,
+        XML_LIGHT2,
         XML_ACCENT1,
         XML_ACCENT2,
         XML_ACCENT3,
         XML_ACCENT4,
         XML_ACCENT5,
         XML_ACCENT6,
-        XML_HLINK,
-        XML_FOLHLINK,
+        XML_FOLLOWED_HYPERLINK,
 
         XML_CONTENT_CONTROL,
         XML_SHOWING_PLACE_HOLDER,
@@ -3514,6 +3520,11 @@ namespace xmloff::token {
         XML_FILL_USE_SLIDE_BACKGROUND,
 
         XML_MAY_BREAK_BETWEEN_PAGES,
+
+        XML_GRADIENT_STOP, // multi-color-gradient
+        XML_OPACITY_STOP,
+        XML_COLOR_VALUE,
+        XML_COLOR_TYPE,
 
         XML_TOKEN_END
     };

@@ -738,7 +738,7 @@ SwTextNode *SwTextNode::SplitContentNode(const SwPosition & rPos,
             }
 
             const std::shared_ptr<SfxItemSet>& pSet = pHt->GetAutoFormat().GetStyleHandle();
-            if (!pSet || pSet->Count() != 1 || !pSet->GetItem(RES_CHRATR_ESCAPEMENT))
+            if (!pSet || pSet->Count() != 1 || !pSet->HasItem(RES_CHRATR_ESCAPEMENT))
             {
                 continue;
             }
@@ -3422,33 +3422,6 @@ SwTwips SwTextNode::GetAdditionalIndentForStartingNewList() const
     }
 
     return nAdditionalIndent;
-}
-
-// #i96772#
-void SwTextNode::ClearLRSpaceItemDueToListLevelIndents(
-        std::unique_ptr<SvxFirstLineIndentItem>& o_rFirstLineItem,
-        std::unique_ptr<SvxTextLeftMarginItem>& o_rTextLeftMarginItem) const
-{
-    ::sw::ListLevelIndents const result(AreListLevelIndentsApplicable());
-    if (result != ::sw::ListLevelIndents::No)
-    {
-        const SwNumRule* pRule = GetNumRule();
-        if ( pRule && GetActualListLevel() >= 0 )
-        {
-            const SwNumFormat& rFormat = pRule->Get(lcl_BoundListLevel(GetActualListLevel()));
-            if ( rFormat.GetPositionAndSpaceMode() == SvxNumberFormat::LABEL_ALIGNMENT )
-            {
-                if (result & ::sw::ListLevelIndents::FirstLine)
-                {
-                    o_rFirstLineItem = std::make_unique<SvxFirstLineIndentItem>(RES_MARGIN_FIRSTLINE);
-                }
-                if (result & ::sw::ListLevelIndents::LeftMargin)
-                {
-                    o_rTextLeftMarginItem = std::make_unique<SvxTextLeftMarginItem>(RES_MARGIN_TEXTLEFT);
-                }
-            }
-        }
-    }
 }
 
 // #i91133#

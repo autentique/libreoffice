@@ -79,6 +79,9 @@
 #include <sot/formats.hxx>
 #include <svx/compatflags.hxx>
 #include <svx/dialogs.hrc>
+#include <svx/svdpagv.hxx>
+#include <svx/svdpage.hxx>
+#include <docmodel/theme/Theme.hxx>
 
 #include <formulacell.hxx>
 #include <global.hxx>
@@ -115,7 +118,6 @@
 #include <scextopt.hxx>
 #include <compiler.hxx>
 #include <warnpassword.hxx>
-#include <optsolver.hxx>
 #include <sheetdata.hxx>
 #include <table.hxx>
 #include <tabprotection.hxx>
@@ -214,6 +216,26 @@ void ScDocShell::FillClass( SvGlobalName* pClassName,
 std::set<Color> ScDocShell::GetDocColors()
 {
     return m_pDocument->GetDocColors();
+}
+
+std::vector<Color> ScDocShell::GetThemeColors()
+{
+    ScTabViewShell* pSh = GetBestViewShell();
+    if (!pSh)
+        return {};
+    ScTabView* pTabView = pSh->GetViewData().GetView();
+    if (!pTabView)
+        return {};
+    ScDrawView* pView = pTabView->GetScDrawView();
+    if (!pView)
+        return {};
+    SdrPage* pPage = pView->GetSdrPageView()->GetPage();
+    if (!pPage)
+        return {};
+    auto const& pTheme = pPage->getSdrPageProperties().GetTheme();
+    if (!pTheme)
+        return {};
+    return pTheme->GetColors();
 }
 
 void ScDocShell::DoEnterHandler()
@@ -438,7 +460,7 @@ class MessageWithCheck : public weld::MessageDialogController
 private:
     std::unique_ptr<weld::CheckButton> m_xWarningOnBox;
 public:
-    MessageWithCheck(weld::Window *pParent, const OUString& rUIFile, const OString& rDialogId)
+    MessageWithCheck(weld::Window *pParent, const OUString& rUIFile, const OUString& rDialogId)
         : MessageDialogController(pParent, rUIFile, rDialogId, "ask")
         , m_xWarningOnBox(m_xBuilder->weld_check_button("ask"))
     {
@@ -2948,7 +2970,6 @@ ScDocShell::~ScDocShell()
 
     m_pPaintLockData.reset();
 
-    m_pSolverSaveData.reset();
     m_pSheetSaveData.reset();
     m_pFormatSaveData.reset();
     m_pOldAutoDBRange.reset();
@@ -3110,11 +3131,6 @@ weld::Window* ScDocShell::GetActiveDialogParent()
     if ( pViewSh )
         return pViewSh->GetDialogParent();
     return Application::GetDefDialogParent();
-}
-
-void ScDocShell::SetSolverSaveData( std::unique_ptr<ScOptSolverSave> pData )
-{
-    m_pSolverSaveData = std::move(pData);
 }
 
 ScSheetSaveData* ScDocShell::GetSheetSaveData()

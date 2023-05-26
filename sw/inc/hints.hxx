@@ -256,6 +256,11 @@ public:
     const bool m_isHidden;
     SectionHidden(const bool isHidden = true) : SfxHint(SfxHintId::SwSectionHidden), m_isHidden(isHidden) {};
 };
+class TableHeadingChange final: public SfxHint
+{
+public:
+    TableHeadingChange() : SfxHint(SfxHintId::SwTableHeadingChange) {};
+};
 }
 
 class SwUpdateAttr final : public SwMsgPoolItem
@@ -299,7 +304,7 @@ enum TableFormulaUpdateFlags { TBL_CALC = 0,
                          TBL_MERGETBL,
                          TBL_SPLITTBL
                        };
-class SwTableFormulaUpdate final : public SwMsgPoolItem
+class SwTableFormulaUpdate final
 {
 public:
     const SwTable* m_pTable;         ///< Pointer to the current table
@@ -307,7 +312,6 @@ public:
         const SwTable* pDelTable;  ///< Merge: Pointer to the table to be removed
         const OUString* pNewTableNm; ///< Split: the name of the new table
     } m_aData;
-    SwHistory* m_pHistory;
     sal_uInt16 m_nSplitLine;       ///< Split: from this BaseLine on will be split
     TableFormulaUpdateFlags m_eFlags;
     bool m_bModified : 1;
@@ -382,17 +386,6 @@ public:
     const SwNode* GetFoundNode() const { return m_pFound; }
 };
 
-class SwStringMsgPoolItem final : public SwMsgPoolItem
-{
-    OUString m_sStr;
-public:
-
-    const OUString& GetString() const { return m_sStr; }
-
-    SwStringMsgPoolItem( sal_uInt16 nId, OUString aStr )
-        : SwMsgPoolItem( nId ), m_sStr(std::move( aStr ))
-    {}
-};
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

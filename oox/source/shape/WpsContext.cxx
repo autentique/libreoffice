@@ -33,9 +33,7 @@
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/HomogenMatrix3.hpp>
-#include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
 #include <com/sun/star/geometry/IntegerRectangle2D.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -608,9 +606,10 @@ oox::core::ContextHandlerRef WpsContext::onCreateContext(sal_Int32 nElementToken
                     aTransformation.set(1, 0, aMatrix.Line2.Column1);
                     aTransformation.set(1, 1, aMatrix.Line2.Column2);
                     aTransformation.set(1, 2, aMatrix.Line2.Column3);
-                    aTransformation.set(2, 0, aMatrix.Line3.Column1);
-                    aTransformation.set(2, 1, aMatrix.Line3.Column2);
-                    aTransformation.set(2, 2, aMatrix.Line3.Column3);
+                    // For this to be a valid 2D transform matrix, the last row must be [0,0,1]
+                    assert(aMatrix.Line3.Column1 == 0);
+                    assert(aMatrix.Line3.Column2 == 0);
+                    assert(aMatrix.Line3.Column3 == 1);
                     basegfx::B2DTuple aScale;
                     basegfx::B2DTuple aTranslate;
                     double fRotate = 0;
@@ -931,7 +930,8 @@ void WpsContext::onEndElement()
         = lcl_generateFillPropertiesFromTextProps(aTextPropMap);
     aCreatedFillProperties.pushToPropMap(aFillShapeProps, getFilter().getGraphicHelper(),
                                          /*nShapeRotation*/ 0,
-                                         /*nPhClr*/ API_RGB_TRANSPARENT, /*nPhClrTheme*/ -1,
+                                         /*nPhClr*/ API_RGB_TRANSPARENT,
+                                         /*aShapeSize*/ css::awt::Size(0, 0), /*nPhClrTheme*/ -1,
                                          pCustomShape->IsMirroredX(), pCustomShape->IsMirroredY(),
                                          /*bIsCustomShape*/ true);
     lcl_applyShapePropsToShape(xShapePropertySet, aFillShapeProps);

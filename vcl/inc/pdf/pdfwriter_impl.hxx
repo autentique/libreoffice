@@ -480,11 +480,13 @@ struct PDFScreen : public PDFAnnotation
     /// alternative text description
     OUString m_AltText;
     sal_Int32 m_nStructParent;
+    OUString m_MimeType;
 
-    PDFScreen(OUString const& rAltText)
+    PDFScreen(OUString const& rAltText, OUString const& rMimeType)
         : m_nTempFileObject(0)
         , m_AltText(rAltText)
         , m_nStructParent(-1)
+        , m_MimeType(rMimeType)
     {
     }
 };
@@ -527,6 +529,8 @@ struct PDFWidget : public PDFAnnotation
     std::vector<sal_Int32>      m_aSelectedEntries;
     typedef std::unordered_map<OString, SvMemoryStream*> PDFAppearanceStreams;
     std::unordered_map<OString, PDFAppearanceStreams> m_aAppearances;
+    sal_Int32 m_nStructParent = -1;
+
     PDFWidget()
             : m_eType( PDFWriter::PushButton ),
               m_nTextStyle( DrawTextFlags::NONE ),
@@ -584,7 +588,7 @@ struct PDFStructureElement
     sal_Int32                                           m_nParentElement; // index into structure vector
     sal_Int32                                           m_nFirstPageObject;
     bool                                                m_bOpenMCSeq;
-    std::list< sal_Int32 >                              m_aChildren; // indexes into structure vector
+    std::vector< sal_Int32 >                            m_aChildren; // indexes into structure vector
     std::list< PDFStructureElementKid >                 m_aKids;
     std::map<PDFWriter::StructAttribute, PDFStructureAttribute >
                                                         m_aAttributes;
@@ -933,7 +937,7 @@ i12626
     /* writes a font descriptor and returns its object id (or 0) */
     sal_Int32 emitFontDescriptor(const vcl::font::PhysicalFontFace*, FontSubsetInfo const &, sal_Int32 nSubsetID, sal_Int32 nStream);
     /* writes a ToUnicode cmap, returns the corresponding stream object */
-    sal_Int32 createToUnicodeCMap( sal_uInt8 const * pEncoding, const sal_Ucs* pCodeUnits, const sal_Int32* pCodeUnitsPerGlyph,
+    sal_Int32 createToUnicodeCMap( sal_uInt8 const * pEncoding, const std::vector<sal_Ucs>& CodeUnits, const sal_Int32* pCodeUnitsPerGlyph,
                                    const sal_Int32* pEncToUnicodeIndex, uint32_t nGlyphs );
 
     /* get resource dict object number */
@@ -1014,8 +1018,6 @@ i12626
     bool finalizeSignature();
     // writes xref and trailer
     bool emitTrailer();
-    // emit additional streams collected; also create there object numbers
-    bool emitAdditionalStreams();
     // emits info dict (if applicable)
     sal_Int32 emitInfoDict( );
 
@@ -1314,7 +1316,7 @@ public:
     void      setLinkPropertyId( sal_Int32 nLinkId, sal_Int32 nPropertyId );
 
     // screens
-    sal_Int32 createScreen(const tools::Rectangle& rRect, sal_Int32 nPageNr, OUString const& rAltText);
+    sal_Int32 createScreen(const tools::Rectangle& rRect, sal_Int32 nPageNr, OUString const& rAltText, OUString const& rMimeType);
     void setScreenURL(sal_Int32 nScreenId, const OUString& rURL);
     void setScreenStream(sal_Int32 nScreenId, const OUString& rURL);
 

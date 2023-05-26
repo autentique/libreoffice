@@ -51,6 +51,7 @@
 #include <svx/SmartTagItem.hxx>
 #include <svx/xflgrit.hxx>
 #include <svx/xflhtit.hxx>
+#include <svx/xfillit0.hxx>
 #include <fmtinfmt.hxx>
 #include <wrtsh.hxx>
 #include <wview.hxx>
@@ -124,9 +125,11 @@ using namespace ::com::sun::star::container;
 using namespace com::sun::star::style;
 using namespace svx::sidebar;
 
-static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell &rWrtSh, std::shared_ptr<SfxItemSet> const & pCoreSet, bool bSel, bool bSelectionPut, SfxRequest *pReq);
+static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell &rWrtSh, std::shared_ptr<SfxItemSet> const & pCoreSet, bool bSel,
+                                bool bSelectionPut, bool bApplyToParagraph, SfxRequest *pReq);
 
-static void sw_CharDialog(SwWrtShell &rWrtSh, bool bUseDialog, sal_uInt16 nSlot, const SfxItemSet *pArgs, SfxRequest *pReq )
+static void sw_CharDialog(SwWrtShell& rWrtSh, bool bUseDialog, bool bApplyToParagraph,
+                          sal_uInt16 nSlot, const SfxItemSet* pArgs, SfxRequest* pReq)
 {
     FieldUnit eMetric = ::GetDfltMetric(dynamic_cast<SwWebView*>( &rWrtSh.GetView()) != nullptr );
     SW_MOD()->PutItem(SfxUInt16Item(SID_ATTR_METRIC, static_cast< sal_uInt16 >(eMetric)));
@@ -186,7 +189,7 @@ static void sw_CharDialog(SwWrtShell &rWrtSh, bool bUseDialog, sal_uInt16 nSlot,
         {
             const SfxStringItem* pItem = (*pReq).GetArg<SfxStringItem>(FN_PARAM_1);
             if (pItem)
-                pDlg->SetCurPageId(OUStringToOString(pItem->GetValue(), RTL_TEXTENCODING_UTF8));
+                pDlg->SetCurPageId(pItem->GetValue());
         }
     }
 
@@ -198,24 +201,35 @@ static void sw_CharDialog(SwWrtShell &rWrtSh, bool bUseDialog, sal_uInt16 nSlot,
             pRequest = std::make_shared<SfxRequest>(*pReq);
             pReq->Ignore(); // the 'old' request is not relevant any more
         }
-        pDlg->StartExecuteAsync([pDlg, &rWrtSh, pCoreSet, bSel, bSelectionPut, pRequest](sal_Int32 nResult){
+        pDlg->StartExecuteAsync([pDlg, &rWrtSh, pCoreSet, bSel, bSelectionPut, bApplyToParagraph, pRequest](sal_Int32 nResult){
             if (nResult == RET_OK)
             {
-                sw_CharDialogResult(pDlg->GetOutputItemSet(), rWrtSh, pCoreSet, bSel, bSelectionPut, pRequest.get());
+                sw_CharDialogResult(pDlg->GetOutputItemSet(), rWrtSh, pCoreSet, bSel, bSelectionPut,
+                                    bApplyToParagraph, pRequest.get());
             }
             pDlg->disposeOnce();
         });
     }
     else if (pArgs)
     {
-        sw_CharDialogResult(pArgs, rWrtSh, pCoreSet, bSel, bSelectionPut, pReq);
+        sw_CharDialogResult(pArgs, rWrtSh, pCoreSet, bSel, bSelectionPut, bApplyToParagraph, pReq);
     }
 }
 
-static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell &rWrtSh, std::shared_ptr<SfxItemSet> const & pCoreSet, bool bSel, bool bSelectionPut, SfxRequest *pReq)
+static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell& rWrtSh, std::shared_ptr<SfxItemSet> const & pCoreSet, bool bSel,
+                                bool bSelectionPut, bool bApplyToParagraph, SfxRequest* pReq)
 {
     SfxItemSet aTmpSet( *pSet );
     ::ConvertAttrGenToChar(aTmpSet, *pCoreSet);
+
+    const bool bWasLocked = rWrtSh.IsViewLocked();
+    if (bApplyToParagraph)
+    {
+        rWrtSh.StartAction();
+        rWrtSh.LockView(true);
+        rWrtSh.Push();
+        SwLangHelper::SelectCurrentPara(rWrtSh);
+    }
 
     const SfxStringItem* pSelectionItem;
     bool bInsert = false;
@@ -265,6 +279,12 @@ static void sw_CharDialogResult(const SfxItemSet* pSet, SwWrtShell &rWrtSh, std:
         rWrtSh.EndAction();
     }
 
+    if (bApplyToParagraph)
+    {
+        rWrtSh.Pop(SwCursorShell::PopMode::DeleteCurrent);
+        rWrtSh.LockView(bWasLocked);
+        rWrtSh.EndAction();
+    }
 }
 
 
@@ -317,14 +337,14 @@ static void sw_ParagraphDialogResult(SfxItemSet* pSet, SwWrtShell &rWrtSh, SfxRe
         sal_uInt16 nNumStart = USHRT_MAX;
         if( SfxItemState::SET == pSet->GetItemState(FN_NUMBER_NEWSTART_AT) )
         {
-            nNumStart = static_cast<const SfxUInt16Item&>(pSet->Get(FN_NUMBER_NEWSTART_AT)).GetValue();
+            nNumStart = pSet->Get(FN_NUMBER_NEWSTART_AT).GetValue();
         }
         rWrtSh.SetNumRuleStart(bStart, pPaM);
         rWrtSh.SetNodeNumStart(nNumStart);
     }
     else if( SfxItemState::SET == pSet->GetItemState(FN_NUMBER_NEWSTART_AT) )
     {
-        rWrtSh.SetNodeNumStart(static_cast<const SfxUInt16Item&>(pSet->Get(FN_NUMBER_NEWSTART_AT)).GetValue());
+        rWrtSh.SetNodeNumStart(pSet->Get(FN_NUMBER_NEWSTART_AT).GetValue());
         rWrtSh.SetNumRuleStart(false, pPaM);
     }
     // #i56253#
@@ -400,7 +420,7 @@ void UpdateSections(SfxRequest& rReq, SwWrtShell& rWrtSh)
         pSections->GetValue() >>= aSections;
     }
 
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::INSSECTION, nullptr);
+    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::UPDATE_SECTIONS, nullptr);
     rWrtSh.StartAction();
 
     SwDoc* pDoc = rWrtSh.GetDoc();
@@ -448,7 +468,7 @@ void UpdateSections(SfxRequest& rReq, SwWrtShell& rWrtSh)
     }
 
     rWrtSh.EndAction();
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::INSSECTION, nullptr);
+    rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::UPDATE_SECTIONS, nullptr);
 }
 
 void DeleteSections(SfxRequest& rReq, SwWrtShell& rWrtSh)
@@ -460,13 +480,13 @@ void DeleteSections(SfxRequest& rReq, SwWrtShell& rWrtSh)
         aSectionNamePrefix = pSectionNamePrefix->GetValue();
     }
 
-    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::DELSECTION, nullptr);
+    rWrtSh.GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::DELETE_SECTIONS, nullptr);
     rWrtSh.StartAction();
     comphelper::ScopeGuard g(
         [&rWrtSh]
         {
             rWrtSh.EndAction();
-            rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::DELSECTION, nullptr);
+            rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::DELETE_SECTIONS, nullptr);
         });
 
     SwDoc* pDoc = rWrtSh.GetDoc();
@@ -725,13 +745,13 @@ void DeleteFields(SfxRequest& rReq, SwWrtShell& rWrtSh)
     }
 
     SwDoc* pDoc = rWrtSh.GetDoc();
-    pDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::DELBOOKMARK, nullptr);
+    pDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::DELETE_FIELDS, nullptr);
     rWrtSh.StartAction();
     comphelper::ScopeGuard g(
         [&rWrtSh]
         {
             rWrtSh.EndAction();
-            rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::DELBOOKMARK, nullptr);
+            rWrtSh.GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::DELETE_FIELDS, nullptr);
         });
 
     std::vector<const SwFormatRefMark*> aRemovals;
@@ -785,7 +805,7 @@ void SwTextShell::Execute(SfxRequest &rReq)
                 if (rWrtSh.HasReadonlySel() && !rWrtSh.CursorInsideInputField())
                 {
                     // Only break if there's something to do; don't nag with the dialog otherwise
-                    rWrtSh.InfoReadOnlyDialog();
+                    rWrtSh.InfoReadOnlyDialog(false);
                     break;
                 }
                 SwRewriter aRewriter;
@@ -1007,6 +1027,7 @@ void SwTextShell::Execute(SfxRequest &rReq)
                 { RES_CHRATR_CJK_LANGUAGE + 1, RES_CHRATR_CTL_LANGUAGE - 1 },
                 { RES_CHRATR_CTL_LANGUAGE + 1, RES_CHRATR_END - 1 },
                 { RES_PARATR_BEGIN, RES_PARATR_END - 1 },
+                { RES_PARATR_LIST_AUTOFMT, RES_PARATR_LIST_AUTOFMT },
                 { RES_TXTATR_UNKNOWN_CONTAINER, RES_TXTATR_UNKNOWN_CONTAINER },
                 { RES_UNKNOWNATR_BEGIN, RES_UNKNOWNATR_END - 1 },
             };
@@ -1398,15 +1419,12 @@ void SwTextShell::Execute(SfxRequest &rReq)
         case SID_CHAR_DLG_EFFECT:
         case SID_CHAR_DLG_POSITION:
         {
-            sw_CharDialog( rWrtSh, bUseDialog, nSlot, pArgs, &rReq );
+            sw_CharDialog(rWrtSh, bUseDialog, /*ApplyToParagraph*/false, nSlot, pArgs, &rReq);
         }
         break;
         case SID_CHAR_DLG_FOR_PARAGRAPH:
         {
-            rWrtSh.Push();          //save current cursor
-            SwLangHelper::SelectCurrentPara( rWrtSh );
-            sw_CharDialog( rWrtSh, bUseDialog, nSlot, pArgs, &rReq );
-            rWrtSh.Pop(SwCursorShell::PopMode::DeleteCurrent); // restore old cursor
+            sw_CharDialog(rWrtSh, /*UseDialog*/true, /*ApplyToParagraph*/true, nSlot, pArgs, &rReq);
         }
         break;
         case SID_ATTR_LRSPACE :
@@ -1520,9 +1538,9 @@ void SwTextShell::Execute(SfxRequest &rReq)
 
             if ( bUseDialog && GetActiveView() )
             {
-                OString sDefPage;
+                OUString sDefPage;
                 if (pItem)
-                    sDefPage = OUStringToOString(static_cast<const SfxStringItem*>(pItem)->GetValue(), RTL_TEXTENCODING_UTF8);
+                    sDefPage = static_cast<const SfxStringItem*>(pItem)->GetValue();
 
                 SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
                 pDlg.reset(pFact->CreateSwParaDlg(GetView().GetFrameWeld(), GetView(), aCoreSet, false, sDefPage));
@@ -1585,7 +1603,10 @@ void SwTextShell::Execute(SfxRequest &rReq)
                             pSet->Put(SfxStringItem(FN_DROP_CHAR_STYLE_NAME, sCharStyleName));
                         }
 
-                        const XFillGradientItem* pTempGradItem = pSet->GetItem<XFillGradientItem>(XATTR_FILLGRADIENT);
+                        const XFillStyleItem* pFS = pSet->GetItem<XFillStyleItem>(XATTR_FILLSTYLE);
+                        bool bSet = pFS && pFS->GetValue() == drawing::FillStyle_GRADIENT;
+                        const XFillGradientItem* pTempGradItem
+                            = bSet ? pSet->GetItem<XFillGradientItem>(XATTR_FILLGRADIENT) : nullptr;
                         if (pTempGradItem && pTempGradItem->GetName().isEmpty())
                         {
                             // MigrateItemSet guarantees unique gradient names
@@ -1594,7 +1615,9 @@ void SwTextShell::Execute(SfxRequest &rReq)
                             SdrModel::MigrateItemSet(&aMigrateSet, pSet, pDrawModel);
                         }
 
-                        const XFillHatchItem* pTempHatchItem = pSet->GetItem<XFillHatchItem>(XATTR_FILLHATCH);
+                        bSet = pFS && pFS->GetValue() == drawing::FillStyle_HATCH;
+                        const XFillHatchItem* pTempHatchItem
+                            = bSet ? pSet->GetItem<XFillHatchItem>(XATTR_FILLHATCH) : nullptr;
                         if (pTempHatchItem && pTempHatchItem->GetName().isEmpty())
                         {
                             SfxItemSetFixed<XATTR_FILLHATCH, XATTR_FILLHATCH> aMigrateSet(rWrtSh.GetView().GetPool());
@@ -1685,7 +1708,7 @@ void SwTextShell::Execute(SfxRequest &rReq)
                 // otherwise, it'll be the color for the next text to be typed
                 if (!pApply || pApply->nColor != SID_ATTR_CHAR_COLOR_EXT)
                 {
-                    rWrtSh.SetAttrItem(SvxColorItem(pColorItem->GetValue(), pColorItem->GetThemeColor(), RES_CHRATR_COLOR));
+                    rWrtSh.SetAttrItem(SvxColorItem(pColorItem->GetValue(), pColorItem->getComplexColor(), RES_CHRATR_COLOR));
                 }
 
                 rReq.Done();
@@ -1805,15 +1828,17 @@ void SwTextShell::Execute(SfxRequest &rReq)
         if(SfxItemState::SET <= aSet.GetItemState( RES_TXTATR_INETFMT ))
         {
             const SwFormatINetFormat& rINetFormat = aSet.Get(RES_TXTATR_INETFMT);
-            if( nSlot == SID_COPY_HYPERLINK_LOCATION )
+
+            if (nSlot == SID_OPEN_HYPERLINK)
+            {
+                rWrtSh.ClickToINetAttr(rINetFormat);
+            }
+            else if (nSlot == SID_COPY_HYPERLINK_LOCATION)
             {
                 OUString hyperlinkLocation = rINetFormat.GetValue();
                 ::uno::Reference< datatransfer::clipboard::XClipboard > xClipboard = GetView().GetEditWin().GetClipboard();
-
                 vcl::unohelper::TextDataObject::CopyStringTo(hyperlinkLocation, xClipboard, SfxViewShell::Current());
             }
-            else
-                rWrtSh.ClickToINetAttr(rINetFormat);
         }
         else
         {
@@ -1821,19 +1846,27 @@ void SwTextShell::Execute(SfxRequest &rReq)
             if (pField && pField->GetTyp()->Which() == SwFieldIds::TableOfAuthorities)
             {
                 const auto& rAuthorityField = *static_cast<const SwAuthorityField*>(pField);
-                if (!rAuthorityField.UseTargetURL() && rAuthorityField.HasURL())
+                OUString targetURL = "";
+
+                if (auto targetType = rAuthorityField.GetTargetType();
+                    targetType == SwAuthorityField::TargetType::UseDisplayURL
+                    || targetType == SwAuthorityField::TargetType::UseTargetURL)
                 {
                     // Bibliography entry with URL also provides a hyperlink.
-                    const OUString& rURL
-                        = rAuthorityField.GetAuthEntry()->GetAuthorField(AUTH_FIELD_URL);
-                    ::LoadURL(rWrtSh, rURL, LoadUrlFlags::NewView, /*rTargetFrameName=*/OUString());
+                    targetURL = rAuthorityField.GetAbsoluteURL();
                 }
-                else if (rAuthorityField.UseTargetURL() && rAuthorityField.HasTargetURL())
+
+                if (targetURL.getLength() > 0)
                 {
-                    // Bibliography entry with URL also provides a hyperlink.
-                    const OUString& rURL
-                        = rAuthorityField.GetAuthEntry()->GetAuthorField(AUTH_FIELD_TARGET_URL);
-                    ::LoadURL(rWrtSh, rURL, LoadUrlFlags::NewView, /*rTargetFrameName=*/OUString());
+                    if (nSlot == SID_OPEN_HYPERLINK)
+                    {
+                        ::LoadURL(rWrtSh, targetURL, LoadUrlFlags::NewView, /*rTargetFrameName=*/OUString());
+                    }
+                    else if (nSlot == SID_COPY_HYPERLINK_LOCATION)
+                    {
+                        ::uno::Reference< datatransfer::clipboard::XClipboard > xClipboard = GetView().GetEditWin().GetClipboard();
+                        vcl::unohelper::TextDataObject::CopyStringTo(targetURL, xClipboard, SfxViewShell::Current());
+                    }
                 }
             }
         }
@@ -2500,7 +2533,6 @@ void SwTextShell::GetState( SfxItemSet &rSet )
                 break;
 
             case SID_EDIT_HYPERLINK:
-            case SID_COPY_HYPERLINK_LOCATION:
                 {
                     SfxItemSetFixed<RES_TXTATR_INETFMT, RES_TXTATR_INETFMT> aSet(GetPool());
                     rSh.GetCurAttr(aSet);
@@ -2550,7 +2582,8 @@ void SwTextShell::GetState( SfxItemSet &rSet )
             case FN_SELECTION_MODE_BLOCK :
                     rSet.Put(SfxBoolItem(nWhich, (nWhich == FN_SELECTION_MODE_DEFAULT) != rSh.IsBlockMode()));
             break;
-            case  SID_OPEN_HYPERLINK:
+            case SID_COPY_HYPERLINK_LOCATION:
+            case SID_OPEN_HYPERLINK:
             {
                 SfxItemSetFixed<RES_TXTATR_INETFMT, RES_TXTATR_INETFMT> aSet(GetPool());
                 rSh.GetCurAttr(aSet);
@@ -2559,12 +2592,14 @@ void SwTextShell::GetState( SfxItemSet &rSet )
                 SwField* pField = rSh.GetCurField();
                 if (pField && pField->GetTyp()->Which() == SwFieldIds::TableOfAuthorities)
                 {
-                    // Bibliography entry with URL also provides a hyperlink.
                     const auto& rAuthorityField = *static_cast<const SwAuthorityField*>(pField);
-                    if (!rAuthorityField.UseTargetURL())
-                        bAuthorityFieldURL = rAuthorityField.HasURL();
-                    else
-                        bAuthorityFieldURL = rAuthorityField.HasTargetURL();
+                    if (auto targetType = rAuthorityField.GetTargetType();
+                        targetType == SwAuthorityField::TargetType::UseDisplayURL
+                        || targetType == SwAuthorityField::TargetType::UseTargetURL)
+                    {
+                        // Check if the Bibliography entry has a target URL
+                        bAuthorityFieldURL = rAuthorityField.GetAbsoluteURL().getLength() > 0;
+                    }
                 }
                 if (SfxItemState::SET > aSet.GetItemState(RES_TXTATR_INETFMT, false)
                     && !bAuthorityFieldURL)

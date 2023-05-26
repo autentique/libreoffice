@@ -115,7 +115,7 @@ static void InterceptLOKStateChangeEvent( sal_uInt16 nSID, SfxViewFrame* pViewFr
 void SfxStatusDispatcher::ReleaseAll()
 {
     css::lang::EventObject aObject;
-    aObject.Source = static_cast<cppu::OWeakObject*>(this);
+    aObject.Source = getXWeak();
     std::unique_lock aGuard(maMutex);
     maListeners.disposeAndClear( aGuard, aObject );
 }
@@ -335,9 +335,9 @@ SfxDispatchController_Impl::SfxDispatchController_Impl(
     , bMasterSlave( false )
     , bVisible( true )
 {
-    if ( aDispatchURL.Protocol == "slot:" && pSlot->pUnoName )
+    if ( aDispatchURL.Protocol == "slot:" && !pSlot->pUnoName.isEmpty() )
     {
-        aDispatchURL.Complete = ".uno:" + OUString::createFromAscii(pSlot->pUnoName);
+        aDispatchURL.Complete = pSlot->GetCommand();
         Reference< XURLTransformer > xTrans( URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
         xTrans->parseStrict( aDispatchURL );
     }
@@ -542,7 +542,7 @@ void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
         aTree.put("message", "Blocked feature");
         aTree.put("viewID", SfxViewShell::Current()->GetViewShellId().get());
 
-        SfxViewShell::Current()->libreOfficeKitViewCallback(LOK_COMMAND_BLOCKED, aTree.extractData());
+        SfxViewShell::Current()->libreOfficeKitViewCallback(LOK_COMMAND_BLOCKED, aTree.finishAndGetAsOString());
         return;
     }
 
@@ -655,7 +655,7 @@ void SfxDispatchController_Impl::dispatch( const css::util::URL& aURL,
                         sal_Int32 nIndex = lNewArgs.getLength();
                         lNewArgs.realloc( nIndex+1 );
                         auto plNewArgs = lNewArgs.getArray();
-                        plNewArgs[nIndex].Name   = OUString::createFromAscii( pSlot->pUnoName );
+                        plNewArgs[nIndex].Name   = pSlot->pUnoName;
                         plNewArgs[nIndex].Value  <<= SfxDispatchController_Impl::getSlaveCommand( aDispatchURL );
                     }
 
@@ -893,9 +893,7 @@ static void InterceptLOKStateChangeEvent(sal_uInt16 nSID, SfxViewFrame* pViewFra
     if (!comphelper::LibreOfficeKit::isActive())
         return;
 
-    OUStringBuffer aBuffer;
-    aBuffer.append(aEvent.FeatureURL.Complete);
-    aBuffer.append(u'=');
+    OUStringBuffer aBuffer(aEvent.FeatureURL.Complete + "=");
 
     if (aEvent.FeatureURL.Path == "Bold" ||
         aEvent.FeatureURL.Path == "CenterPara" ||
@@ -1282,7 +1280,7 @@ static void InterceptLOKStateChangeEvent(sal_uInt16 nSID, SfxViewFrame* pViewFra
 
     OUString payload = aBuffer.makeStringAndClear();
     if (const SfxViewShell* pViewShell = pViewFrame->GetViewShell())
-        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, payload.toUtf8().getStr());
+        pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_STATE_CHANGED, payload.toUtf8());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

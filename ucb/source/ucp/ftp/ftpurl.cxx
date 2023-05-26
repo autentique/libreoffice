@@ -243,8 +243,7 @@ OUString FTPURL::ident(bool withslash,bool internal) const
     // and more important, as one without username and
     // password. ( These are set together with the command. )
 
-    OUStringBuffer bff;
-    bff.append("ftp://");
+    OUStringBuffer bff("ftp://");
 
     if( m_aUsername != "anonymous" ) {
         bff.append(m_aUsername);
@@ -285,9 +284,7 @@ OUString FTPURL::ident(bool withslash,bool internal) const
 
 OUString FTPURL::parent(bool internal) const
 {
-    OUStringBuffer bff;
-
-    bff.append("ftp://");
+    OUStringBuffer bff("ftp://");
 
     if( m_aUsername != "anonymous" ) {
         bff.append(m_aUsername);
@@ -716,13 +713,11 @@ OUString FTPURL::ren(const OUString& NewTitle)
     // post request
     OUString OldTitle = net_title();
     OString renamefrom = "RNFR " +
-        OString(OldTitle.getStr(),
-                     OldTitle.getLength(),
+        OUStringToOString(OldTitle,
                      RTL_TEXTENCODING_UTF8);
 
     OString renameto = "RNTO " +
-        OString(NewTitle.getStr(),
-                     NewTitle.getLength(),
+        OUStringToOString(NewTitle,
                      RTL_TEXTENCODING_UTF8);
 
     struct curl_slist *slist = nullptr;

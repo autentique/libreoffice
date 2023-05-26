@@ -371,20 +371,20 @@ OUString convertFractionToString(const Fraction& aFraction)
 
     ss << aFraction;
 
-    return OUString::createFromAscii(ss.str().c_str());
+    return OUString::createFromAscii(ss.str());
 }
 
-OUString convertGradientStyle(GradientStyle eStyle)
+OUString convertGradientStyleToOUString(css::awt::GradientStyle eStyle)
 {
     switch (eStyle)
     {
-        case GradientStyle::Linear:     return "Linear";
-        case GradientStyle::Axial:      return "Axial";
-        case GradientStyle::Radial:     return "Radial";
-        case GradientStyle::Elliptical: return "Elliptical";
-        case GradientStyle::Square:     return "Square";
-        case GradientStyle::Rect:       return "Rect";
-        case GradientStyle::FORCE_EQUAL_SIZE: return "ForceEqualSize";
+        case css::awt::GradientStyle_LINEAR:     return "Linear";
+        case css::awt::GradientStyle_AXIAL:      return "Axial";
+        case css::awt::GradientStyle_RADIAL:     return "Radial";
+        case css::awt::GradientStyle_ELLIPTICAL: return "Elliptical";
+        case css::awt::GradientStyle_SQUARE:     return "Square";
+        case css::awt::GradientStyle_RECT:       return "Rect";
+        case css::awt::GradientStyle::GradientStyle_MAKE_FIXED_SIZE: return "ForceEqualSize";
     }
     return OUString();
 }
@@ -405,7 +405,7 @@ OUString convertLanguageTypeToString(LanguageType rLanguageType)
 {
     std::stringstream ss;
     ss << std::hex << std::setfill ('0') << std::setw(4) << rLanguageType.get();
-    return "#" + OUString::createFromAscii(ss.str().c_str());
+    return "#" + OUString::createFromAscii(ss.str());
 }
 
 OUString convertWallpaperStyleToString(WallpaperStyle eWallpaperStyle)
@@ -480,7 +480,7 @@ OUString hex32(sal_uInt32 nNumber)
 {
     std::stringstream ss;
     ss << std::hex << std::setfill('0') << std::setw(8) << nNumber;
-    return OUString::createFromAscii(ss.str().c_str());
+    return OUString::createFromAscii(ss.str());
 }
 
 OUString toHexString(const sal_uInt8* nData, sal_uInt32 nDataSize){
@@ -491,7 +491,7 @@ OUString toHexString(const sal_uInt8* nData, sal_uInt32 nDataSize){
         aStrm << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(nData[i]);
     }
 
-    return OUString::createFromAscii(aStrm.str().c_str());
+    return OUString::createFromAscii(aStrm.str());
 }
 
 void writePoint(tools::XmlWriter& rWriter, Point const& rPoint)
@@ -555,7 +555,7 @@ void writeLineInfo(tools::XmlWriter& rWriter, LineInfo const& rLineInfo)
 
 void writeGradient(tools::XmlWriter& rWriter, Gradient const& rGradient)
 {
-    rWriter.attribute("style", convertGradientStyle(rGradient.GetStyle()));
+    rWriter.attribute("style", convertGradientStyleToOUString(rGradient.GetStyle()));
     rWriter.attribute("startcolor", convertColorToString(rGradient.GetStartColor()));
     rWriter.attribute("endcolor", convertColorToString(rGradient.GetEndColor()));
     rWriter.attribute("angle", rGradient.GetAngle().get());
@@ -575,7 +575,7 @@ OString toHexString(const std::vector<unsigned char>& a)
         aStrm << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(i);
     }
 
-    return OString(aStrm.str().c_str());
+    return OString(aStrm.str());
 }
 
 void writeBitmapContentChecksum(tools::XmlWriter& rWriter, Bitmap const& rBitmap)
@@ -868,11 +868,10 @@ void MetafileXmlDump::writeXml(const GDIMetaFile& rMetaFile, tools::XmlWriter& r
                         rWriter.attribute("first", rArray[aIndex]);
                     if (aIndex + aLength - 1 < o3tl::narrowing<sal_Int32>(rArray.size()))
                         rWriter.attribute("last", rArray[aIndex + aLength - 1]);
-                    OUStringBuffer sDxLengthString;
+                    OUStringBuffer sDxLengthString(std::max((aLength - aIndex) * 4, sal_Int32(0)));
                     for (sal_Int32 i = 0; i < aLength - aIndex; ++i)
                     {
-                        sDxLengthString.append(rArray[aIndex + i]);
-                        sDxLengthString.append(" ");
+                        sDxLengthString.append(OUString::number(rArray[aIndex + i]) + " ");
                     }
                     rWriter.content(sDxLengthString);
                     rWriter.endElement();

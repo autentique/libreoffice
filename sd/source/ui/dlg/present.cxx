@@ -54,6 +54,7 @@ SdStartPresentationDlg::SdStartPresentationDlg(weld::Window* pWindow, const SfxI
     , m_xCbxAnimationAllowed(m_xBuilder->weld_check_button("animationsallowed"))
     , m_xCbxChangePage(m_xBuilder->weld_check_button("changeslidesbyclick"))
     , m_xCbxAlwaysOnTop(m_xBuilder->weld_check_button("alwaysontop"))
+    , m_xCbxShowNavigationButton(m_xBuilder->weld_check_button("shownavigationbutton"))
     , m_xFtMonitor(m_xBuilder->weld_label("presdisplay_label"))
     , m_xLBMonitor(m_xBuilder->weld_combo_box("presdisplay_cb"))
     , m_xMonitor(m_xBuilder->weld_label("monitor_str"))
@@ -105,13 +106,14 @@ SdStartPresentationDlg::SdStartPresentationDlg(weld::Window* pWindow, const SfxI
     else
         m_xRbtAtDia->set_active(true);
 
-    m_xLbDias->set_active_text( static_cast<const SfxStringItem&>( rOutAttrs.Get( ATTR_PRESENT_DIANAME ) ).GetValue() );
+    m_xLbDias->set_active_text( rOutAttrs.Get( ATTR_PRESENT_DIANAME ).GetValue() );
     m_xCbxManuel->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_MANUEL ) ).GetValue() );
     m_xCbxMousepointer->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_MOUSE ) ).GetValue() );
     m_xCbxPen->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_PEN ) ).GetValue() );
     m_xCbxAnimationAllowed->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_ANIMATION_ALLOWED ) ).GetValue() );
     m_xCbxChangePage->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_CHANGE_PAGE ) ).GetValue() );
     m_xCbxAlwaysOnTop->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_ALWAYS_ON_TOP ) ).GetValue() );
+    m_xCbxShowNavigationButton->set_active( static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_SHOW_NAVIGATION_BUTTONS) ).GetValue() );
 
     const bool  bEndless = static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_ENDLESS ) ).GetValue();
     const bool  bWindow = !static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_FULLSCREEN ) ).GetValue();
@@ -260,6 +262,7 @@ void SdStartPresentationDlg::GetAttr( SfxItemSet& rAttr )
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_ANIMATION_ALLOWED, m_xCbxAnimationAllowed->get_active() ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_CHANGE_PAGE, m_xCbxChangePage->get_active() ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_ALWAYS_ON_TOP, m_xCbxAlwaysOnTop->get_active() ) );
+    rAttr.Put( SfxBoolItem ( ATTR_PRESENT_SHOW_NAVIGATION_BUTTONS, m_xCbxShowNavigationButton->get_active() ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_FULLSCREEN, !m_xRbtWindow->get_active() ) );
     rAttr.Put( SfxBoolItem ( ATTR_PRESENT_ENDLESS, m_xRbtAuto->get_active() ) );
     rAttr.Put( SfxUInt32Item ( ATTR_PRESENT_PAUSE_TIMEOUT, m_xFormatter->GetTime().GetMSFromTime() / 1000 ) );

@@ -62,6 +62,7 @@
 #include <iterator>
 #include <functional>
 #include <o3tl/functional.hxx>
+#include <comphelper/string.hxx>
 
 namespace dbaui
 {
@@ -523,6 +524,38 @@ OUString ODbDataSourceAdministrationHelper::getConnectionURL() const
                 sNewUrl = pCollection->cutPrefix(pUrlItem->GetValue()) + lcl_createHostWithPort(nullptr,pPortNumber);
             }
             break;
+        case ::dbaccess::DST_POSTGRES:
+            {
+                sNewUrl = pCollection->cutPrefix(pUrlItem->GetValue());
+                OUString rURL(comphelper::string::stripEnd(pUrlItem->GetValue(), '*'));
+                const SfxStringItem* pHostName = m_pItemSetHelper->getOutputSet()->GetItem<SfxStringItem>(DSID_CONN_HOSTNAME);
+                const SfxInt32Item* pPortNumber = m_pItemSetHelper->getOutputSet()->GetItem<SfxInt32Item>(DSID_POSTGRES_PORTNUMBER);
+                const SfxStringItem* pDatabaseName = m_pItemSetHelper->getOutputSet()->GetItem<SfxStringItem>(DSID_DATABASENAME);
+                if (pHostName && pHostName->GetValue().getLength())
+                {
+                    OUString hostname( pHostName->GetValue() );
+                    hostname = hostname.replaceAll( "\\", "\\\\");
+                    hostname = hostname.replaceAll( "\'", "\\'");
+                    hostname = "'" + hostname + "'";
+                    rURL += " host=" + hostname;
+                }
+                if (pPortNumber && pPortNumber->GetValue())
+                {
+                    OUString port = "'" + OUString::number(pPortNumber->GetValue()) + "'";
+                    rURL += " port=" + port;
+                }
+                if (pDatabaseName && pDatabaseName->GetValue().getLength())
+                {
+                    OUString dbname( pDatabaseName->GetValue() );
+                    dbname = dbname.replaceAll( "\\", "\\\\");
+                    dbname = dbname.replaceAll( "\'", "\\'");
+                    dbname = "'" + dbname + "'";
+                    rURL += " dbname=" + dbname;
+                }
+                sNewUrl = rURL;
+                return sNewUrl;
+            }
+            break;
         case  ::dbaccess::DST_JDBC:
             // run through
         default:
@@ -860,8 +893,7 @@ OString ODbDataSourceAdministrationHelper::translatePropertyId( sal_Int32 _nId )
             aString = indirectPos->second;
     }
 
-    OString aReturn( aString.getStr(), aString.getLength(), RTL_TEXTENCODING_ASCII_US );
-    return aReturn;
+    return OUStringToOString( aString, RTL_TEXTENCODING_ASCII_US );
 }
 template<class T> static bool checkItemType(const SfxPoolItem* pItem){ return dynamic_cast<const T*>(pItem) != nullptr;}
 
@@ -1000,6 +1032,9 @@ void ODbDataSourceAdministrationHelper::convertUrl(SfxItemSet& _rDest)
             break;
         case  ::dbaccess::DST_LDAP:
             nPortNumberId = DSID_CONN_LDAP_PORTNUMBER;
+            break;
+        case ::dbaccess::DST_POSTGRES:
+            nPortNumberId = DSID_POSTGRES_PORTNUMBER;
             break;
         default:
             break;

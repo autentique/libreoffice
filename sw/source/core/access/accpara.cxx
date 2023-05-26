@@ -100,7 +100,6 @@ using namespace ::com::sun::star::accessibility;
 using namespace ::com::sun::star::container;
 
 using beans::PropertyValue;
-using beans::XMultiPropertySet;
 using beans::UnknownPropertyException;
 using beans::PropertyState_DIRECT_VALUE;
 
@@ -537,13 +536,18 @@ const SwRangeRedline* SwAccessibleParagraph::GetRedlineAtIndex()
 
 bool SwAccessibleParagraph::GetCharBoundary(
     i18n::Boundary& rBound,
+    std::u16string_view text,
     sal_Int32 nPos )
 {
     if( GetPortionData().FillBoundaryIFDateField( rBound,  nPos) )
         return true;
 
+    auto nPosEnd = nPos;
+    o3tl::iterateCodePoints(text, &nPosEnd);
+
     rBound.startPos = nPos;
-    rBound.endPos = nPos+1;
+    rBound.endPos = nPosEnd;
+
     return true;
 }
 
@@ -670,7 +674,7 @@ bool SwAccessibleParagraph::GetTextBoundary(
             break;
 
         case AccessibleTextType::CHARACTER:
-            bRet = GetCharBoundary( rBound, nPos );
+            bRet = GetCharBoundary( rBound, rText, nPos );
             break;
 
         case AccessibleTextType::LINE:
@@ -2327,13 +2331,14 @@ OUString SwAccessibleParagraph::getTextRange(
     }
 
     // now skip to previous word
-    if (nTextType==2 || nTextType == 3)
+    if (nTextType == AccessibleTextType::WORD || nTextType == AccessibleTextType::SENTENCE)
     {
         i18n::Boundary preBound = aBound;
         while(preBound.startPos==aBound.startPos && nIndex > 0)
         {
-            nIndex = min( nIndex, preBound.startPos ) - 1;
-            if( nIndex < 0 ) break;
+            nIndex = min(nIndex, preBound.startPos);
+            if (nIndex <= 0) break;
+            rText.iterateCodePoints(&nIndex, -1);
             GetTextBoundary( preBound, rText, nIndex, nTextType );
         }
         //if (nIndex>0)
@@ -2350,9 +2355,10 @@ OUString SwAccessibleParagraph::getTextRange(
         bool bWord = false;
         while( !bWord )
         {
-            nIndex = min( nIndex, aBound.startPos ) - 1;
-            if( nIndex >= 0 )
+            nIndex = min(nIndex, aBound.startPos);
+            if (nIndex > 0)
             {
+                rText.iterateCodePoints(&nIndex, -1);
                 bWord = GetTextBoundary( aBound, rText, nIndex, nTextType );
             }
             else
@@ -2410,7 +2416,7 @@ OUString SwAccessibleParagraph::getTextRange(
         sal_Bool bWord = sal_False;
     bWord = GetTextBoundary( aBound, rText, nIndex, nTextType );
 
-        if (nTextType==2)
+        if (nTextType == AccessibleTextType::WORD)
         {
                 Boundary nexBound=aBound;
 

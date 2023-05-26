@@ -150,7 +150,7 @@ class XMLFontAutoStylePool_Impl : public o3tl::sorted_vector<std::unique_ptr<XML
 };
 
 XMLFontAutoStylePool::XMLFontAutoStylePool(SvXMLExport& rExp, bool bTryToEmbedFonts) :
-    rExport( rExp ),
+    m_rExport( rExp ),
     m_pFontAutoStylePool( new XMLFontAutoStylePool_Impl ),
     m_bTryToEmbedFonts( bTryToEmbedFonts ),
     m_bEmbedUsedOnly(false),
@@ -328,9 +328,9 @@ std::unordered_set<OUString> XMLFontAutoStylePool::getUsedFontList()
                     if (xStyle->isInUse())
                     {
                         uno::Reference<beans::XPropertySet> xPropertySet(xStyle, UNO_QUERY);
-                        if (xPropertySet.is())
+                        uno::Reference<beans::XPropertySetInfo> xInfo(xPropertySet ? xPropertySet->getPropertySetInfo() : nullptr);
+                        if (xInfo)
                         {
-                            uno::Reference<beans::XPropertySetInfo> xInfo(xPropertySet->getPropertySetInfo());
                             if (m_bEmbedLatinScript && xInfo->hasPropertyByName("CharFontName"))
                             {
                                 OUString sCharFontName;
@@ -573,7 +573,7 @@ static OString convertToHashString(std::vector<unsigned char> const & rHash)
         aStringStream << std::setw(2) << std::setfill('0') << std::hex << int(rByte);
     }
 
-    return aStringStream.str().c_str();
+    return OString(aStringStream.str());
 }
 
 static OString getFileHash(OUString const & rFileUrl)

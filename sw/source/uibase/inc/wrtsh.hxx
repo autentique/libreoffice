@@ -509,12 +509,13 @@ typedef bool (SwWrtShell::*FNSimpleMove)();
     void MakeOutlineContentVisible(const size_t nPos, bool bMakeVisible = true, bool bSetAttrOutlineVisibility = true);
     void MakeAllFoldedOutlineContentVisible(bool bMakeVisible = true);
     void InvalidateOutlineContentVisibility();
-    bool GetAttrOutlineContentVisible(const size_t nPos);
+    bool GetAttrOutlineContentVisible(const size_t nPos) const;
 
     void MakeOutlineLevelsVisible(const int nLevel);
 
-    bool HasFoldedOutlineContentSelected();
-    void InfoReadOnlyDialog(bool bAsync = false);
+    bool HasFoldedOutlineContentSelected() const;
+    virtual void InfoReadOnlyDialog(bool bAsync) const override;
+    virtual bool WarnHiddenSectionDialog() const override;
 
     std::optional<OString> getLOKPayload(int nType, int nViewId) const;
 
@@ -694,7 +695,7 @@ public:
                     m_pWrtSh->GetViewOptions()->IsShowOutlineContentVisibilityButton())
             {
                 m_pWrtSh->LockView(true);
-                m_pWrtSh->LockPaint();
+                m_pWrtSh->LockPaint(LockPaintReason::OutlineFolding);
                 m_pWrtSh->MakeAllFoldedOutlineContentVisible();
                 m_bScrollToCursor = bScrollToCursor;
                 m_bDone = true;

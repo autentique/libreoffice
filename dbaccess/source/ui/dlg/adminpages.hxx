@@ -23,6 +23,8 @@
 #include <vcl/wizardmachine.hxx>
 #include <curledit.hxx>
 
+class SfxStringItem;
+
 namespace dbaui
 {
     /// helper class to wrap the savevalue and disable call
@@ -94,7 +96,7 @@ namespace dbaui
         css::uno::Reference< css::uno::XComponentContext >
                                    m_xORB;
     public:
-        OGenericAdministrationPage(weld::Container* pPage, weld::DialogController* pController, const OUString& rUIXMLDescription, const OString& rId, const SfxItemSet& rAttrSet);
+        OGenericAdministrationPage(weld::Container* pPage, weld::DialogController* pController, const OUString& rUIXMLDescription, const OUString& rId, const SfxItemSet& rAttrSet);
         /// set a handler which gets called every time something on the page has been modified
         void SetModifiedHandler(const Link<OGenericAdministrationPage const *, void>& _rHandler) { m_aModifiedHandler = _rHandler; }
 
@@ -215,8 +217,8 @@ namespace dbaui
             @param  _bChangedSomething
                 <TRUE/> if something changed otherwise <FALSE/>
         */
-        static void fillString(SfxItemSet& _rSet,const weld::Entry* pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
-        static void fillString(SfxItemSet& _rSet,const dbaui::OConnectionURLEdit* pEdit,sal_uInt16 _nID, bool& _bChangedSomething);
+        static void fillString(SfxItemSet& _rSet,const weld::Entry* pEdit, TypedWhichId<SfxStringItem> _nID, bool& _bChangedSomething);
+        static void fillString(SfxItemSet& _rSet,const dbaui::OConnectionURLEdit* pEdit, TypedWhichId<SfxStringItem> _nID, bool& _bChangedSomething);
 
     protected:
         /** This link be used for controls where the tabpage does not need to take any special action when the control

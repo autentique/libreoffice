@@ -54,19 +54,223 @@
 #include <comphelper/lok.hxx>
 #include <authfld.hxx>
 
-static OUString lcl_GetRedlineHelp( const SwRangeRedline& rRedl, bool bBalloon, bool bTableChange )
+#include <com/sun/star/text/XTextRange.hpp>
+#include <unotextrange.hxx>
+#include <SwStyleNameMapper.hxx>
+#include <unoprnms.hxx>
+#include <editeng/unoprnms.hxx>
+#include <rootfrm.hxx>
+#include <unomap.hxx>
+#include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+
+namespace {
+
+bool HasValidPropertyValue(const uno::Any& rAny)
+{
+    if (bool bValue; rAny >>= bValue)
+    {
+        return true;
+    }
+    else if (OUString aValue; (rAny >>= aValue) && !(aValue.isEmpty()))
+    {
+        return true;
+    }
+    else if (awt::FontSlant eValue; rAny >>= eValue)
+    {
+        return true;
+    }
+    else if (tools::Long nValueLong; rAny >>= nValueLong)
+    {
+        return true;
+    }
+    else if (double fValue; rAny >>= fValue)
+    {
+        return true;
+    }
+    else if (short nValueShort; rAny >>= nValueShort)
+    {
+        return true;
+    }
+    else
+        return false;
+}
+
+bool PSCSDFPropsQuickHelp(const HelpEvent &rEvt, SwWrtShell& rSh)
+{
+    OUString sText;
+    SwView& rView = rSh.GetView();
+
+    if (rView.IsHighlightCharDF() || rView.GetStylesHighlighterParaColorMap().size()
+            || rView.GetStylesHighlighterCharColorMap().size())
+    {
+        SwPosition aPos(rSh.GetDoc()->GetNodes());
+        Point aPt(rSh.GetWin()->PixelToLogic(
+                      rSh.GetWin()->ScreenToOutputPixel(rEvt.GetMousePosPixel())));
+
+        rSh.GetLayout()->GetModelPositionForViewPoint(&aPos, aPt);
+
+        if (!aPos.GetContentNode()->IsTextNode())
+            return false;
+
+        uno::Reference<text::XTextRange> xRange(
+                    SwXTextRange::CreateXTextRange(*(rView.GetDocShell()->GetDoc()),
+                                                   aPos, &aPos));
+        uno::Reference<beans::XPropertySet> xPropertySet(xRange, uno::UNO_QUERY_THROW);
+
+        SwContentFrame* pContentFrame = aPos.GetContentNode()->GetTextNode()->getLayoutFrame(
+                            rSh.GetLayout());
+
+        SwRect aFrameAreaRect;
+
+        bool bContainsPt = false;
+        do
+        {
+            aFrameAreaRect = pContentFrame->getFrameArea();
+            if (aFrameAreaRect.Contains(aPt))
+            {
+                bContainsPt = true;
+                break;
+            }
+        } while((pContentFrame = pContentFrame->GetFollow()));
+
+        if (bContainsPt)
+        {
+            if (rView.GetStylesHighlighterCharColorMap().size())
+            {
+                // check if in CS formatting highlighted area
+                OUString sCharStyle;
+                xPropertySet->getPropertyValue("CharStyleName") >>= sCharStyle;
+                if (!sCharStyle.isEmpty())
+                    sText = SwStyleNameMapper::GetUIName(sCharStyle, SwGetPoolIdFromName::ChrFmt);
+            }
+
+            if (sText.isEmpty() && rView.IsHighlightCharDF())
+            {
+                // check if in direct formatting highlighted area
+                const std::vector<OUString> aHiddenProperties{ UNO_NAME_RSID,
+                            UNO_NAME_PARA_IS_NUMBERING_RESTART,
+                            UNO_NAME_PARA_STYLE_NAME,
+                            UNO_NAME_PARA_CONDITIONAL_STYLE_NAME,
+                            UNO_NAME_PAGE_STYLE_NAME,
+                            UNO_NAME_NUMBERING_START_VALUE,
+                            UNO_NAME_NUMBERING_IS_NUMBER,
+                            UNO_NAME_PARA_CONTINUEING_PREVIOUS_SUB_TREE,
+                            UNO_NAME_CHAR_STYLE_NAME,
+                            UNO_NAME_NUMBERING_LEVEL,
+                            UNO_NAME_SORTED_TEXT_ID,
+                            UNO_NAME_PARRSID,
+                            UNO_NAME_CHAR_COLOR_THEME,
+                            UNO_NAME_CHAR_COLOR_TINT_OR_SHADE };
+
+                SfxItemPropertySet const& rPropSet(
+                            *aSwMapProvider.GetPropertySet(PROPERTY_MAP_CHAR_AUTO_STYLE));
+                SfxItemPropertyMap const& rMap(rPropSet.getPropertyMap());
+
+                uno::Reference<beans::XPropertyState> xPropertiesState(xRange, uno::UNO_QUERY_THROW);
+                const uno::Sequence<beans::Property> aProperties
+                        = xPropertySet->getPropertySetInfo()->getProperties();
+
+                for (const beans::Property& rProperty : aProperties)
+                {
+                    const OUString& rPropName = rProperty.Name;
+
+                    if (!rMap.hasPropertyByName(rPropName))
+                        continue;
+
+                    if (std::find(aHiddenProperties.begin(), aHiddenProperties.end(), rPropName)
+                            != aHiddenProperties.end())
+                        continue;
+
+                    if (xPropertiesState->getPropertyState(rPropName)
+                            == beans::PropertyState_DIRECT_VALUE)
+                    {
+                        const uno::Any aAny = xPropertySet->getPropertyValue(rPropName);
+                        if (HasValidPropertyValue(aAny))
+                        {
+                            sText = SwResId(STR_CHARACTER_DIRECT_FORMATTING);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        else if (rView.GetStylesHighlighterParaColorMap().size())
+        {
+            // check if in paragraph style formatting highlighted area
+            pContentFrame = aPos.GetContentNode()->GetTextNode()->getLayoutFrame(
+                        rSh.GetLayout());
+            do
+            {
+                aFrameAreaRect = pContentFrame->getFrameArea();
+                if (pContentFrame->IsRightToLeft())
+                {
+                    aFrameAreaRect.AddRight(375);
+                    aFrameAreaRect.Left(aFrameAreaRect.Right() - 300);
+                }
+                else
+                {
+                    aFrameAreaRect.AddLeft(-375);
+                    aFrameAreaRect.Right(aFrameAreaRect.Left() + 300);
+                }
+                if (aFrameAreaRect.Contains(aPt))
+                {
+                    OUString sParaStyle;
+                    xPropertySet->getPropertyValue("ParaStyleName") >>= sParaStyle;
+                    sText = SwStyleNameMapper::GetUIName(sParaStyle, SwGetPoolIdFromName::TxtColl);
+                    // check for paragraph direct formatting
+                    if (SwDoc::HasParagraphDirectFormatting(aPos))
+                        sText = sText + " + " + SwResId(STR_PARAGRAPH_DIRECT_FORMATTING);
+                    break;
+                }
+            } while((pContentFrame = pContentFrame->GetFollow()));
+        }
+    }
+
+    if (!sText.isEmpty())
+    {
+        tools::Rectangle aRect(rSh.GetWin()->PixelToLogic(
+                                   rSh.GetWin()->ScreenToOutputPixel(rEvt.GetMousePosPixel())),
+                               Size(1, 1));
+        Point aPt(rSh.GetWin()->OutputToScreenPixel(rSh.GetWin()->LogicToPixel(aRect.TopLeft())));
+        aRect.SetLeft(aPt.X());
+        aRect.SetTop(aPt.Y());
+        aPt = rSh.GetWin()->OutputToScreenPixel(rSh.GetWin()->LogicToPixel(aRect.BottomRight()));
+        aRect.SetRight(aPt.X());
+        aRect.SetBottom(aPt.Y());
+
+        // tdf#136336 ensure tooltip area surrounds the current mouse position with at least a pixel margin
+        aRect.Union(tools::Rectangle(rEvt.GetMousePosPixel(), Size(1, 1)));
+        aRect.AdjustLeft(-1);
+        aRect.AdjustRight(1);
+        aRect.AdjustTop(-1);
+        aRect.AdjustBottom(1);
+
+        QuickHelpFlags nStyle = QuickHelpFlags::NONE; //TipStyleBalloon;
+        Help::ShowQuickHelp(rSh.GetWin(), aRect, sText, nStyle);
+    }
+
+    return !sText.isEmpty();
+}
+}
+
+static OUString lcl_GetRedlineHelp( const SwRangeRedline& rRedl, bool bBalloon,
+                                    bool bTableChange, bool bTableColChange )
 {
     TranslateId pResId;
     switch( rRedl.GetType() )
     {
     case RedlineType::Insert:   pResId = bTableChange
-        ? STR_REDLINE_TABLE_ROW_INSERT
+        ? !bTableColChange
+            ? STR_REDLINE_TABLE_ROW_INSERT
+            : STR_REDLINE_TABLE_COLUMN_INSERT
         :  rRedl.IsMoved()
             ? STR_REDLINE_INSERT_MOVED
             : STR_REDLINE_INSERT;
         break;
     case RedlineType::Delete:   pResId = bTableChange
-        ? STR_REDLINE_TABLE_ROW_DELETE
+        ? !bTableColChange
+            ? STR_REDLINE_TABLE_ROW_DELETE
+            : STR_REDLINE_TABLE_COLUMN_DELETE
         : rRedl.IsMoved()
             ? STR_REDLINE_DELETE_MOVED
             : STR_REDLINE_DELETE;
@@ -82,17 +286,15 @@ static OUString lcl_GetRedlineHelp( const SwRangeRedline& rRedl, bool bBalloon, 
     default: break;
     }
 
-    OUStringBuffer sBuf;
-    if (pResId)
-    {
-        sBuf.append(SwResId(pResId));
-        sBuf.append(": ");
-        sBuf.append(rRedl.GetAuthorString());
-        sBuf.append(" - ");
-        sBuf.append(GetAppLangDateTimeString(rRedl.GetTimeStamp()));
-        if( bBalloon && !rRedl.GetComment().isEmpty() )
-            sBuf.append("\n" + rRedl.GetComment());
-    }
+    if (!pResId)
+        return OUString();
+    OUStringBuffer sBuf(SwResId(pResId)
+            + ": "
+            + rRedl.GetAuthorString()
+            + " - "
+            + GetAppLangDateTimeString(rRedl.GetTimeStamp()));
+    if( bBalloon && !rRedl.GetComment().isEmpty() )
+        sBuf.append("\n" + rRedl.GetComment());
     return sBuf.makeStringAndClear();
 }
 
@@ -110,6 +312,10 @@ OUString SwEditWin::ClipLongToolTip(const OUString& rText)
 void SwEditWin::RequestHelp(const HelpEvent &rEvt)
 {
     SwWrtShell &rSh = m_rView.GetWrtShell();
+
+    if (PSCSDFPropsQuickHelp(rEvt, rSh))
+        return;
+
     bool bQuickBalloon = bool(rEvt.GetMode() & ( HelpEventMode::QUICK | HelpEventMode::BALLOON ));
     if(bQuickBalloon && !rSh.GetViewOptions()->IsShowContentTips())
         return;
@@ -143,7 +349,8 @@ void SwEditWin::RequestHelp(const HelpEvent &rEvt)
                                     ( bBalloon ? IsAttrAtPos::CurrAttrs : IsAttrAtPos::NONE) |
 #endif
                                     IsAttrAtPos::TableBoxFml |
-                                    IsAttrAtPos::TableRedline );
+                                    IsAttrAtPos::TableRedline |
+                                    IsAttrAtPos::TableColRedline );
 
         if( rSh.GetContentAtPos( aPos, aContentAtPos, false, &aFieldRect ) )
         {
@@ -253,13 +460,17 @@ void SwEditWin::RequestHelp(const HelpEvent &rEvt)
                 break;
 
             case IsAttrAtPos::TableRedline:
+            case IsAttrAtPos::TableColRedline:
             case IsAttrAtPos::Redline:
             {
                 const bool bShowTrackChanges = IDocumentRedlineAccess::IsShowChanges( m_rView.GetDocShell()->GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags() );
                 const bool bShowInlineTooltips = rSh.GetViewOptions()->IsShowInlineTooltips();
                 if ( bShowTrackChanges && bShowInlineTooltips )
                 {
-                     sText = lcl_GetRedlineHelp(*aContentAtPos.aFnd.pRedl, bBalloon, IsAttrAtPos::TableRedline == aContentAtPos.eContentAtPos );
+                     sText = lcl_GetRedlineHelp(*aContentAtPos.aFnd.pRedl, bBalloon,
+                         IsAttrAtPos::TableRedline == aContentAtPos.eContentAtPos ||
+                         IsAttrAtPos::TableColRedline == aContentAtPos.eContentAtPos,
+                         IsAttrAtPos::TableColRedline == aContentAtPos.eContentAtPos);
                 }
                 break;
             }
@@ -281,8 +492,8 @@ void SwEditWin::RequestHelp(const HelpEvent &rEvt)
             case IsAttrAtPos::RefMark:
                 if(aContentAtPos.aFnd.pAttr)
                 {
-                    sText = SwResId(STR_CONTENT_TYPE_SINGLE_REFERENCE) + ": ";
-                    sText += static_cast<const SwFormatRefMark*>(aContentAtPos.aFnd.pAttr)->GetRefName();
+                    sText = SwResId(STR_CONTENT_TYPE_SINGLE_REFERENCE) + ": " +
+                        static_cast<const SwFormatRefMark*>(aContentAtPos.aFnd.pAttr)->GetRefName();
                 }
             break;
 
@@ -374,14 +585,11 @@ void SwEditWin::RequestHelp(const HelpEvent &rEvt)
                             const auto pAuthorityField = static_cast<const SwAuthorityField*>(pField);
                             sText = pAuthorityField->GetAuthority(rSh.GetLayout());
 
-                            if (!pAuthorityField->UseTargetURL() && pAuthorityField->HasURL())
+                            if (auto t = pAuthorityField->GetTargetType();
+                                t == SwAuthorityField::TargetType::UseDisplayURL
+                                || t == SwAuthorityField::TargetType::UseTargetURL)
                             {
                                 const OUString& rURL = pAuthorityField->GetAbsoluteURL();
-                                sText += "\n" + SfxHelp::GetURLHelpText(rURL);
-                            }
-                            else if (pAuthorityField->UseTargetURL() && pAuthorityField->HasTargetURL())
-                            {
-                                const OUString& rURL = pAuthorityField->GetAbsoluteTargetURL();
                                 sText += "\n" + SfxHelp::GetURLHelpText(rURL);
                             }
 
@@ -400,7 +608,7 @@ void SwEditWin::RequestHelp(const HelpEvent &rEvt)
                         {
                             aContentAtPos.eContentAtPos = IsAttrAtPos::Redline;
                             if( rSh.GetContentAtPos( aPos, aContentAtPos, false, &aFieldRect ) )
-                                sText = lcl_GetRedlineHelp(*aContentAtPos.aFnd.pRedl, bBalloon, /*bTableChange=*/false);
+                                sText = lcl_GetRedlineHelp(*aContentAtPos.aFnd.pRedl, bBalloon, /*bTableChange=*/false, /*bTableColChange=*/false);
                         }
                     }
                 }

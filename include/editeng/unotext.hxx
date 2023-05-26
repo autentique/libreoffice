@@ -41,6 +41,7 @@
 #include <com/sun/star/style/LineSpacing.hpp>
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <com/sun/star/util/XComplexColor.hpp>
 #include <comphelper/interfacecontainer4.hxx>
 #include <cppuhelper/implbase1.hxx>
 #include <cppuhelper/weakagg.hxx>
@@ -91,7 +92,7 @@ struct SfxItemPropertyMapEntry;
     { UNO_NAME_EDIT_CHAR_COLOR_TINT_OR_SHADE, EE_CHAR_COLOR, ::cppu::UnoType<sal_Int16>::get(),     0, MID_COLOR_TINT_OR_SHADE }, \
     { UNO_NAME_EDIT_CHAR_COLOR_LUM_MOD,       EE_CHAR_COLOR, ::cppu::UnoType<sal_Int16>::get(),     0, MID_COLOR_LUM_MOD }, \
     { UNO_NAME_EDIT_CHAR_COLOR_LUM_OFF,       EE_CHAR_COLOR, ::cppu::UnoType<sal_Int16>::get(),     0, MID_COLOR_LUM_OFF }, \
-    { UNO_NAME_EDIT_CHAR_COLOR_THEME_REFERENCE, EE_CHAR_COLOR,    ::cppu::UnoType<css::uno::XInterface>::get(), 0, MID_COLOR_THEME_REFERENCE }, \
+    { UNO_NAME_EDIT_CHAR_COMPLEX_COLOR, EE_CHAR_COLOR,    ::cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_COMPLEX_COLOR }, \
     { u"CharBackColor",                EE_CHAR_BKGCOLOR,   ::cppu::UnoType<sal_Int32>::get(),        0, 0 }, \
     { u"CharBackTransparent",          EE_CHAR_BKGCOLOR,   ::cppu::UnoType<bool>::get(),             0, MID_GRAPHIC_TRANSPARENT }, \
     { UNO_NAME_EDIT_CHAR_ESCAPEMENT,  EE_CHAR_ESCAPEMENT, ::cppu::UnoType<sal_Int16>::get(),        0, MID_ESC }, \
@@ -146,7 +147,7 @@ struct SfxItemPropertyMapEntry;
     { UNO_NAME_EDIT_PARA_LMARGIN,      EE_PARA_LRSPACE,    ::cppu::UnoType<sal_Int32>::get(),            0, MID_TXT_LMARGIN, PropertyMoreFlags::METRIC_ITEM }, \
     { UNO_NAME_EDIT_PARA_LINESPACING,  EE_PARA_SBL,                cppu::UnoType<css::style::LineSpacing>::get(),     0, CONVERT_TWIPS}, \
     { UNO_NAME_EDIT_PARA_RMARGIN,      EE_PARA_LRSPACE,    ::cppu::UnoType<sal_Int32>::get(),            0, MID_R_MARGIN, PropertyMoreFlags::METRIC_ITEM }, \
-    { UNO_NAME_EDIT_PARA_TAPSTOPS,     EE_PARA_TABS,               cppu::UnoType<css::uno::Sequence< css::style::TabStop >>::get(), 0, 0 }, \
+    { UNO_NAME_EDIT_PARA_TABSTOPS,     EE_PARA_TABS,               cppu::UnoType<css::uno::Sequence< css::style::TabStop >>::get(), 0, 0 }, \
     { UNO_NAME_EDIT_PARA_TABSTOP_DEFAULT_DISTANCE, EE_PARA_TABS, ::cppu::UnoType<sal_Int32>::get(), 0, MID_TABSTOP_DEFAULT_DISTANCE }, \
     { UNO_NAME_EDIT_PARA_TMARGIN,      EE_PARA_ULSPACE,            ::cppu::UnoType<sal_Int32>::get(),            0, MID_UP_MARGIN, PropertyMoreFlags::METRIC_ITEM },\
     { UNO_NAME_EDIT_PARA_FIRST_LINE_INDENT,     EE_PARA_LRSPACE,   ::cppu::UnoType<sal_Int32>::get(),            0, MID_FIRST_LINE_INDENT, PropertyMoreFlags::METRIC_ITEM}, \
@@ -196,7 +197,7 @@ public:
     virtual void            QuickSetAttribs( const SfxItemSet& rSet, const ESelection& rSel ) override;
     virtual void            QuickInsertLineBreak( const ESelection& rSel ) override;
 
-    virtual OUString        CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rpTxtColor, std::optional<Color>& rpFldColor ) override;
+    virtual OUString        CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, std::optional<Color>& rpTxtColor, std::optional<Color>& rpFldColor, std::optional<FontLineStyle>& rpFldLineStyle ) override;
     virtual void            FieldClicked( const SvxFieldItem& rField ) override;
 
     virtual bool            IsValid() const override;

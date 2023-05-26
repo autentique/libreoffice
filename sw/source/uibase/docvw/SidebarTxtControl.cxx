@@ -246,12 +246,12 @@ void SidebarTextControl::Paint(vcl::RenderContext& rRenderContext, const tools::
         if (mrSidebarWin.IsMouseOverSidebarWin() || HasFocus())
         {
             rRenderContext.DrawGradient(tools::Rectangle(aPos, rRenderContext.PixelToLogic(aSize)),
-                                        Gradient(GradientStyle::Linear, mrSidebarWin.ColorDark(), mrSidebarWin.ColorDark()));
+                                        Gradient(css::awt::GradientStyle_LINEAR, mrSidebarWin.ColorDark(), mrSidebarWin.ColorDark()));
         }
         else
         {
             rRenderContext.DrawGradient(tools::Rectangle(aPos, rRenderContext.PixelToLogic(aSize)),
-                           Gradient(GradientStyle::Linear, mrSidebarWin.ColorLight(), mrSidebarWin.ColorDark()));
+                           Gradient(css::awt::GradientStyle_LINEAR, mrSidebarWin.ColorLight(), mrSidebarWin.ColorDark()));
         }
     }
 
@@ -332,7 +332,7 @@ bool SidebarTextControl::KeyInput( const KeyEvent& rKeyEvt )
                 bDone = pEditView && pEditView->PostKeyEvent(rKeyEvt);
             }
             else
-                mrDocView.GetWrtShell().InfoReadOnlyDialog();
+                mrDocView.GetWrtShell().InfoReadOnlyDialog(false);
         }
         if (bDone)
             mrSidebarWin.ResizeIfNecessary( aOldHeight, mrSidebarWin.GetPostItTextHeight() );
@@ -398,6 +398,13 @@ bool SidebarTextControl::MouseButtonUp(const MouseEvent& rMEvt)
     }
 
     return bRet;
+}
+
+bool SidebarTextControl::MouseMove(const MouseEvent& rMEvt)
+{
+    if (rMEvt.IsEnterWindow())
+        GetDrawingArea()->set_cursor(PointerStyle::Text);
+    return WeldEditView::MouseMove(rMEvt);
 }
 
 IMPL_LINK( SidebarTextControl, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void )

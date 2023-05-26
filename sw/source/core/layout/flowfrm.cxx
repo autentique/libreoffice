@@ -64,6 +64,7 @@
 #include <IDocumentDrawModelAccess.hxx>
 #include <pam.hxx>
 #include <ndtxt.hxx>
+#include <flyfrms.hxx>
 
 bool SwFlowFrame::s_bMoveBwdJump = false;
 
@@ -891,6 +892,26 @@ SwLayoutFrame *SwFrame::GetLeaf( MakePageType eMakePage, bool bFwd )
 
     return bFwd ? GetNextLeaf( eMakePage ) : GetPrevLeaf();
 }
+
+namespace sw {
+
+bool HasPageBreakBefore(SwPageFrame const& rPage)
+{
+    SwFrame const* pFlow(rPage.FindFirstBodyContent());
+    if (!pFlow)
+    {
+        return false;
+    }
+    while (pFlow->GetUpper()->IsInTab())
+    {
+        pFlow = pFlow->GetUpper()->FindTabFrame();
+    }
+    return pFlow->GetPageDescItem().GetPageDesc()
+        || pFlow->GetBreakItem().GetBreak() == SvxBreak::PageBefore
+        || pFlow->GetBreakItem().GetBreak() == SvxBreak::PageBoth;
+};
+
+} // namespace sw
 
 bool SwFrame::WrongPageDesc( SwPageFrame* pNew )
 {
@@ -2141,7 +2162,7 @@ bool SwFlowFrame::MoveFwd( bool bMakePage, bool bPageBreak, bool bMoveAlways )
             // i#106452
             // check page description not only in situation with sections.
             if ( !bSamePage &&
-                 ( m_rThis.GetPageDescItem().GetPageDesc() ||
+                 ((!IsFollow() && m_rThis.GetPageDescItem().GetPageDesc()) ||
                    pOldPage->GetPageDesc()->GetFollow() != pNewPage->GetPageDesc() ) )
             {
                 SwFrame::CheckPageDescs( pNewPage, false );

@@ -141,7 +141,7 @@ public:
         Placement, WritingMode, SpaceBefore, SpaceAfter, StartIndent, EndIndent,
         TextIndent, TextAlign, Width, Height, BlockAlign, InlineAlign,
         LineHeight, BaselineShift, TextDecorationType, ListNumbering,
-        RowSpan, ColSpan, Scope,
+        RowSpan, ColSpan, Scope, Role,
 
         // link destination is an artificial attribute that sets
         // the link annotation ID of a Link element
@@ -180,6 +180,8 @@ public:
         Underline, Overline, LineThrough,
         // Scope
         Row, Column, Both,
+        // Role
+        Rb, Cb, Pb, Tv,
         // ListNumbering
         Disc, Circle, Square, Decimal, UpperRoman, LowerRoman, UpperAlpha, LowerAlpha
     };
@@ -928,7 +930,7 @@ The following structure describes the permissions used in PDF security
     sal_Int32 CreateLink(const tools::Rectangle& rRect, sal_Int32 nPageNr, OUString const& rAltText);
 
     /// Creates a screen annotation.
-    sal_Int32 CreateScreen(const tools::Rectangle& rRect, sal_Int32 nPageNr, OUString const& rAltText);
+    sal_Int32 CreateScreen(const tools::Rectangle& rRect, sal_Int32 nPageNr, OUString const& rAltText, OUString const& rMimeType);
 
     /** creates a destination which is not intended to be referred to by a link, but by a public destination Id.
 

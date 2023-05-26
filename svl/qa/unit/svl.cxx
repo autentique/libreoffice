@@ -1449,6 +1449,18 @@ void Test::testUserDefinedNumberFormats()
         sExpected = "-575 540/697";
         checkPreviewString(aFormatter, sCode, -575.774749601315, eLang, sExpected);
     }
+    {  // tdf#153887: integer value without integer part displayed
+        sCode = "#/?";
+        sExpected = "2/1";
+        checkPreviewString(aFormatter, sCode, 1.95, eLang, sExpected);
+        checkPreviewString(aFormatter, sCode, 2.00, eLang, sExpected);
+        checkPreviewString(aFormatter, sCode, 2.05, eLang, sExpected);
+        sCode = "0/8";
+        sExpected = "16/8";
+        checkPreviewString(aFormatter, sCode, 1.95, eLang, sExpected);
+        checkPreviewString(aFormatter, sCode, 2.00, eLang, sExpected);
+        checkPreviewString(aFormatter, sCode, 2.05, eLang, sExpected);
+    }
     {  // tdf#102507: left alignment of denominator
         sCode = "# ?/???";
         sExpected = "3 1/2  ";
@@ -1714,6 +1726,23 @@ void Test::testUserDefinedNumberFormats()
         checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
         sCode =     "YYYY-MM-DD MM:SS.000";
         sExpected = "1900-01-02 23:53.605";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+    }
+    {   // tdf#150028 decimals of seconds fraction withtout truncate on overflow
+        sCode =     "[SS]";
+        sExpected = "271434";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        // One decimal.
+        sCode =     "[SS].0";
+        sExpected = "271433.6";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        // Two decimals.
+        sCode =     "[SS].00";
+        sExpected = "271433.61";
+        checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
+        // Three decimals.
+        sCode =     "[SS].000";
+        sExpected = "271433.605";
         checkPreviewString(aFormatter, sCode, M_PI, eLang, sExpected);
     }
     {   // tdf#33689 use English NfKeywords in non-English language

@@ -39,6 +39,7 @@
 #include <editeng/adjustitem.hxx>
 #include <editeng/frmdiritem.hxx>
 #include <editeng/justifyitem.hxx>
+#include <editeng/udlnitem.hxx>
 
 #include <com/sun/star/i18n/CharacterIteratorMode.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
@@ -98,8 +99,11 @@ ImpEditEngine::ImpEditEngine( EditEngine* pEE, SfxItemPool* pItemPool ) :
     pUndoManager(nullptr),
     aWordDelimiters(" .,;:-`'?!_=\"{}()[]"),
     maBackgroundColor(COL_AUTO),
-    mnStretchX(100.0),
-    mnStretchY(100.0),
+    mfFontScaleX(100.0),
+    mfFontScaleY(100.0),
+    mfSpacingScaleX(100.0),
+    mfSpacingScaleY(100.0),
+    mbRoundToNearestPt(false),
     nAsianCompressionMode(CharCompressType::NONE),
     eDefaultHorizontalTextDirection(EEHorizontalTextDirection::Default),
     nBigTextObjectStart(20),
@@ -371,8 +375,9 @@ bool ImpEditEngine::Command( const CommandEvent& rCEvt, EditView* pView )
                 // #102812# convert quotes in IME text
                 // works on the last input character, this is especially in Korean text often done
                 // quotes that are inside of the string are not replaced!
+                // See also tdf#155350
                 const sal_Unicode nCharCode = aSel.Min().GetNode()->GetChar( aSel.Min().GetIndex() );
-                if ( ( GetStatus().DoAutoCorrect() ) && ( ( nCharCode == '\"' ) || ( nCharCode == '\'' ) ) )
+                if ( ( GetStatus().DoAutoCorrect() ) && SvxAutoCorrect::IsAutoCorrectChar(nCharCode) )
                 {
                     aSel = DeleteSelected( aSel );
                     aSel = AutoCorrect( aSel, nCharCode, mpIMEInfos->bWasCursorOverwrite );
@@ -3059,7 +3064,7 @@ bool ImpEditEngine::UpdateFields()
                 if (!aStatus.MarkNonUrlFields() && !aStatus.MarkUrlFields())
                     ;   // nothing marked
                 else if (aStatus.MarkNonUrlFields() && aStatus.MarkUrlFields())
-                    rField.GetFieldColor() = GetColorConfig().GetColorValue( svtools::WRITERFIELDSHADINGS ).nColor;
+                    rField.GetFieldColor() = GetColorConfig().GetColorValue(svtools::WRITERFIELDSHADINGS).nColor;
                 else
                 {
                     bool bURL = false;
@@ -3075,7 +3080,7 @@ bool ImpEditEngine::UpdateFields()
                 const OUString aFldValue =
                     GetEditEnginePtr()->CalcFieldValue(
                         static_cast<const SvxFieldItem&>(*rField.GetItem()),
-                        nPara, rField.GetStart(), rField.GetTextColor(), rField.GetFieldColor());
+                        nPara, rField.GetStart(), rField.GetTextColor(), rField.GetFieldColor(), rField.GetFldLineStyle() );
 
                 rField.SetFieldValue(aFldValue);
                 if (rField != aCurrent)
@@ -3222,7 +3227,7 @@ void ImpEditEngine::IterateLineAreas(const IterateLinesAreasFunc& f, IterFlag eO
                 const SvxLineSpacingItem& rLSItem
                     = pPortion->GetNode()->GetContentAttribs().GetItem(EE_PARA_SBL);
                 nSBL = (rLSItem.GetInterLineSpaceRule() == SvxInterLineSpaceRule::Fix)
-                           ? GetYValue(rLSItem.GetInterLineSpace())
+                           ? scaleYSpacingValue(rLSItem.GetInterLineSpace())
                            : 0;
             }
 
@@ -3266,7 +3271,7 @@ void ImpEditEngine::IterateLineAreas(const IterateLinesAreasFunc& f, IterFlag eO
             {
                 const SvxULSpaceItem& rULItem
                     = pPortion->GetNode()->GetContentAttribs().GetItem(EE_PARA_ULSPACE);
-                tools::Long nUL = GetYValue(rULItem.GetLower());
+                tools::Long nUL = scaleYSpacingValue(rULItem.GetLower());
                 adjustYDirectionAware(aLineStart, nUL);
             }
         }
@@ -3402,10 +3407,10 @@ sal_uInt32 ImpEditEngine::CalcParaWidth( sal_Int32 nPara, bool bIgnoreExtraSpace
             // width, here not preferred. I general, it is best not leave it
             // to StartPosX, also the right indents have to be taken into
             // account!
-            tools::Long nCurWidth = GetXValue( rLRItem.GetTextLeft() + nSpaceBeforeAndMinLabelWidth );
+            tools::Long nCurWidth = scaleXSpacingValue(rLRItem.GetTextLeft() + nSpaceBeforeAndMinLabelWidth);
             if ( nLine == 0 )
             {
-                tools::Long nFI = GetXValue( rLRItem.GetTextFirstLineOffset() );
+                tools::Long nFI = scaleXSpacingValue(rLRItem.GetTextFirstLineOffset());
                 nCurWidth -= nFI;
                 if ( pPortion->GetBulletX() > nCurWidth )
                 {
@@ -3414,7 +3419,7 @@ sal_uInt32 ImpEditEngine::CalcParaWidth( sal_Int32 nPara, bool bIgnoreExtraSpace
                         nCurWidth = pPortion->GetBulletX();
                 }
             }
-            nCurWidth += GetXValue( rLRItem.GetRight() );
+            nCurWidth += scaleXSpacingValue(rLRItem.GetRight());
             nCurWidth += CalcLineWidth( pPortion, &rLine, bIgnoreExtraSpace );
             if ( nCurWidth > nMaxWidth )
             {
@@ -4337,7 +4342,7 @@ void ImpEditEngine::CalcHeight( ParaPortion* pPortion )
 
     const SvxULSpaceItem& rULItem = pPortion->GetNode()->GetContentAttribs().GetItem( EE_PARA_ULSPACE );
     const SvxLineSpacingItem& rLSItem = pPortion->GetNode()->GetContentAttribs().GetItem( EE_PARA_SBL );
-    sal_Int32 nSBL = ( rLSItem.GetInterLineSpaceRule() == SvxInterLineSpaceRule::Fix ) ? GetYValue( rLSItem.GetInterLineSpace() ) : 0;
+    sal_Int32 nSBL = ( rLSItem.GetInterLineSpaceRule() == SvxInterLineSpaceRule::Fix ) ? scaleYSpacingValue(rLSItem.GetInterLineSpace()) : 0;
 
     if ( nSBL )
     {
@@ -4350,14 +4355,14 @@ void ImpEditEngine::CalcHeight( ParaPortion* pPortion )
     sal_Int32 nPortion = GetParaPortions().GetPos( pPortion );
     if ( nPortion )
     {
-        sal_uInt16 nUpper = GetYValue( rULItem.GetUpper() );
+        sal_uInt16 nUpper = scaleYSpacingValue(rULItem.GetUpper());
         pPortion->nHeight += nUpper;
         pPortion->nFirstLineOffset = nUpper;
     }
 
     if ( nPortion != (GetParaPortions().Count()-1) )
     {
-        pPortion->nHeight += GetYValue( rULItem.GetLower() );   // not in the last
+        pPortion->nHeight += scaleYSpacingValue(rULItem.GetLower());   // not in the last
     }
 
 
@@ -4377,7 +4382,7 @@ void ImpEditEngine::CalcHeight( ParaPortion* pPortion )
     // Only Writer3: Do not add up, but minimum distance.
 
     // check if distance by LineSpacing > Upper:
-    sal_uInt16 nExtraSpace = GetYValue( lcl_CalcExtraSpace( rLSItem ) );
+    sal_uInt16 nExtraSpace = scaleYSpacingValue(lcl_CalcExtraSpace(rLSItem));
     if ( nExtraSpace > pPortion->nFirstLineOffset )
     {
         // Paragraph becomes 'bigger':
@@ -4386,7 +4391,7 @@ void ImpEditEngine::CalcHeight( ParaPortion* pPortion )
     }
 
     // Determine nFirstLineOffset now f(pNode) => now f(pNode, pPrev):
-    sal_uInt16 nPrevLower = GetYValue( rPrevULItem.GetLower() );
+    sal_uInt16 nPrevLower = scaleYSpacingValue(rPrevULItem.GetLower());
 
     // This PrevLower is still in the height of PrevPortion ...
     if ( nPrevLower > pPortion->nFirstLineOffset )
@@ -4408,7 +4413,7 @@ void ImpEditEngine::CalcHeight( ParaPortion* pPortion )
     if ( pPrev->IsInvalid() )
         return;
 
-    nExtraSpace = GetYValue( lcl_CalcExtraSpace( rPrevLSItem ) );
+    nExtraSpace = scaleYSpacingValue(lcl_CalcExtraSpace(rPrevLSItem));
     if ( nExtraSpace > nPrevLower )
     {
         sal_uInt16 nMoreLower = nExtraSpace - nPrevLower;

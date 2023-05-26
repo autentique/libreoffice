@@ -19,6 +19,7 @@
 
 #include <vcl/settings.hxx>
 #include <vcl/virdev.hxx>
+#include <vcl/commandevent.hxx>
 #include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/weldutils.hxx>
@@ -33,7 +34,6 @@ using namespace com::sun::star;
 SvxCharView::SvxCharView(const VclPtr<VirtualDevice>& rVirDev)
     : mxVirDev(rVirDev)
     , mnY(0)
-    , maPosition(0, 0)
     , maHasInsert(true)
 {
 }
@@ -66,18 +66,10 @@ bool SvxCharView::MouseButtonDown(const MouseEvent& rMEvt)
         }
 
         maMouseClickHdl.Call(this);
+        return true;
     }
 
-    if (rMEvt.IsRight())
-    {
-        Point aPosition(rMEvt.GetPosPixel());
-        maPosition = aPosition;
-        GrabFocus();
-        Invalidate();
-        createContextMenu();
-    }
-
-    return true;
+    return CustomWidgetController::MouseButtonDown(rMEvt);
 }
 
 bool SvxCharView::KeyInput(const KeyEvent& rKEvt)
@@ -95,6 +87,19 @@ bool SvxCharView::KeyInput(const KeyEvent& rKEvt)
     return bRet;
 }
 
+bool SvxCharView::Command(const CommandEvent& rCommandEvent)
+{
+    if (rCommandEvent.GetCommand() == CommandEventId::ContextMenu)
+    {
+        GrabFocus();
+        Invalidate();
+        createContextMenu(rCommandEvent.GetMousePosPixel());
+        return true;
+    }
+
+    return weld::CustomWidgetController::Command(rCommandEvent);
+}
+
 void SvxCharView::InsertCharToDoc()
 {
     if (GetText().isEmpty())
@@ -107,22 +112,22 @@ void SvxCharView::InsertCharToDoc()
     comphelper::dispatchCommand(".uno:InsertSymbol", aArgs);
 }
 
-void SvxCharView::createContextMenu()
+void SvxCharView::createContextMenu(const Point& rPosition)
 {
     weld::DrawingArea* pDrawingArea = GetDrawingArea();
     std::unique_ptr<weld::Builder> xBuilder(
         Application::CreateBuilder(pDrawingArea, "sfx/ui/charviewmenu.ui"));
     std::unique_ptr<weld::Menu> xItemMenu(xBuilder->weld_menu("charviewmenu"));
     ContextMenuSelect(
-        xItemMenu->popup_at_rect(pDrawingArea, tools::Rectangle(maPosition, Size(1, 1))));
+        xItemMenu->popup_at_rect(pDrawingArea, tools::Rectangle(rPosition, Size(1, 1))));
     Invalidate();
 }
 
-void SvxCharView::ContextMenuSelect(std::string_view rMenuId)
+void SvxCharView::ContextMenuSelect(std::u16string_view rMenuId)
 {
-    if (rMenuId == "clearchar")
+    if (rMenuId == u"clearchar")
         maClearClickHdl.Call(this);
-    else if (rMenuId == "clearallchar")
+    else if (rMenuId == u"clearallchar")
         maClearAllClickHdl.Call(this);
 }
 

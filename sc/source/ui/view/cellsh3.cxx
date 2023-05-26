@@ -86,19 +86,19 @@ void lcl_lokGetWholeFunctionList()
     if (!(pFuncManager && aFuncNameOrderedSet.size()))
         return;
 
-    OStringBuffer aPayload;
-    aPayload.append("{ \"wholeList\": true, ");
-    aPayload.append("\"categories\": [ ");
+    OStringBuffer aPayload(
+        "{ \"wholeList\": true, "
+        "\"categories\": [ ");
 
     formula::FormulaHelper aHelper(pFuncManager);
     sal_uInt32 nCategoryCount = pFuncManager->getCount();
     for (sal_uInt32 i = 0; i < nCategoryCount; ++i)
     {
         OUString sCategoryName = ScFunctionMgr::GetCategoryName(i);
-        aPayload.append("{");
-        aPayload.append("\"name\": \"");
-        aPayload.append(escapeJSON(sCategoryName));
-        aPayload.append("\"}, ");
+        aPayload.append("{"
+            "\"name\": \""
+            + escapeJSON(sCategoryName)
+            + "\"}, ");
     }
     sal_Int32 nLen = aPayload.getLength();
     aPayload[nLen - 2] = ' ';
@@ -121,19 +121,19 @@ void lcl_lokGetWholeFunctionList()
             {
                 if (ppFDesc->getCategory())
                 {
-                    aPayload.append("{");
-                    aPayload.append("\"index\": ");
-                    aPayload.append(static_cast<sal_Int64>(nCurIndex));
-                    aPayload.append(", ");
-                    aPayload.append("\"category\": ");
-                    aPayload.append(static_cast<sal_Int64>(ppFDesc->getCategory()->getNumber()));
-                    aPayload.append(", ");
-                    aPayload.append("\"signature\": \"");
-                    aPayload.append(escapeJSON(ppFDesc->getSignature()));
-                    aPayload.append("\", ");
-                    aPayload.append("\"description\": \"");
-                    aPayload.append(escapeJSON(ppFDesc->getDescription()));
-                    aPayload.append("\"}, ");
+                    aPayload.append("{"
+                        "\"index\": "
+                        + OString::number(static_cast<sal_Int64>(nCurIndex))
+                        + ", "
+                        "\"category\": "
+                        + OString::number(static_cast<sal_Int64>(ppFDesc->getCategory()->getNumber()))
+                        + ", "
+                        "\"signature\": \""
+                        + escapeJSON(ppFDesc->getSignature())
+                        + "\", "
+                        "\"description\": \""
+                        + escapeJSON(ppFDesc->getDescription())
+                        + "\"}, ");
                 }
             }
         }
@@ -145,7 +145,7 @@ void lcl_lokGetWholeFunctionList()
     aPayload.append(" }");
 
     OString s = aPayload.makeStringAndClear();
-    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CALC_FUNCTION_LIST, s.getStr());
+    pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_CALC_FUNCTION_LIST, s);
 }
 
 } // end namespace
@@ -276,8 +276,7 @@ void ScCellShell::Execute( SfxRequest& rReq )
                         rBindings.Invalidate(SID_DOC_MODIFIED);
                     }
 
-                    OUString aStr( static_cast<const SfxStringItem&>(pReqArgs->
-                                    Get( SID_ENTER_STRING )).GetValue() );
+                    OUString aStr( pReqArgs->Get( SID_ENTER_STRING ).GetValue() );
                     const SfxPoolItem* pDontCommitItem;
                     bool bCommit = true;
                     if (pReqArgs->HasItem(FN_PARAM_1, &pDontCommitItem))
@@ -713,7 +712,7 @@ void ScCellShell::Execute( SfxRequest& rReq )
             {
                 if ( pReqArgs )
                 {
-                    const SfxUInt16Item&  rUInt16Item = static_cast<const SfxUInt16Item&>(pReqArgs->Get( FID_ROW_OPT_HEIGHT ));
+                    const SfxUInt16Item&  rUInt16Item = pReqArgs->Get( FID_ROW_OPT_HEIGHT );
 
                     // #101390#; the value of the macro is in HMM so use convertMm100ToTwip to convert
                     pTabViewShell->SetMarkedWidthOrHeight( false, SC_SIZE_OPTIMAL,
@@ -818,7 +817,7 @@ void ScCellShell::Execute( SfxRequest& rReq )
             {
                 if ( pReqArgs )
                 {
-                    const SfxUInt16Item&  rUInt16Item = static_cast<const SfxUInt16Item&>(pReqArgs->Get( FID_COL_OPT_WIDTH ));
+                    const SfxUInt16Item&  rUInt16Item = pReqArgs->Get( FID_COL_OPT_WIDTH );
 
                     // #101390#; the value of the macro is in HMM so use convertMm100ToTwip to convert
                     pTabViewShell->SetMarkedWidthOrHeight( true, SC_SIZE_OPTIMAL,

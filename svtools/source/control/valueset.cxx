@@ -154,7 +154,7 @@ void ValueSet::ImplDeleteItems()
 
 void ValueSet::Select()
 {
-    collectUIInformation(OStringToOUString(GetDrawingArea()->get_buildable_name(),RTL_TEXTENCODING_UTF8) , OStringToOUString(GetDrawingArea()->get_help_id(),RTL_TEXTENCODING_UTF8) , OUString::number(GetSelectedItemId()));
+    collectUIInformation(GetDrawingArea()->get_buildable_name() , GetDrawingArea()->get_help_id() , OUString::number(GetSelectedItemId()));
     maSelectHdl.Call( this );
 }
 
@@ -804,7 +804,7 @@ void ValueSet::SelectItem( sal_uInt16 nItemId )
             {
                 Any aOldAny;
                 Any aNewAny;
-                aOldAny <<= Reference<XInterface>(static_cast<cppu::OWeakObject*>(pItemAcc));
+                aOldAny <<= Reference(getXWeak(pItemAcc));
                 ImplFireAccessibleEvent(AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldAny, aNewAny );
             }
         }
@@ -827,7 +827,7 @@ void ValueSet::SelectItem( sal_uInt16 nItemId )
     {
         Any aOldAny;
         Any aNewAny;
-        aNewAny <<= Reference<XInterface>(static_cast<cppu::OWeakObject*>(pItemAcc));
+        aNewAny <<= Reference(getXWeak(pItemAcc));
         ImplFireAccessibleEvent(AccessibleEventId::ACTIVE_DESCENDANT_CHANGED, aOldAny, aNewAny);
     }
 

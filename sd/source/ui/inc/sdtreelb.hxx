@@ -28,6 +28,7 @@
 #include <memory>
 #include <vector>
 
+class SdrView;
 class SdDrawDocument;
 class SfxMedium;
 class SfxViewFrame;
@@ -54,12 +55,17 @@ class SdPageObjsTLVDropTarget final : public DropTargetHelper
 {
 private:
     weld::TreeView& m_rTreeView;
+    SdrView* m_pSdrView;
+    bool m_bOrderFrontToBack = false;
 
     virtual sal_Int8 AcceptDrop( const AcceptDropEvent& rEvt ) override;
     virtual sal_Int8 ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
 
 public:
     SdPageObjsTLVDropTarget(weld::TreeView& rTreeView);
+
+    void SetDrawView(SdrView* pSdrView) { m_pSdrView = pSdrView; }
+    void SetOrderFrontToBack(bool bSet) { m_bOrderFrontToBack = bSet; }
 };
 
 class SD_DLLPUBLIC SdPageObjsTLV
@@ -78,6 +84,7 @@ private:
     SfxMedium* m_pOwnMedium;
     bool m_bLinkableSelected;
     bool m_bShowAllShapes;
+    bool m_bOrderFrontToBack;
 
     /** This flag controls whether to show all pages.
     */
@@ -326,6 +333,9 @@ public:
     void SetShowAllShapes (const bool bShowAllShapes, const bool bFill);
     bool GetShowAllShapes() const { return m_bShowAllShapes; }
 
+    void SetOrderFrontToBack (const bool bOrderFrontToBack);
+    bool GetOrderFrontToBack() const { return m_bOrderFrontToBack; }
+
     bool IsNavigationGrabsFocus() const { return m_bNavigationGrabsFocus; }
     bool IsEqualToDoc(const SdDrawDocument* pInDoc);
     /// Visits rList recursively and tries to advance rEntry accordingly.
@@ -391,7 +401,12 @@ public:
 
     void InsertEntry(const weld::TreeIter* pParent, const OUString& rId, const OUString &rName, const OUString &rExpander, weld::TreeIter* pEntry = nullptr)
     {
-        m_xTreeView->insert(pParent, -1, &rName, &rId, nullptr, nullptr, false, m_xScratchIter.get());
+        if (pParent)
+            m_xTreeView->insert(pParent, m_bOrderFrontToBack ? 0 : -1, &rName, &rId, nullptr,
+                                nullptr, false, m_xScratchIter.get());
+        else
+            // always append page/slide entry
+            m_xTreeView->insert(nullptr, -1, &rName, &rId, nullptr, nullptr, false, m_xScratchIter.get());
         m_xTreeView->set_image(*m_xScratchIter, rExpander);
         if (pEntry)
             m_xTreeView->copy_iterator(*m_xScratchIter, *pEntry);

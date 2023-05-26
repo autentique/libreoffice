@@ -60,7 +60,6 @@ namespace com::sun::star {
 namespace writerfilter::dmapper {
 
 class  DomainMapper_Impl;
-struct FloatingTableInfo;
 struct AnchoredObjectInfo;
 
 enum BorderPosition
@@ -324,9 +323,6 @@ private:
                                    sal_uInt32 nLineWidth,
                                    DomainMapper_Impl& rDM_Impl );
 
-    // Determines if conversion of a given floating table is wanted or not.
-    bool FloatingTableConversion( const DomainMapper_Impl& rDM_Impl, FloatingTableInfo& rInfo );
-
     /// Increases paragraph spacing according to Word 2013+ needs if necessary.
     void HandleIncreasedAnchoredObjectSpacing(DomainMapper_Impl& rDM_Impl);
 
@@ -452,9 +448,6 @@ public:
     ParagraphProperties(ParagraphProperties &&) = default;
     ParagraphProperties & operator =(ParagraphProperties const &) = default;
     ParagraphProperties & operator =(ParagraphProperties &&) = default;
-
-    // Does not compare the starting/ending range, m_sParaStyleName and m_nDropCapLength
-    bool operator==( const ParagraphProperties& ) const;
 
     sal_Int32 GetListId() const          { return m_nListId; }
     void      SetListId( sal_Int32 nId ) { m_nListId = nId; }

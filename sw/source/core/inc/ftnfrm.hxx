@@ -64,6 +64,8 @@ public:
         const SwBorderAttrs&) const override;
     virtual void PaintSubsidiaryLines( const SwPageFrame*, const SwRect& ) const override;
             void    PaintLine( const SwRect &, const SwPageFrame * ) const;
+
+    void dumpAsXml(xmlTextWriterPtr writer = nullptr) const override;
 };
 
 inline SwFootnoteFrame* SwFootnoteContFrame::AppendChained(SwFrame* pThis, bool bDefaultFormat)
@@ -160,6 +162,8 @@ public:
         pointer to found last content frame. NULL, if none is found.
     */
     SwContentFrame* FindLastContent();
+
+    void dumpAsXml(xmlTextWriterPtr writer = nullptr) const override;
 };
 
 #endif

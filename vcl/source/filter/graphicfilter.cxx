@@ -89,7 +89,6 @@
 #include <vcl/TypeSerializer.hxx>
 
 #include "FilterConfigCache.hxx"
-#include "graphicfilter_internal.hxx"
 
 #include <graphic/GraphicFormatDetector.hxx>
 #include <graphic/GraphicReader.hxx>
@@ -140,23 +139,6 @@ public:
 }
 
 // Helper functions
-
-sal_uInt8* ImplSearchEntry( sal_uInt8* pSource, sal_uInt8 const * pDest, sal_uLong nComp, sal_uLong nSize )
-{
-    while ( nComp-- >= nSize )
-    {
-        sal_uLong i;
-        for ( i = 0; i < nSize; i++ )
-        {
-            if ( ( pSource[i]&~0x20 ) != ( pDest[i]&~0x20 ) )
-                break;
-        }
-        if ( i == nSize )
-            return pSource;
-        pSource++;
-    }
-    return nullptr;
-}
 
 static OUString ImpGetExtension( std::u16string_view rPath )
 {
@@ -709,7 +691,7 @@ void GraphicFilter::MakeGraphicsAvailableThreaded(std::vector<Graphic*>& graphic
         {
             // Graphic objects share internal ImpGraphic, do not process any of those twice.
             const auto predicate = [graphic](Graphic* item) { return item->ImplGetImpGraphic() == graphic->ImplGetImpGraphic(); };
-            if( std::find_if(toLoad.begin(), toLoad.end(), predicate ) == toLoad.end())
+            if( std::none_of(toLoad.begin(), toLoad.end(), predicate ))
                 toLoad.push_back( graphic );
         }
     }
@@ -912,10 +894,10 @@ Graphic GraphicFilter::ImportUnloadedGraphic(SvStream& rIStream, sal_uInt64 size
         {
             bool bAnimated = false;
             Size aLogicSize;
-            if (eLinkType == GfxLinkType::NativeGif)
+            if (eLinkType == GfxLinkType::NativeGif && !aGraphicContent.isEmpty())
             {
-                SvMemoryStream aMemoryStream(aGraphicContent.getMemoryStream());
-                bAnimated = IsGIFAnimated(aMemoryStream, aLogicSize);
+                std::shared_ptr<SvStream> pMemoryStream = aGraphicContent.getAsStream();
+                bAnimated = IsGIFAnimated(*pMemoryStream, aLogicSize);
                 if (!pSizeHint && aLogicSize.getWidth() && aLogicSize.getHeight())
                 {
                     pSizeHint = &aLogicSize;
@@ -954,8 +936,8 @@ ErrCode GraphicFilter::readPNG(SvStream & rStream, Graphic & rGraphic, GfxLinkTy
     if (auto aMSGifChunk = vcl::PngImageReader::getMicrosoftGifChunk(rStream);
         !aMSGifChunk.isEmpty())
     {
-        SvMemoryStream aIStrm(aMSGifChunk.getMemoryStream());
-        ImportGIF(aIStrm, rGraphic);
+        std::shared_ptr<SvStream> pIStrm(aMSGifChunk.getAsStream());
+        ImportGIF(*pIStrm, rGraphic);
         rLinkType = GfxLinkType::NativeGif;
         rpGraphicContent = aMSGifChunk;
         return aReturnCode;
@@ -1632,9 +1614,7 @@ ErrCode GraphicFilter::ExportGraphic( const Graphic& rGraphic, std::u16string_vi
                     && !rVectorGraphicDataPtr->getBinaryDataContainer().isEmpty()
                     && !bIsEMF)
                 {
-                    auto & aDataContainer = rVectorGraphicDataPtr->getBinaryDataContainer();
-                    rTempStm->WriteBytes(aDataContainer.getData(), aDataContainer.getSize());
-
+                    rVectorGraphicDataPtr->getBinaryDataContainer().writeToStream(*rTempStm);
                     if (rTempStm->GetError())
                     {
                         nStatus = ERRCODE_GRFILTER_IOERROR;
@@ -1673,9 +1653,7 @@ ErrCode GraphicFilter::ExportGraphic( const Graphic& rGraphic, std::u16string_vi
                     && rVectorGraphicDataPtr->getType() == VectorGraphicDataType::Emf
                     && !rVectorGraphicDataPtr->getBinaryDataContainer().isEmpty())
                 {
-                    auto & aDataContainer = rVectorGraphicDataPtr->getBinaryDataContainer();
-                    rTempStm->WriteBytes(aDataContainer.getData(), aDataContainer.getSize());
-
+                    rVectorGraphicDataPtr->getBinaryDataContainer().writeToStream(*rTempStm);
                     if (rTempStm->GetError())
                     {
                         nStatus = ERRCODE_GRFILTER_IOERROR;
@@ -1743,9 +1721,7 @@ ErrCode GraphicFilter::ExportGraphic( const Graphic& rGraphic, std::u16string_vi
                     && rVectorGraphicDataPtr->getType()  ==  VectorGraphicDataType::Svg
                     && !rVectorGraphicDataPtr->getBinaryDataContainer().isEmpty())
                 {
-                    auto & aDataContainer = rVectorGraphicDataPtr->getBinaryDataContainer();
-                    rTempStm->WriteBytes(aDataContainer.getData(), aDataContainer.getSize());
-
+                    rVectorGraphicDataPtr->getBinaryDataContainer().writeToStream(*rTempStm);
                     if( rTempStm->GetError() )
                     {
                         nStatus = ERRCODE_GRFILTER_IOERROR;

@@ -32,7 +32,6 @@
 #include <svx/xlnwtit.hxx>
 #include <svx/xfillit0.hxx>
 #include <svx/xflclit.hxx>
-#include <svx/xgrad.hxx>
 #include <svx/xflgrit.hxx>
 #include <editeng/fontitem.hxx>
 #include <editeng/wrlmitem.hxx>
@@ -1245,19 +1244,19 @@ void ImpSdrGDIMetaFileImport::DoAction( MetaCommentAction const & rAct, GDIMetaF
                         std::move(aSource));
                     // #i125211# Use the ranges from the SdrObject to create a new empty SfxItemSet
                     SfxItemSet aGradAttr(mpModel->GetItemPool(), pPath->GetMergedItemSet().GetRanges());
-                    XGradient aXGradient(
-                        basegfx::utils::createColorStopsFromStartEndColor(
+                    basegfx::BGradient aBGradient(
+                        basegfx::BColorStops(
                             rGrad.GetStartColor().getBColor(),
                             rGrad.GetEndColor().getBColor()));
 
-                    aXGradient.SetGradientStyle(static_cast<css::awt::GradientStyle>(rGrad.GetStyle()));
-                    aXGradient.SetAngle(rGrad.GetAngle());
-                    aXGradient.SetBorder(rGrad.GetBorder());
-                    aXGradient.SetXOffset(rGrad.GetOfsX());
-                    aXGradient.SetYOffset(rGrad.GetOfsY());
-                    aXGradient.SetStartIntens(rGrad.GetStartIntensity());
-                    aXGradient.SetEndIntens(rGrad.GetEndIntensity());
-                    aXGradient.SetSteps(rGrad.GetSteps());
+                    aBGradient.SetGradientStyle(rGrad.GetStyle());
+                    aBGradient.SetAngle(rGrad.GetAngle());
+                    aBGradient.SetBorder(rGrad.GetBorder());
+                    aBGradient.SetXOffset(rGrad.GetOfsX());
+                    aBGradient.SetYOffset(rGrad.GetOfsY());
+                    aBGradient.SetStartIntens(rGrad.GetStartIntensity());
+                    aBGradient.SetEndIntens(rGrad.GetEndIntensity());
+                    aBGradient.SetSteps(rGrad.GetSteps());
 
                     // no need to use SetAttributes(..) here since line and fill style
                     // need to be set individually
@@ -1269,7 +1268,7 @@ void ImpSdrGDIMetaFileImport::DoAction( MetaCommentAction const & rAct, GDIMetaF
 
                     // add detected gradient fillstyle
                     aGradAttr.Put(XFillStyleItem(drawing::FillStyle_GRADIENT));
-                    aGradAttr.Put(XFillGradientItem(aXGradient));
+                    aGradAttr.Put(XFillGradientItem(aBGradient));
 
                     pPath->SetMergedItemSet(aGradAttr);
 
@@ -1393,34 +1392,6 @@ void ImpSdrGDIMetaFileImport::DoAction(MetaMaskScalePartAction const & rAct)
     InsertObj(pGraf.get());
 }
 
-namespace
-{
-    css::awt::GradientStyle getXGradientStyleFromGradientStyle(const GradientStyle& rGradientStyle)
-    {
-        css::awt::GradientStyle aXGradientStyle(css::awt::GradientStyle_LINEAR);
-
-        switch(rGradientStyle)
-        {
-            case GradientStyle::Linear: aXGradientStyle = css::awt::GradientStyle_LINEAR; break;
-            case GradientStyle::Axial: aXGradientStyle = css::awt::GradientStyle_AXIAL; break;
-            case GradientStyle::Radial: aXGradientStyle = css::awt::GradientStyle_RADIAL; break;
-            case GradientStyle::Elliptical: aXGradientStyle = css::awt::GradientStyle_ELLIPTICAL; break;
-            case GradientStyle::Square: aXGradientStyle = css::awt::GradientStyle_SQUARE; break;
-            case GradientStyle::Rect: aXGradientStyle = css::awt::GradientStyle_RECT; break;
-
-            // Needed due to GradientStyle::FORCE_EQUAL_SIZE; this again is needed
-            // to force the enum defines in VCL to a defined size for the compilers,
-            // so despite it is never used it cannot be removed (would break the
-            // API implementation probably).
-            case GradientStyle::FORCE_EQUAL_SIZE: break;
-            default:
-                break;
-        }
-
-        return aXGradientStyle;
-    }
-}
-
 void ImpSdrGDIMetaFileImport::DoAction(MetaGradientAction const & rAct)
 {
     basegfx::B2DRange aRange = vcl::unotools::b2DRectangleFromRectangle(rAct.GetRect());
@@ -1440,13 +1411,12 @@ void ImpSdrGDIMetaFileImport::DoAction(MetaGradientAction const & rAct)
             ceil(aRange.getMaxY())));
     // #i125211# Use the ranges from the SdrObject to create a new empty SfxItemSet
     SfxItemSet aGradientAttr(mpModel->GetItemPool(), pRect->GetMergedItemSet().GetRanges());
-    const css::awt::GradientStyle aXGradientStyle(getXGradientStyleFromGradientStyle(rGradient.GetStyle()));
     const XFillGradientItem aXFillGradientItem(
-        XGradient(
-            basegfx::utils::createColorStopsFromStartEndColor(
+        basegfx::BGradient(
+            basegfx::BColorStops(
                 rGradient.GetStartColor().getBColor(),
                 rGradient.GetEndColor().getBColor()),
-            aXGradientStyle,
+            rGradient.GetStyle(),
             rGradient.GetAngle(),
             rGradient.GetOfsX(),
             rGradient.GetOfsY(),
@@ -1503,13 +1473,12 @@ void ImpSdrGDIMetaFileImport::DoAction(MetaGradientExAction const & rAct)
         std::move(aSource));
     // #i125211# Use the ranges from the SdrObject to create a new empty SfxItemSet
     SfxItemSet aGradientAttr(mpModel->GetItemPool(), pPath->GetMergedItemSet().GetRanges());
-    const css::awt::GradientStyle aXGradientStyle(getXGradientStyleFromGradientStyle(rGradient.GetStyle()));
     const XFillGradientItem aXFillGradientItem(
-        XGradient(
-            basegfx::utils::createColorStopsFromStartEndColor(
+        basegfx::BGradient(
+            basegfx::BColorStops(
                 rGradient.GetStartColor().getBColor(),
                 rGradient.GetEndColor().getBColor()),
-            aXGradientStyle,
+            rGradient.GetStyle(),
             rGradient.GetAngle(),
             rGradient.GetOfsX(),
             rGradient.GetOfsY(),

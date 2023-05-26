@@ -31,6 +31,9 @@
 #include <svx/svdpage.hxx>
 #include <rtl/math.hxx>
 
+using ::std::cerr;
+using ::std::endl;
+
 class TestSort : public ScUcalcTestBase
 {
 protected:
@@ -72,6 +75,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSort)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 1;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     m_pDoc->Sort(0, aSortData, false, true, nullptr, nullptr);
 
@@ -173,6 +177,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortHorizontal)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -240,6 +245,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortHorizontalWholeColumn)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -301,6 +307,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortSingleRow)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     // Do the sorting.  This should not crash.
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
@@ -414,6 +421,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortWithFormulaRefs)
     aSortData.nRow2 = 7;
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     m_pDoc->Sort(0, aSortData, false, true, nullptr, nullptr);
 
@@ -449,6 +457,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortWithStrings)
     aParam.maKeyState[0].bDoSort = true;
     aParam.maKeyState[0].bAscending = true;
     aParam.maKeyState[0].nField = 1;
+    aParam.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     m_pDoc->Sort(0, aParam, false, true, nullptr, nullptr);
 
@@ -502,6 +511,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortInFormulaGroup)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     m_pDoc->Sort(0, aSortData, false, true, nullptr, nullptr);
 
@@ -669,6 +679,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortWithCellFormats)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, false, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -738,6 +749,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortRefUpdate)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -889,6 +901,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortRefUpdate2)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -974,6 +987,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortRefUpdate3)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -1102,6 +1116,7 @@ void TestSort::testSortRefUpdate4_Impl()
         aSortData.maKeyState[0].bDoSort = true;         // sort on
         aSortData.maKeyState[0].nField = 3;             // Average
         aSortData.maKeyState[0].bAscending = false;     // descending
+        aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
         m_pDoc->SetAnonymousDBData( 0, std::unique_ptr<ScDBData>(new ScDBData( STR_DB_LOCAL_NONAME, aSortRange.aStart.Tab(),
                     aSortData.nCol1, aSortData.nRow1, aSortData.nCol2, aSortData.nRow2)));
@@ -1173,6 +1188,7 @@ void TestSort::testSortRefUpdate4_Impl()
         aSortData.maKeyState[0].bDoSort = true;         // sort on
         aSortData.maKeyState[0].nField = 0;             // Name
         aSortData.maKeyState[0].bAscending = false;     // descending
+        aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
         m_pDoc->SetAnonymousDBData( 0, std::unique_ptr<ScDBData>(new ScDBData( STR_DB_LOCAL_NONAME, aSortRange.aStart.Tab(),
                     aSortData.nCol1, aSortData.nRow1, aSortData.nCol2, aSortData.nRow2)));
@@ -1278,6 +1294,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortRefUpdate5)
     aSortData.maKeyState[0].bDoSort = true;         // sort on
     aSortData.maKeyState[0].nField = 0;             // Date
     aSortData.maKeyState[0].bAscending = true;      // ascending
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -1373,6 +1390,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortRefUpdate6)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -1509,6 +1527,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortBroadcaster)
         aSortData.maKeyState[0].bDoSort = true;
         aSortData.maKeyState[0].nField = 0;
         aSortData.maKeyState[0].bAscending = false;
+        aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
         bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
         CPPUNIT_ASSERT(bSorted);
 
@@ -1606,6 +1625,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortBroadcaster)
         aSortData.maKeyState[0].bDoSort = true;
         aSortData.maKeyState[0].nField = 0;
         aSortData.maKeyState[0].bAscending = false;
+        aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
         bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
         CPPUNIT_ASSERT(bSorted);
 
@@ -1709,6 +1729,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortBroadcastBroadcaster)
         aSortData.maKeyState[0].bDoSort = true;
         aSortData.maKeyState[0].nField = 0;
         aSortData.maKeyState[0].bAscending = false;
+        aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
         bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
         CPPUNIT_ASSERT(bSorted);
 
@@ -1779,6 +1800,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortOutOfPlaceResult)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -1855,6 +1877,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortPartialFormulaGroup)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
     bool bSorted = aFunc.Sort(0, aSortData, true, true, true);
     CPPUNIT_ASSERT(bSorted);
 
@@ -1924,6 +1947,7 @@ CPPUNIT_TEST_FIXTURE(TestSort, testSortImages)
     aSortData.maKeyState[0].bDoSort = true;
     aSortData.maKeyState[0].nField = 0;
     aSortData.maKeyState[0].bAscending = true;
+    aSortData.maKeyState[0].aColorSortMode = ScColorSortMode::None;
 
     m_pDoc->Sort(0, aSortData, false, true, nullptr, nullptr);
 
