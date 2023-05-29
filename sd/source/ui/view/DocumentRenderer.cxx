@@ -506,6 +506,9 @@ namespace {
             // Mutually exclusive page options settings are stored in separate config keys...
             // TODO: There is no config key to set the distributeonmultiple option as default
             sal_Int32 nDefaultChoice = 0;
+            if (mbImpress)
+                nDefaultChoice = 1;
+
             if ( mbImpress ? officecfg::Office::Impress::Print::Page::PageSize::get() :
                              officecfg::Office::Draw::Print::Page::PageSize::get() )
             {
