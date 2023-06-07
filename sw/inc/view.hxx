@@ -618,7 +618,7 @@ public:
     // Enable mail merge - mail merge field dialog enabled
     void EnableMailMerge();
     //apply Accessibility options
-    void ApplyAccessibilityOptions(SvtAccessibilityOptions const & rAccessibilityOptions);
+    void ApplyAccessibilityOptions();
 
     SwView(SfxViewFrame& rFrame, SfxViewShell*);
     virtual ~SwView() override;
@@ -670,6 +670,8 @@ public:
     void dumpAsXml(xmlTextWriterPtr pWriter) const override;
     void SetRedlineAuthor(const OUString& rAuthor);
     const OUString& GetRedlineAuthor() const;
+    /// See SfxViewShell::afterCallbackRegistered().
+    void afterCallbackRegistered() override;
     /// See SfxViewShell::NotifyCursor().
     void NotifyCursor(SfxViewShell* pViewShell) const override;
     void ShowUIElement(const OUString& sElementURL) const;

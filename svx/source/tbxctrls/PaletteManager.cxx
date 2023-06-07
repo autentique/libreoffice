@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <memory>
 #include <svx/PaletteManager.hxx>
 
+#include <basegfx/color/bcolortools.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <tools/urlobj.hxx>
 #include <osl/file.hxx>
@@ -29,12 +29,11 @@
 #include <svx/strings.hrc>
 #include <svx/svxids.hrc>
 #include <svx/dialmgr.hxx>
+
 #include <tbxcolorupdate.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <comphelper/sequence.hxx>
-#include <stack>
-#include <set>
 #include <officecfg/Office/Common.hxx>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
@@ -48,16 +47,10 @@
 
 #include <palettes.hxx>
 
-namespace
-{
-// Luminance modulation for the 6 effect presets.
-// 10000 is the default.
-constexpr const std::array<sal_Int16, 6> g_aLumMods = { 10000, 2000, 4000, 6000, 7500, 5000 };
-
-// Luminance offset for the 6 effect presets.
-// 0 is the default.
-constexpr const std::array<sal_Int16, 6> g_aLumOffs = { 0, 8000, 6000, 4000, 0, 0 };
-}
+#include <memory>
+#include <array>
+#include <stack>
+#include <set>
 
 PaletteManager::PaletteManager() :
     mnMaxRecentColors(Application::GetSettings().GetStyleSettings().GetColorValueSetColumnCount()),
@@ -66,6 +59,7 @@ PaletteManager::PaletteManager() :
     mnColorCount(0),
     mpBtnUpdater(nullptr),
     maColorSelectFunction(PaletteManager::DispatchColorCommand)
+
 {
     SfxObjectShell* pDocSh = SfxObjectShell::Current();
     if(pDocSh)
@@ -165,19 +159,33 @@ bool PaletteManager::IsThemePaletteSelected() const
     return mnCurrentPalette == mnNumOfPalettes - 2;
 }
 
-void PaletteManager::GetThemeIndexLumModOff(sal_uInt16 nItemId, sal_Int16& rThemeIndex,
-                                            sal_Int16& rLumMod, sal_Int16& rLumOff)
+bool PaletteManager::GetThemeAndEffectIndex(sal_uInt16 nItemId, sal_uInt16& rThemeIndex, sal_uInt16& rEffectIndex)
 {
-    // Each column is the same color with different effects.
+     // Each column is the same color with different effects.
     rThemeIndex = nItemId % 12;
 
-    // Each row is the same effect with different colors.
-    rLumMod = g_aLumMods[nItemId / 12];
-    rLumOff = g_aLumOffs[nItemId / 12];
+    rEffectIndex = nItemId / 12;
+    if (rEffectIndex > 5)
+        return false;
+    return true;
+}
+
+bool PaletteManager::GetLumModOff(sal_uInt16 nThemeIndex, sal_uInt16 nEffect, sal_Int16& rLumMod, sal_Int16& rLumOff)
+{
+    if (!moThemePaletteCollection)
+        return false;
+
+    auto const& aThemeColorData = moThemePaletteCollection->maColors[nThemeIndex];
+
+    rLumMod = aThemeColorData.getLumMod(nEffect);
+    rLumOff = aThemeColorData.getLumOff(nEffect);
+
+    return true;
 }
 
 void PaletteManager::ReloadColorSet(SvxColorValueSet &rColorSet)
 {
+    moThemePaletteCollection.reset();
     if( mnCurrentPalette == 0)
     {
         rColorSet.Clear();
@@ -196,46 +204,22 @@ void PaletteManager::ReloadColorSet(SvxColorValueSet &rColorSet)
         SfxObjectShell* pObjectShell = SfxObjectShell::Current();
         if (pObjectShell)
         {
-            std::vector<Color> aColors = pObjectShell->GetThemeColors();
-            mnColorCount = aColors.size();
+            auto pColorSet = pObjectShell->GetThemeColors();
+            mnColorCount = 12;
             rColorSet.Clear();
-            if (aColors.size() >= 12)
+            sal_uInt16 nItemId = 0;
+
+            svx::ThemeColorPaletteManager aThemeColorManager(pColorSet);
+            moThemePaletteCollection = aThemeColorManager.generate();
+
+            // Each row is one effect type (no effect + each type).
+            for (size_t nEffect : {0, 1, 2, 3, 4, 5})
             {
-                std::vector<OUString> aEffectNames = {
-                    SvxResId(RID_SVXSTR_THEME_EFFECT1),  SvxResId(RID_SVXSTR_THEME_EFFECT2),
-                    SvxResId(RID_SVXSTR_THEME_EFFECT3),  SvxResId(RID_SVXSTR_THEME_EFFECT4),
-                    SvxResId(RID_SVXSTR_THEME_EFFECT5),
-                };
-
-                std::vector<OUString> aColorNames = {
-                    SvxResId(RID_SVXSTR_THEME_COLOR1),  SvxResId(RID_SVXSTR_THEME_COLOR2),
-                    SvxResId(RID_SVXSTR_THEME_COLOR3),  SvxResId(RID_SVXSTR_THEME_COLOR4),
-                    SvxResId(RID_SVXSTR_THEME_COLOR5),  SvxResId(RID_SVXSTR_THEME_COLOR6),
-                    SvxResId(RID_SVXSTR_THEME_COLOR7),  SvxResId(RID_SVXSTR_THEME_COLOR8),
-                    SvxResId(RID_SVXSTR_THEME_COLOR9),  SvxResId(RID_SVXSTR_THEME_COLOR10),
-                    SvxResId(RID_SVXSTR_THEME_COLOR11), SvxResId(RID_SVXSTR_THEME_COLOR12),
-                };
-
-                sal_uInt16 nItemId = 0;
-                // Each row is one effect type (no effect + each type).
-                for (size_t nEffect = 0; nEffect < aEffectNames.size() + 1; ++nEffect)
+                // Each column is one color type.
+                for (auto const& rColorData : moThemePaletteCollection->maColors)
                 {
-                    // Each column is one color type.
-                    for (size_t nColor = 0; nColor < aColorNames.size(); ++nColor)
-                    {
-                        Color aColor = aColors[nColor];
-                        aColor.ApplyLumModOff(g_aLumMods[nEffect], g_aLumOffs[nEffect]);
-                        OUString aColorName;
-                        if (nEffect == 0)
-                        {
-                            aColorName = aColorNames[nColor];
-                        }
-                        else
-                        {
-                            aColorName = aEffectNames[nEffect - 1].replaceAll("%1", aColorNames[nColor]);
-                        }
-                        rColorSet.InsertItem(nItemId++, aColor, aColorName);
-                    }
+                    auto const& rEffect = rColorData.maEffects[nEffect];
+                    rColorSet.InsertItem(nItemId++, rEffect.maColor, rEffect.maColorName);
                 }
             }
         }

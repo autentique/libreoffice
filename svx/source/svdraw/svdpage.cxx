@@ -30,6 +30,7 @@
 
 #include <tools/debug.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/lok.hxx>
 
 #include <svtools/colorcfg.hxx>
 #include <svx/svdetc.hxx>
@@ -46,6 +47,7 @@
 #include <svx/fmdpage.hxx>
 #include <svx/theme/ThemeColorChanger.hxx>
 #include <svx/ColorSets.hxx>
+#include <svx/theme/ThemeColorPaletteManager.hxx>
 
 #include <sdr/contact/viewcontactofsdrpage.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
@@ -56,6 +58,8 @@
 #include <rtl/strbuf.hxx>
 #include <libxml/xmlwriter.h>
 #include <docmodel/theme/Theme.hxx>
+#include <sfx2/lokhelper.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 
@@ -789,6 +793,17 @@ SdrObject* SdrObjList::GetObj(size_t nNum) const
     return nullptr;
 }
 
+SdrObject* SdrObjList::GetObjByName(std::u16string_view sName) const
+{
+    for (size_t i = 0; i < GetObjCount(); ++i)
+    {
+        SdrObject* pObj = GetObj(i);
+        if (pObj->GetName() == sName)
+            return pObj;
+    }
+    return nullptr;
+}
+
 
 bool SdrObjList::IsReadOnly() const
 {
@@ -1190,6 +1205,7 @@ SdrPageProperties::SdrPageProperties(SdrPage& rSdrPage)
         {
             std::shared_ptr<model::ColorSet> pDefaultColorSet(new model::ColorSet(*pColorSet));
             mpTheme->setColorSet(pDefaultColorSet);
+            sendLOKitThemeChangedCallback();
         }
     }
 }
@@ -1262,7 +1278,12 @@ void SdrPageProperties::SetStyleSheet(SfxStyleSheet* pStyleSheet)
 
 void SdrPageProperties::SetTheme(std::shared_ptr<model::Theme> const& pTheme)
 {
+    if (mpTheme == pTheme)
+        return;
+
     mpTheme = pTheme;
+
+    sendLOKitThemeChangedCallback();
 
     if (mpTheme && mpTheme->getColorSet() && mpSdrPage->IsMasterPage())
     {
@@ -1280,6 +1301,15 @@ void SdrPageProperties::SetTheme(std::shared_ptr<model::Theme> const& pTheme)
             aChanger.apply(*mpTheme->getColorSet());
         }
     }
+}
+
+void SdrPageProperties::sendLOKitThemeChangedCallback()
+{
+    if (!comphelper::LibreOfficeKit::isActive())
+        return;
+
+    svx::ThemeColorPaletteManager aManager(mpTheme->getColorSet());
+    SfxLokHelper::notifyAllViews(LOK_CALLBACK_COLOR_PALETTES, aManager.generateJSON());
 }
 
 std::shared_ptr<model::Theme> const& SdrPageProperties::GetTheme() const

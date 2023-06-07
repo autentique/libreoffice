@@ -3026,16 +3026,12 @@ starmath/inc/mathml/mathmlMo.hxx:88
     enum moOpDF operator&(enum moOpDF,enum moOpDF)
 starmath/inc/mathml/mathmlMo.hxx:98
     enum moOpDP operator&(enum moOpDP,enum moOpDP)
-starmath/inc/mathml/starmathdatabase.hxx:274
-    struct SmColorTokenTableEntry starmathdatabase::Identify_Color_HTML(unsigned int)
 starmath/inc/mathml/starmathdatabase.hxx:294
     struct SmColorTokenTableEntry starmathdatabase::Identify_Color_DVIPSNAMES(unsigned int)
 starmath/inc/node.hxx:508
     SmNode * SmStructureNode::GetSubNodeBinMo(unsigned long) const
 starmath/inc/node.hxx:533
     void SmStructureNode::SetSubNodes(SmNode *,SmNode *,SmNode *)
-starmath/inc/node.hxx:554
-    void SmStructureNode::SetSubNodesBinMo(SmNode *,SmNode *,SmNode *)
 starmath/inc/nodetype.hxx:59
     _Bool starmathdatabase::isStructuralNode(enum SmNodeType)
 starmath/inc/nodetype.hxx:71

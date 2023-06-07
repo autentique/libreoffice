@@ -440,10 +440,12 @@ ApiFilterSettings ColorFilter::finalizeImport()
 
     const SfxItemSet& rItemSet = pStyleSheet->GetItemSet();
     // Color (whether text or background color) is always stored in ATTR_BACKGROUND
-    const SvxBrushItem* pItem = rItemSet.GetItem<SvxBrushItem>(ATTR_BACKGROUND);
-    ::Color aColor = pItem->GetFiltColor();
-    util::Color nColor(aColor);
-    aSettings.appendField(true, nColor, mbIsBackgroundColor);
+    if (const SvxBrushItem* pItem = rItemSet.GetItem<SvxBrushItem>(ATTR_BACKGROUND))
+    {
+        ::Color aColor = pItem->GetFiltColor();
+        util::Color nColor(aColor);
+        aSettings.appendField(true, nColor, mbIsBackgroundColor);
+    }
     return aSettings;
 }
 
@@ -835,7 +837,7 @@ void AutoFilter::finalizeImport( const Reference< XDatabaseRange >& rxDatabaseRa
 
     if (!aParam.bUserDef)
     {
-        pUserList->push_back(new ScUserListData(rSorConditionLoaded.maSortCustomList));
+        pUserList->emplace_back(rSorConditionLoaded.maSortCustomList);
         aParam.bUserDef = true;
         aParam.nUserIndex = pUserList->size()-1;
     }

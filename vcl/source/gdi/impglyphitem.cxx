@@ -137,9 +137,10 @@ SalLayoutGlyphsImpl* SalLayoutGlyphsImpl::cloneCharRange(sal_Int32 index, sal_In
     // Require a start at the exact position given, otherwise bail out.
     if (pos->charPos() != beginPos)
         return nullptr;
-    // For RTL make sure we're not cutting in the middle of a multi-character glyph
+    // For RTL make sure we're not cutting in the middle of a multi-character glyph,
+    // or in the middle of a cluster
     // (for non-RTL charPos is always the start of a multi-character glyph).
-    if (rtl && pos->charPos() + pos->charCount() > beginPos + 1)
+    if (rtl && (pos->charPos() + pos->charCount() > beginPos + 1 || pos->IsInCluster()))
         return nullptr;
     if (!isSafeToBreak(pos, rtl))
         return nullptr;
@@ -328,10 +329,6 @@ SalLayoutGlyphsCache::GetLayoutGlyphs(VclPtr<const OutputDevice> outputDevice, c
     if (nLen == 0)
         return nullptr;
     const CachedGlyphsKey key(outputDevice, text, nIndex, nLen, nLogicWidth);
-    // for now disable if the font is the one seen in tdf#119074
-    // https://github.com/harfbuzz/harfbuzz/issues/3824
-    if (key.fontMetric.GetFamilyName() == "XB Roya")
-        return nullptr;
     GlyphsCache::const_iterator it = mCachedGlyphs.find(key);
     if (it != mCachedGlyphs.end())
     {

@@ -248,6 +248,17 @@ bool SwFlowFrame::IsKeep(SvxFormatKeepItem const& rKeep,
                     ( !m_rThis.IsInTab() || m_rThis.IsTabFrame() ) &&
                     rKeep.GetValue() && !IsNextContentFullPage(m_rThis));
 
+    if (bKeep && m_rThis.IsTextFrame())
+    {
+        auto& rTextFrame = static_cast<SwTextFrame&>(m_rThis);
+        if (rTextFrame.HasNonLastSplitFlyDrawObj())
+        {
+            // Allow split for the non-last anchors of a split fly, even if rKeep.GetValue() is
+            // true.
+            bKeep = false;
+        }
+    }
+
     OSL_ENSURE( !bCheckIfLastRowShouldKeep || m_rThis.IsTabFrame(),
             "IsKeep with bCheckIfLastRowShouldKeep should only be used for tabfrms" );
 
@@ -2020,7 +2031,15 @@ bool SwFlowFrame::MoveFwd( bool bMakePage, bool bPageBreak, bool bMoveAlways )
         }
     }
 
+// prevent -Werror=maybe-uninitialized under gcc 11.2.0
+#if defined __GNUC__ && !defined __clang__ && __GNUC__ == 13
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     std::optional<SwFrameDeleteGuard> oDeleteGuard;
+#if defined __GNUC__ && !defined __clang__ && __GNUC__ == 13
+#pragma GCC diagnostic pop
+#endif
     if (bMakePage)
         oDeleteGuard.emplace(pOldBoss);
 

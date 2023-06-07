@@ -616,7 +616,7 @@ IMPL_LINK_NOARG(ApplyStyle, ApplyHdl, LinkParamNone*, void)
 
         m_xTmp->SetItemSet( aTmpSet );
 
-        if( SfxStyleFamily::Page == m_nFamily && SvtCTLOptions().IsCTLFontEnabled() )
+        if( SfxStyleFamily::Page == m_nFamily && SvtCTLOptions::IsCTLFontEnabled() )
         {
             const SfxPoolItem *pItem = nullptr;
             if( aTmpSet.GetItemState( m_rDocSh.GetPool().GetTrueWhich( SID_ATTR_FRAMEDIRECTION, false ) , true, &pItem ) == SfxItemState::SET )
@@ -1580,7 +1580,7 @@ std::set<Color> SwDocShell::GetDocColors()
     return m_xDoc->GetDocColors();
 }
 
-std::vector<Color> SwDocShell::GetThemeColors()
+std::shared_ptr<model::ColorSet> SwDocShell::GetThemeColors()
 {
     SdrPage* pPage = m_xDoc->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
     if (!pPage)
@@ -1588,7 +1588,7 @@ std::vector<Color> SwDocShell::GetThemeColors()
     auto const& pTheme = pPage->getSdrPageProperties().GetTheme();
     if (!pTheme)
         return {};
-    return pTheme->GetColors();
+    return pTheme->getColorSet();
 }
 
 void  SwDocShell::LoadStyles( SfxObjectShell& rSource )

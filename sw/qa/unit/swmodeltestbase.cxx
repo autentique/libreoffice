@@ -53,7 +53,7 @@ void SwModelTestBase::paste(std::u16string_view aFilename, OUString aInstance,
     CPPUNIT_ASSERT(xFilter->filter(aDescriptor));
 }
 
-SwModelTestBase::SwModelTestBase(const OUString& pTestDocumentPath, const char* pFilter)
+SwModelTestBase::SwModelTestBase(const OUString& pTestDocumentPath, const OUString& pFilter)
     : UnoApiXmlTest(pTestDocumentPath)
     , mbExported(false)
     , mpXmlBuffer(nullptr)
@@ -67,7 +67,7 @@ void SwModelTestBase::executeImportTest(const char* filename, const char* pPassw
     maTempFile.EnableKillingFile(false);
     header();
     std::unique_ptr<Resetter> const pChanges(preTest(filename));
-    load(filename, pPassword);
+    loadURL(createFileURL(OUString::createFromAscii(filename)), pPassword);
     verify();
     finish();
     maTempFile.EnableKillingFile();
@@ -78,10 +78,10 @@ void SwModelTestBase::executeLoadVerifyReloadVerify(const char* filename, const 
     maTempFile.EnableKillingFile(false);
     header();
     std::unique_ptr<Resetter> const pChanges(preTest(filename));
-    load(filename, pPassword);
+    loadURL(createFileURL(OUString::createFromAscii(filename)), pPassword);
     verify();
     postLoad(filename);
-    reload(mpFilter, filename, pPassword);
+    saveAndReload(mpFilter, pPassword);
     verify();
     finish();
     maTempFile.EnableKillingFile();
@@ -92,9 +92,9 @@ void SwModelTestBase::executeLoadReloadVerify(const char* filename, const char* 
     maTempFile.EnableKillingFile(false);
     header();
     std::unique_ptr<Resetter> const pChanges(preTest(filename));
-    load(filename, pPassword);
+    loadURL(createFileURL(OUString::createFromAscii(filename)), pPassword);
     postLoad(filename);
-    reload(mpFilter, filename, pPassword);
+    saveAndReload(mpFilter, pPassword);
     verify();
     finish();
     maTempFile.EnableKillingFile();
@@ -105,8 +105,7 @@ void SwModelTestBase::executeImportExport(const char* filename, const char* pPas
     maTempFile.EnableKillingFile(false);
     header();
     std::unique_ptr<Resetter> const pChanges(preTest(filename));
-    load(filename, pPassword);
-    save(OUString::createFromAscii(mpFilter));
+    loadAndSave(filename, pPassword);
     maTempFile.EnableKillingFile(false);
     verify();
     finish();
@@ -457,13 +456,12 @@ uno::Reference<drawing::XShape> SwModelTestBase::getTextFrameByName(const OUStri
 
 void SwModelTestBase::header() {}
 
-void SwModelTestBase::loadURL(OUString const& rURL, const char* pName, const char* pPassword)
+void SwModelTestBase::loadURL(OUString const& rURL, const char* pPassword)
 {
     // Output name at load time, so in the case of a hang, the name of the hanging input file is visible.
     if (!isExported())
     {
-        if (pName)
-            std::cout << pName << ":\n";
+        std::cout << rURL << ":\n";
         mnStartTime = osl_getGlobalTimer();
     }
 
@@ -472,62 +470,28 @@ void SwModelTestBase::loadURL(OUString const& rURL, const char* pName, const cha
     CPPUNIT_ASSERT(!getSwDocShell()->GetMedium()->GetWarningError());
 
     discardDumpedLayout();
-    if (pName && mustCalcLayoutOf(pName))
-        calcLayout();
+    calcLayout();
 }
 
-void SwModelTestBase::reload(const char* pFilter, const char* pName, const char* pPassword)
+void SwModelTestBase::saveAndReload(const OUString& pFilter, const char* pPassword)
 {
-    save(OUString::createFromAscii(pFilter), pName, pPassword);
-
-    loadURL(maTempFile.GetURL(), pName, pPassword);
-}
-
-void SwModelTestBase::save(const OUString& aFilterName, const char* pName, const char* pPassword)
-{
-    // FIXME: Merge skipValidation and mustValidate
-    skipValidation();
-
-    UnoApiXmlTest::save(aFilterName, pPassword);
-
-    // TODO: for now, validate only ODF here
-    if (mustValidate(pName) || aFilterName == "writer8"
-        || aFilterName == "OpenDocument Text Flat XML")
-    {
-        if (aFilterName == "Office Open XML Text")
-        {
-            // too many validation errors right now
-            validate(maTempFile.GetFileName(), test::OOXML);
-        }
-        else if (aFilterName == "writer8" || aFilterName == "OpenDocument Text Flat XML")
-        {
-            validate(maTempFile.GetFileName(), test::ODF);
-        }
-        else if (aFilterName == "MS Word 97")
-        {
-            validate(maTempFile.GetFileName(), test::MSBINARY);
-        }
-        else
-        {
-            OString aMessage
-                = OString::Concat("validation requested, but don't know how to validate ") + pName
-                  + " (" + OUStringToOString(aFilterName, RTL_TEXTENCODING_UTF8) + ")";
-            CPPUNIT_FAIL(aMessage.getStr());
-        }
-    }
+    save(pFilter, pPassword);
     mbExported = true;
+
+    loadURL(maTempFile.GetURL(), pPassword);
 }
 
-void SwModelTestBase::loadAndSave(const char* pName)
+void SwModelTestBase::loadAndSave(const char* pName, const char* pPassword)
 {
-    load(pName);
-    save(OUString::createFromAscii(mpFilter));
+    loadURL(createFileURL(OUString::createFromAscii(pName)), pPassword);
+    save(mpFilter);
+    mbExported = true;
 }
 
 void SwModelTestBase::loadAndReload(const char* pName)
 {
-    load(pName);
-    reload(mpFilter, pName);
+    loadURL(createFileURL(OUString::createFromAscii(pName)));
+    saveAndReload(mpFilter);
 }
 
 void SwModelTestBase::finish()
@@ -564,9 +528,9 @@ xmlDocUniquePtr SwModelTestBase::parseExportedFile()
 void SwModelTestBase::createSwDoc(const char* pName, const char* pPassword)
 {
     if (!pName)
-        loadURL("private:factory/swriter", pName, nullptr);
+        loadURL("private:factory/swriter");
     else
-        load(pName, pPassword);
+        loadURL(createFileURL(OUString::createFromAscii(pName)), pPassword);
 
     uno::Reference<lang::XServiceInfo> xServiceInfo(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT(xServiceInfo->supportsService("com.sun.star.text.TextDocument"));
@@ -575,9 +539,9 @@ void SwModelTestBase::createSwDoc(const char* pName, const char* pPassword)
 void SwModelTestBase::createSwWebDoc(const char* pName)
 {
     if (!pName)
-        loadURL("private:factory/swriter/web", pName, nullptr);
+        loadURL("private:factory/swriter/web");
     else
-        load(pName);
+        loadURL(createFileURL(OUString::createFromAscii(pName)));
 
     uno::Reference<lang::XServiceInfo> xServiceInfo(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT(xServiceInfo->supportsService("com.sun.star.text.WebDocument"));
@@ -586,9 +550,9 @@ void SwModelTestBase::createSwWebDoc(const char* pName)
 void SwModelTestBase::createSwGlobalDoc(const char* pName)
 {
     if (!pName)
-        loadURL("private:factory/swriter/GlobalDocument", pName, nullptr);
+        loadURL("private:factory/swriter/GlobalDocument");
     else
-        load(pName);
+        loadURL(createFileURL(OUString::createFromAscii(pName)));
 
     uno::Reference<lang::XServiceInfo> xServiceInfo(mxComponent, uno::UNO_QUERY_THROW);
     CPPUNIT_ASSERT(xServiceInfo->supportsService("com.sun.star.text.GlobalDocument"));

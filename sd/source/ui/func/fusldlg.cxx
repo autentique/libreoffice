@@ -208,7 +208,7 @@ void FuSlideShowDlg::DoExecute( SfxRequest& )
         rPresentationSettings.mbFullScreen = bValue;
     }
 
-    nValue32 = ITEMVALUE( aDlgSet, ATTR_PRESENT_PAUSE_TIMEOUT, SfxUInt32Item );
+    nValue32 = aDlgSet.Get(ATTR_PRESENT_PAUSE_TIMEOUT).GetValue();
     if( nValue32 != rPresentationSettings.mnPauseTimeout )
     {
         bValuesChanged = true;
@@ -222,7 +222,7 @@ void FuSlideShowDlg::DoExecute( SfxRequest& )
         rPresentationSettings.mbShowPauseLogo = bValue;
     }
 
-    pOptions->SetDisplay( ITEMVALUE( aDlgSet, ATTR_PRESENT_DISPLAY, SfxInt32Item ) );
+    pOptions->SetDisplay( aDlgSet.Get(ATTR_PRESENT_DISPLAY).GetValue() );
 
     // is something has changed, we set the modified flag
     if ( bValuesChanged )

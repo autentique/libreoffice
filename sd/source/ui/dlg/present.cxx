@@ -117,7 +117,7 @@ SdStartPresentationDlg::SdStartPresentationDlg(weld::Window* pWindow, const SfxI
 
     const bool  bEndless = static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_ENDLESS ) ).GetValue();
     const bool  bWindow = !static_cast<const SfxBoolItem&>( rOutAttrs.Get( ATTR_PRESENT_FULLSCREEN ) ).GetValue();
-    const tools::Long  nPause = static_cast<const SfxUInt32Item&>( rOutAttrs.Get( ATTR_PRESENT_PAUSE_TIMEOUT ) ).GetValue();
+    const tools::Long  nPause = rOutAttrs.Get( ATTR_PRESENT_PAUSE_TIMEOUT ).GetValue();
 
     m_xFormatter->SetTime( tools::Time( 0, 0, nPause ) );
     // set cursor in timefield to end
@@ -197,7 +197,7 @@ void SdStartPresentationDlg::InitMonitorSettings()
             sal_Int32 nSelectedIndex (-1);
             sal_Int32 nDefaultExternalIndex (-1);
             const sal_Int32 nDefaultSelectedDisplay (
-                static_cast<const SfxInt32Item&>( rOutAttrs.Get( ATTR_PRESENT_DISPLAY ) ).GetValue());
+                rOutAttrs.Get( ATTR_PRESENT_DISPLAY ).GetValue());
 
             // Un-conditionally add a version for '0' the default external display
             sal_Int32 nInsertedEntry;

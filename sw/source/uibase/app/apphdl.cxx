@@ -989,7 +989,7 @@ void SwModule::ConfigurationChanged( utl::ConfigurationBroadcaster* pBrdCst, Con
                    dynamic_cast< const SwSrcView *>( pViewShell ) !=  nullptr)
                 {
                     SwViewOption aNewOptions = *pSwView->GetWrtShell().GetViewOptions();
-                    aNewOptions.SetThemeName(m_pColorConfig->GetCurrentSchemeName());
+                    aNewOptions.SetThemeName(svtools::ColorConfig::GetCurrentSchemeName());
                     SwViewColors aViewColors(*m_pColorConfig);
                     aNewOptions.SetColorConfig(aViewColors);
                     pSwView->GetWrtShell().ApplyViewOptions(aNewOptions);
@@ -1019,9 +1019,9 @@ void SwModule::ConfigurationChanged( utl::ConfigurationBroadcaster* pBrdCst, Con
                 auto pPagePreview = dynamic_cast<SwPagePreview *>( pViewShell );
 
                 if(pSwView)
-                    pSwView->ApplyAccessibilityOptions(*m_pAccessibilityOptions);
+                    pSwView->ApplyAccessibilityOptions();
                 else if(pPagePreview)
-                    pPagePreview->ApplyAccessibilityOptions(*m_pAccessibilityOptions);
+                    pPagePreview->ApplyAccessibilityOptions();
 
                 if(pSwView || pPagePreview || dynamic_cast< const SwSrcView *>( pViewShell ) !=  nullptr)
                 {

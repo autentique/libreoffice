@@ -438,7 +438,7 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWidow)
     // - Expected: 6
     // - Actual  : 7
     // i.e. widow control was disabled, layout didn't match Word.
-    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uLong>(6), pText1->GetThisLines());
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(6), pText1->GetThisLines());
     auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
     CPPUNIT_ASSERT(pPage2);
     const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
@@ -455,7 +455,7 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyWidow)
     SwFrame* pCell2 = pRow2->GetLower();
     auto pText2 = dynamic_cast<SwTextFrame*>(pCell2->GetLower());
     // And then similarly this was 1, not 2.
-    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uLong>(2), pText2->GetThisLines());
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(2), pText2->GetThisLines());
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testSplitFlyCompat14)
@@ -920,6 +920,31 @@ CPPUNIT_TEST_FIXTURE(Test, testSplitFlyNextLeafInSection)
     // When calculating the layout:
     // Then this never returned, the loop in SwFrame::GetNextFlyLeaf() never finished.
     calcLayout();
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testSplitFlyAnchorKeepWithNext)
+{
+    // Given a document with 2 pages, a split floating table on both pages:
+    createSwDoc("floattable-anchor-keep-with-next.docx");
+
+    // When calculating the layout:
+    calcLayout();
+
+    // Then make sure the pages have the expected amount of anchored objects:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    // Without the accompanying fix in place, this test would have failed, page 1 had no floating
+    // table, it was entirely on page 2.
+    CPPUNIT_ASSERT(pPage1->GetSortedObjs());
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage1Objs.size());
+    auto pPage2 = dynamic_cast<SwPageFrame*>(pPage1->GetNext());
+    CPPUNIT_ASSERT(pPage2);
+    CPPUNIT_ASSERT(pPage2->GetSortedObjs());
+    const SwSortedObjs& rPage2Objs = *pPage2->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), rPage2Objs.size());
 }
 }
 

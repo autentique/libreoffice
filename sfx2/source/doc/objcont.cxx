@@ -185,10 +185,9 @@ bool SfxObjectShell::CreatePreview_Impl( bool bFullContent, VirtualDevice* pDevi
     }
 
     LanguageType eLang;
-    SvtCTLOptions aCTLOptions;
-    if ( SvtCTLOptions::NUMERALS_HINDI == aCTLOptions.GetCTLTextNumerals() )
+    if ( SvtCTLOptions::NUMERALS_HINDI == SvtCTLOptions::GetCTLTextNumerals() )
         eLang = LANGUAGE_ARABIC_SAUDI_ARABIA;
-    else if ( SvtCTLOptions::NUMERALS_ARABIC == aCTLOptions.GetCTLTextNumerals() )
+    else if ( SvtCTLOptions::NUMERALS_ARABIC == SvtCTLOptions::GetCTLTextNumerals() )
         eLang = LANGUAGE_ENGLISH;
     else
         eLang = Application::GetSettings().GetLanguageTag().getLanguageType();
@@ -321,7 +320,7 @@ std::set<Color> SfxObjectShell::GetDocColors()
     return empty;
 }
 
-std::vector<Color> SfxObjectShell::GetThemeColors() { return std::vector<Color>(); }
+std::shared_ptr<model::ColorSet> SfxObjectShell::GetThemeColors() { return {}; }
 
 sfx::AccessibilityIssueCollection SfxObjectShell::runAccessibilityCheck()
 {

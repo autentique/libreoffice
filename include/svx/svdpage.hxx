@@ -141,6 +141,7 @@ public:
 
     size_t GetObjCount() const;
     SdrObject* GetObj(size_t nNum) const;
+    SdrObject* GetObjByName(std::u16string_view sName) const;
 
     /// linked page or linked group object
     virtual bool IsReadOnly() const;
@@ -326,6 +327,7 @@ private:
 
     SdrPageProperties& operator=(const SdrPageProperties& rCandidate) = delete;
 
+    void sendLOKitThemeChangedCallback();
 public:
     // construct/destruct
     SdrPageProperties(SdrPage& rSdrPage);

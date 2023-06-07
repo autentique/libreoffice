@@ -273,6 +273,9 @@ public:
     // try to detect if an empty/no-color-change area exists
     // at the start and return offset to it. Returns 0.0 if not.
     double detectPossibleOffsetAtStart() const;
+
+    // returns true if the color stops are symmetrical in color and offset, otherwise false.
+    bool isSymmetrical() const;
 };
 
 class BASEGFX_DLLPUBLIC BGradient final
@@ -335,9 +338,13 @@ public:
     css::awt::Gradient2 getAsGradient2() const;
 
     /// Tooling to handle border correction/integration and StartStopIntensity
-    void tryToRecreateBorder(basegfx::BColorStops* pAssociatedTransparencyStops);
+    void tryToRecreateBorder(basegfx::BColorStops* pAssociatedTransparencyStops = nullptr);
     void tryToApplyBorder();
     void tryToApplyStartEndIntensity();
+
+    // If a linear gradient is symmetrical it is converted to an axial gradient.
+    // Does nothing in other cases and for other gradient types.
+    void tryToConvertToAxial();
 };
 }
 

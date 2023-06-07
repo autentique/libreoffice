@@ -9,7 +9,7 @@ dnl in order to create a configure script.
 # several non-alphanumeric characters, those are split off and used only for the
 # ABOUTBOXPRODUCTVERSIONSUFFIX in openoffice.lst. Why that is necessary, no idea.
 
-AC_INIT([LibreOffice],[7.6.0.0.alpha1+],[],[],[http://documentfoundation.org/])
+AC_INIT([LibreOffice],[7.7.0.0.alpha0+],[],[],[http://documentfoundation.org/])
 
 dnl libnumbertext needs autoconf 2.68, but that can pick up autoconf268 just fine if it is installed
 dnl whereas aclocal (as run by autogen.sh) insists on using autoconf and fails hard
@@ -3317,8 +3317,9 @@ AC_SUBST(CCACHE_DEPEND_MODE)
 # sccache defaults are good enough
 if test "$CCACHE" != "" -a -z "$SCCACHE"; then
     # e.g. (/home/rene/.config/ccache/ccache.conf) max_size = 20.0G
+    # or (...) max_size = 20.0 G
     # -p works with both 4.2 and 4.4
-    ccache_size_msg=$([$CCACHE -p | $AWK /max_size/'{ print $4 }' | sed -e 's/\.[0-9]*//'])
+    ccache_size_msg=$([$CCACHE -p | $AWK /max_size/'{ print $4 $5 }' | sed -e 's/\.[0-9]*//'])
     ccache_size=$(echo "$ccache_size_msg" | grep "G" | sed -e 's/G.*$//')
     if test "$ccache_size" = ""; then
         ccache_size=$(echo "$ccache_size_msg" | grep "M" | sed -e 's/\ M.*$//')
@@ -3986,7 +3987,7 @@ map_vs_year_to_version()
     2022)
         vsversion=17;;
     2022preview)
-        vsversion=17.6;;
+        vsversion=17.7;;
     *)
         AC_MSG_ERROR([Assertion failure - invalid argument "$1" to map_vs_year_to_version()]);;
     esac
@@ -4106,7 +4107,7 @@ find_msvc()
             vcyear=2019
             vctoolset=v142
             ;;
-        17.0 | 17.6)
+        17.0 | 17.7)
             vcyear=2022
             vctoolset=v143
             ;;
@@ -4278,7 +4279,7 @@ if test "$_os" = "WINNT"; then
         # are always "better", we list them in reverse chronological order.
 
         case "$vcnumwithdot" in
-        16.0 | 17.0 | 17.6)
+        16.0 | 17.0 | 17.7)
             WINDOWS_SDK_ACCEPTABLE_VERSIONS="10.0 8.1A 8.1 8.0"
             ;;
         esac
@@ -6620,7 +6621,7 @@ find_msms()
 
     msmdir=
     case "$VCVER" in
-    16.0 | 17.0 | 17.6)
+    16.0 | 17.0 | 17.7)
         for l in `ls -1 $VC_PRODUCT_DIR/redist/MSVC/`; do
             my_msm_dir="$VC_PRODUCT_DIR/redist/MSVC/$l/MergeModules/"
             echo "$as_me:$LINENO: looking for $my_msm_dir${my_msm_file}])" >&5
@@ -6656,7 +6657,7 @@ find_msvc_x64_dlls()
 
     msvcdllpath="$VC_PRODUCT_DIR/redist/x64/Microsoft.VC${VCVER}.CRT"
     case "$VCVER" in
-    16.0 | 17.0 | 17.6)
+    16.0 | 17.0 | 17.7)
         for crtver in 141 142 143; do
             for l in `ls -1 $VC_PRODUCT_DIR/redist/MSVC/`; do
                 echo "$as_me:$LINENO: testing $VC_PRODUCT_DIR/redist/MSVC/$l/x64/Microsoft.VC$crtver.CRT" >&5
@@ -9950,7 +9951,7 @@ if test \( "$cross_compiling" = yes -a -z "$PYTHON_FOR_BUILD" \) -o "$enable_pyt
     SYSTEM_PYTHON=
     PYTHON_VERSION_MAJOR=3
     PYTHON_VERSION_MINOR=8
-    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.16
+    PYTHON_VERSION=${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.17
     if ! grep -q -i python.*${PYTHON_VERSION} ${SRC_ROOT}/download.lst; then
         AC_MSG_ERROR([PYTHON_VERSION ${PYTHON_VERSION} but no matching file in download.lst])
     fi

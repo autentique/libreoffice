@@ -64,7 +64,8 @@
 #include <validat.hxx>
 #include <scmod.hxx>
 #include <fillinfo.hxx>
-#include <boost/functional/hash.hpp>
+#include <comphelper/lok.hxx>
+#include <tabvwsh.hxx>
 
 ScPatternAttr::ScPatternAttr( SfxItemSet&& pItemSet, const OUString& rStyleName )
     :   SfxSetItem  ( ATTR_PATTERN, std::move(pItemSet) ),
@@ -436,15 +437,30 @@ void ScPatternAttr::GetFont(
             if ( aBackColor == COL_TRANSPARENT ||
                     eAutoMode == SC_AUTOCOL_IGNOREBACK || eAutoMode == SC_AUTOCOL_IGNOREALL )
             {
-                if ( eAutoMode == SC_AUTOCOL_PRINT )
-                    aBackColor = COL_WHITE;
-                else if ( pBackConfigColor )
+                if (!comphelper::LibreOfficeKit::isActive())
                 {
-                    // pBackConfigColor can be used to avoid repeated lookup of the configured color
-                    aBackColor = *pBackConfigColor;
+                    if ( eAutoMode == SC_AUTOCOL_PRINT )
+                        aBackColor = COL_WHITE;
+                    else if ( pBackConfigColor )
+                    {
+                        // pBackConfigColor can be used to avoid repeated lookup of the configured color
+                        aBackColor = *pBackConfigColor;
+                    }
+                    else
+                        aBackColor = SC_MOD()->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
                 }
                 else
-                    aBackColor = SC_MOD()->GetColorConfig().GetColorValue(svtools::DOCCOLOR).nColor;
+                {
+                    // Get document color from current view instead
+                    SfxViewShell* pSfxViewShell = SfxViewShell::Current();
+                    ScTabViewShell* pViewShell = dynamic_cast<ScTabViewShell*>(pSfxViewShell);
+                    if (pViewShell)
+                    {
+                        const ScViewData& pViewData = pViewShell->GetViewData();
+                        const ScViewOptions& aViewOptions = pViewData.GetOptions();
+                        aBackColor = aViewOptions.GetDocColor();
+                    }
+                }
             }
 
             //  get system text color for comparison
@@ -1415,8 +1431,25 @@ void ScPatternAttr::CalcHashCode() const
         mxHashCode = 0; // invalid
         return;
     }
-    mxHashCode = 1; // Set up seed so that an empty pattern does not have an (invalid) hash of 0.
-    boost::hash_range(*mxHashCode, rSet.GetItems_Impl(), rSet.GetItems_Impl() + compareSize);
+    // This is an unrolled hash function so the compiler/CPU can execute it in parallel,
+    // because we hit this hard when loading documents with lots of styles.
+    // Set up seed so that an empty pattern does not have an (invalid) hash of 0.
+    sal_uInt32 h1 = 1;
+    sal_uInt32 h2 = 1;
+    sal_uInt32 h3 = 1;
+    sal_uInt32 h4 = 1;
+    for (auto it = rSet.GetItems_Impl(), end = rSet.GetItems_Impl() + (compareSize / 4 * 4); it != end; )
+    {
+        h1 = 31 * h1 + reinterpret_cast<size_t>(*it);
+        ++it;
+        h2 = 31 * h2 + reinterpret_cast<size_t>(*it);
+        ++it;
+        h3 = 31 * h3 + reinterpret_cast<size_t>(*it);
+        ++it;
+        h4 = 31 * h4 + reinterpret_cast<size_t>(*it);
+        ++it;
+    }
+    mxHashCode = h1 + h2 + h3 + h4;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

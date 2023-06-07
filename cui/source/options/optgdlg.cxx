@@ -702,7 +702,7 @@ bool OfaViewTabPage::FillItemSet( SfxItemSet* )
             case 2: eSet = SFX_SYMBOLS_SIZE_LARGE; break;
             case 3: eSet = SFX_SYMBOLS_SIZE_32; break;
             default:
-                OSL_FAIL( "OfaViewTabPage::FillItemSet(): This state of m_xIconSizeLB should not be possible!" );
+                SAL_WARN("cui.options", "OfaViewTabPage::FillItemSet(): This state of m_xIconSizeLB should not be possible!");
         }
         aMiscOptions.SetSymbolsSize( eSet );
     }
@@ -718,7 +718,7 @@ bool OfaViewTabPage::FillItemSet( SfxItemSet* )
             case 1: eSet = ToolBoxButtonSize::Small; break;
             case 2: eSet = ToolBoxButtonSize::Large; break;
             default:
-                OSL_FAIL( "OfaViewTabPage::FillItemSet(): This state of m_xSidebarIconSizeLB should not be possible!" );
+                SAL_WARN("cui.options", "OfaViewTabPage::FillItemSet(): This state of m_xSidebarIconSizeLB should not be possible!");
         }
         officecfg::Office::Common::Misc::SidebarIconSize::set(static_cast<sal_Int16>(eSet), xChanges);
     }
@@ -734,7 +734,7 @@ bool OfaViewTabPage::FillItemSet( SfxItemSet* )
             case 1: eSet = ToolBoxButtonSize::Small; break;
             case 2: eSet = ToolBoxButtonSize::Large; break;
             default:
-                OSL_FAIL( "OfaViewTabPage::FillItemSet(): This state of m_xNotebookbarIconSizeLB should not be possible!" );
+                SAL_WARN("cui.options", "OfaViewTabPage::FillItemSet(): This state of m_xNotebookbarIconSizeLB should not be possible!");
         }
         officecfg::Office::Common::Misc::NotebookbarIconSize::set(static_cast<sal_Int16>(eSet), xChanges);
     }
@@ -855,13 +855,13 @@ void OfaViewTabPage::Reset( const SfxItemSet* )
 {
     SvtMiscOptions aMiscOptions;
 
-    if (aMiscOptions.GetSymbolsSize() != SFX_SYMBOLS_SIZE_AUTO)
+    if (SvtMiscOptions::GetSymbolsSize() != SFX_SYMBOLS_SIZE_AUTO)
     {
         nSizeLB_InitialSelection = 1;
 
-        if (aMiscOptions.GetSymbolsSize() == SFX_SYMBOLS_SIZE_LARGE)
+        if (SvtMiscOptions::GetSymbolsSize() == SFX_SYMBOLS_SIZE_LARGE)
             nSizeLB_InitialSelection = 2;
-        else if (aMiscOptions.GetSymbolsSize() == SFX_SYMBOLS_SIZE_32)
+        else if (SvtMiscOptions::GetSymbolsSize() == SFX_SYMBOLS_SIZE_32)
             nSizeLB_InitialSelection = 3;
     }
     m_xIconSizeLB->set_active( nSizeLB_InitialSelection );
@@ -893,7 +893,7 @@ void OfaViewTabPage::Reset( const SfxItemSet* )
         nStyleLB_InitialSelection = 0;
     }
     else {
-        const OUString& selected = aMiscOptions.GetIconTheme();
+        const OUString& selected = SvtMiscOptions::GetIconTheme();
         const vcl::IconThemeInfo& selectedInfo =
                 vcl::IconThemeInfo::FindIconThemeById(mInstalledIconThemes, selected);
         nStyleLB_InitialSelection = m_xIconStyleLB->find_text(selectedInfo.GetDisplayName());
@@ -1067,7 +1067,7 @@ OfaLanguagesTabPage::OfaLanguagesTabPage(weld::Container* pPage, weld::DialogCon
         std::sort(aUILanguages.begin(), aUILanguages.end(), [](const auto& l1, const auto& l2) {
             static const auto aSorter = comphelper::string::NaturalStringSorter(
                 comphelper::getProcessComponentContext(),
-                Application::GetSettings().GetLanguageTag().getLocale());
+                Application::GetSettings().GetUILanguageTag().getLocale());
             return aSorter.compare(l1.second, l2.second) < 0;
         });
 
@@ -1169,7 +1169,7 @@ OfaLanguagesTabPage::OfaLanguagesTabPage(weld::Container* pPage, weld::DialogCon
     m_xAsianSupportCB->set_sensitive(!bReadonly);
     SupportHdl(*m_xAsianSupportCB);
 
-    m_bOldCtl = pLangConfig->aCTLLanguageOptions.IsCTLFontEnabled();
+    m_bOldCtl = SvtCTLOptions::IsCTLFontEnabled();
     m_xCTLSupportCB->set_active(m_bOldCtl);
     m_xCTLSupportCB->save_state();
     bReadonly = pLangConfig->aCTLLanguageOptions.IsReadOnly(SvtCTLOptions::E_CTLFONT);

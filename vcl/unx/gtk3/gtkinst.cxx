@@ -1599,7 +1599,7 @@ Reference< XInterface > GtkInstance::CreateClipboard(const Sequence< Any >& argu
     if (m_aClipboards[eSelection].is())
         return m_aClipboards[eSelection];
 
-    Reference<XInterface> xClipboard(static_cast<cppu::OWeakObject *>(new VclGtkClipboard(eSelection)));
+    Reference<XInterface> xClipboard(getXWeak(new VclGtkClipboard(eSelection)));
     m_aClipboards[eSelection] = xClipboard;
     return xClipboard;
 }
@@ -1649,7 +1649,7 @@ void GtkInstDropTarget::initialize(const Sequence<Any>& rArguments)
     if (rArguments.getLength() < 2)
     {
         throw RuntimeException("DropTarget::initialize: Cannot install window event handler",
-                               static_cast<OWeakObject*>(this));
+                               getXWeak());
     }
 
     sal_IntPtr nFrame = 0;
@@ -1658,7 +1658,7 @@ void GtkInstDropTarget::initialize(const Sequence<Any>& rArguments)
     if (!nFrame)
     {
         throw RuntimeException("DropTarget::initialize: missing SalFrame",
-                               static_cast<OWeakObject*>(this));
+                               getXWeak());
     }
 
     m_pFrame = reinterpret_cast<GtkSalFrame*>(nFrame);
@@ -1785,7 +1785,7 @@ void GtkInstDragSource::initialize(const css::uno::Sequence<css::uno::Any >& rAr
     if (rArguments.getLength() < 2)
     {
         throw RuntimeException("DragSource::initialize: Cannot install window event handler",
-                               static_cast<OWeakObject*>(this));
+                               getXWeak());
     }
 
     sal_IntPtr nFrame = 0;
@@ -1794,7 +1794,7 @@ void GtkInstDragSource::initialize(const css::uno::Sequence<css::uno::Any >& rAr
     if (!nFrame)
     {
         throw RuntimeException("DragSource::initialize: missing SalFrame",
-                               static_cast<OWeakObject*>(this));
+                               getXWeak());
     }
 
     m_pFrame = reinterpret_cast<GtkSalFrame*>(nFrame);
@@ -8420,7 +8420,9 @@ public:
     {
         if (gtk_scrolled_window_get_overlay_scrolling(m_pScrolledWindow))
             return 0;
-        return gtk_widget_get_allocated_width(gtk_scrolled_window_get_vscrollbar(m_pScrolledWindow));
+        GtkRequisition size;
+        gtk_widget_get_preferred_size(gtk_scrolled_window_get_vscrollbar(m_pScrolledWindow), nullptr, &size);
+        return size.width;
     }
 
     virtual void set_scroll_thickness(int nThickness) override
@@ -17033,6 +17035,11 @@ public:
         gtk_widget_set_has_tooltip(GTK_WIDGET(m_pIconView), true);
     }
 
+    virtual void connect_get_property_tree_elem(const Link<const weld::json_prop_query&, bool>& /*rLink*/) override
+    {
+        //not implemented for the gtk variant
+    }
+
     virtual OUString get_selected_id() const override
     {
         assert(gtk_icon_view_get_model(m_pIconView) && "don't request selection when frozen");
@@ -17246,6 +17253,12 @@ public:
     {
         const GtkInstanceTreeIter& rGtkIter = static_cast<const GtkInstanceTreeIter&>(rIter);
         return get(rGtkIter.iter, m_nIdCol);
+    }
+
+    virtual OUString get_text(const weld::TreeIter& rIter) const override
+    {
+        const GtkInstanceTreeIter& rGtkIter = static_cast<const GtkInstanceTreeIter&>(rIter);
+        return get(rGtkIter.iter, m_nTextCol);
     }
 
     virtual void disable_notify_events() override

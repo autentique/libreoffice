@@ -930,6 +930,7 @@ void OfaTreeOptionsDialog::SelectHdl_Impl()
         {
             SvtViewOptions aTabPageOpt( EViewType::TabPage, OUString::number( pPageInfo->m_nPageId) );
             pPageInfo->m_xPage->SetUserData( GetViewOptUserItem( aTabPageOpt ) );
+            pPageInfo->m_xPage->SetFrame( m_xFrame );
             pPageInfo->m_xPage->Reset( &*pGroupInfo->m_pInItemSet );
         }
     }
@@ -1206,7 +1207,7 @@ void OfaTreeOptionsDialog::ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet 
 
         default:
         {
-            OSL_FAIL( "Unhandled option in ApplyItemSet" );
+            SAL_WARN("cui.options", "Unhandled option in ApplyItemSet");
         }
         break;
     }
@@ -1276,7 +1277,7 @@ void OfaTreeOptionsDialog::ApplyLanguageOptions(const SfxItemSet& rSet)
     }
 }
 
-static OUString getCurrentFactory_Impl( const Reference< XFrame >& _xFrame )
+OUString OfaTreeOptionsDialog::getCurrentFactory_Impl( const Reference< XFrame >& _xFrame )
 {
     OUString sIdentifier;
     Reference < XFrame > xCurrentFrame( _xFrame );
@@ -1308,6 +1309,7 @@ static OUString getCurrentFactory_Impl( const Reference< XFrame >& _xFrame )
 
 void OfaTreeOptionsDialog::Initialize( const Reference< XFrame >& _xFrame )
 {
+    m_xFrame = _xFrame;
     sal_uInt16 nGroup = 0;
 
     SvtOptionsDialogOptions aOptionsDlgOpt;
@@ -1367,7 +1369,6 @@ void OfaTreeOptionsDialog::Initialize( const Reference< XFrame >& _xFrame )
     }
 
     // Language options
-    SvtCTLOptions aCTLLanguageOptions;
     if ( !lcl_isOptionHidden( SID_LANGUAGE_OPTIONS, aOptionsDlgOpt ) )
     {
         setGroupName(u"LanguageSettings", CuiResId(SID_LANGUAGE_OPTIONS_RES[0].first));
@@ -1387,7 +1388,7 @@ void OfaTreeOptionsDialog::Initialize( const Reference< XFrame >& _xFrame )
 
             if ( ( RID_SVXPAGE_JSEARCH_OPTIONS != nPageId || SvtCJKOptions::IsJapaneseFindEnabled() ) &&
                  ( RID_SVXPAGE_ASIAN_LAYOUT != nPageId    || SvtCJKOptions::IsAsianTypographyEnabled() ) &&
-                 ( RID_SVXPAGE_OPTIONS_CTL != nPageId     || aCTLLanguageOptions.IsCTLFontEnabled() ) )
+                 ( RID_SVXPAGE_OPTIONS_CTL != nPageId     || SvtCTLOptions::IsCTLFontEnabled() ) )
                 AddTabPage(nPageId, CuiResId(SID_LANGUAGE_OPTIONS_RES[i].first), nGroup);
         }
     }
@@ -1418,7 +1419,7 @@ void OfaTreeOptionsDialog::Initialize( const Reference< XFrame >& _xFrame )
                     if ( lcl_isOptionHidden( nPageId, aOptionsDlgOpt ) )
                         continue;
                     if ( ( RID_SW_TP_STD_FONT_CJK != nPageId || SvtCJKOptions::IsCJKFontEnabled() ) &&
-                         ( RID_SW_TP_STD_FONT_CTL != nPageId || aCTLLanguageOptions.IsCTLFontEnabled() ) &&
+                         ( RID_SW_TP_STD_FONT_CTL != nPageId || SvtCTLOptions::IsCTLFontEnabled() ) &&
                          ( RID_SW_TP_MAILCONFIG != nPageId || MailMergeCfgIsEmailSupported() ) )
                         AddTabPage( nPageId, CuiResId(SID_SW_EDITOPTIONS_RES[i].first), nGroup );
                 }

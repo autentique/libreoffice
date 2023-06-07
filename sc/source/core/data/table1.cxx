@@ -756,13 +756,11 @@ bool ScTable::GetPrintAreaHor( SCROW nStartRow, SCROW nEndRow,
 bool ScTable::GetPrintAreaVer( SCCOL nStartCol, SCCOL nEndCol,
                                 SCROW& rEndRow, bool bNotes ) const
 {
-    nStartCol = std::min<SCCOL>( nStartCol, aCol.size()-1 );
-    nEndCol   = std::min<SCCOL>( nEndCol,   aCol.size()-1 );
     bool bFound = false;
     SCROW nMaxY = 0;
     SCCOL i;
 
-    for (i=nStartCol; i<=nEndCol; i++)              // Test attribute
+    for (i=nStartCol; i<=nEndCol && i < aCol.size(); i++)              // Test attribute
     {
         SCROW nLastRow;
         if (aCol[i].GetLastVisibleAttr( nLastRow ))
@@ -773,7 +771,7 @@ bool ScTable::GetPrintAreaVer( SCCOL nStartCol, SCCOL nEndCol,
         }
     }
 
-    for (i=nStartCol; i<=nEndCol; i++)              // Test data
+    for (i=nStartCol; i<=nEndCol && i < aCol.size(); i++)              // Test data
     {
         if (!aCol[i].IsEmptyData())
         {
@@ -1851,8 +1849,13 @@ void ScTable::UpdateReference(
     }
     else
     {
-        for( SCCOL col : GetAllocatedColumnsRange( 0, rDocument.MaxCol()))
-            bUpdated |= aCol[col].UpdateReference(rCxt, pUndoDoc);
+        // When deleting row(s) or column(s), allocate the last column
+        // before updating the references
+        if (nDx < 0 || nDy < 0)
+            CreateColumnIfNotExists(rDocument.MaxCol());
+
+        for (SCCOL col : GetColumnsRange(0, rDocument.MaxCol()))
+            bUpdated |= CreateColumnIfNotExists(col).UpdateReference(rCxt, pUndoDoc);
     }
 
     if ( bIncludeDraw )

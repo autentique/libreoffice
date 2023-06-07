@@ -1870,7 +1870,7 @@ void ScFormatShell::GetNumFormatState( SfxItemSet& rSet )
                         if( nFormatCategory == -1 )
                             rSet.InvalidateItem( nWhich );
                         else
-                            rSet.Put( SfxInt16Item( nWhich, nFormatCategory ) );
+                            rSet.Put( SfxUInt16Item( nWhich, nFormatCategory ) );
                     }
                     else
                     {
@@ -1972,7 +1972,7 @@ void ScFormatShell::GetTextDirectionState( SfxItemSet& rSet )
             eBidiDir = EEHorizontalTextDirection::L2R;
     }
 
-    bool bDisableCTLFont = !SvtCTLOptions().IsCTLFontEnabled();
+    bool bDisableCTLFont = !SvtCTLOptions::IsCTLFontEnabled();
     bool bDisableVerticalText = !SvtCJKOptions::IsVerticalTextEnabled();
 
     SfxWhichIter aIter( rSet );

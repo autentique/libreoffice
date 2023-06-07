@@ -97,7 +97,7 @@ private:
 
 protected:
     xmlBufferPtr mpXmlBuffer;
-    const char* mpFilter;
+    OUString mpFilter;
 
     sal_uInt32 mnStartTime;
 
@@ -107,7 +107,7 @@ protected:
     void paste(std::u16string_view aFilename, OUString aInstance, css::uno::Reference<css::text::XTextRange> const& xTextRange);
 
 public:
-    SwModelTestBase(const OUString& pTestDocumentPath = OUString(), const char* pFilter = "");
+    SwModelTestBase(const OUString& pTestDocumentPath = OUString(), const OUString& pFilter = {});
 
 protected:
     /**
@@ -157,22 +157,6 @@ protected:
     /// Override this function if some special file-specific setup is needed during export test: after load, but before save.
     virtual void postLoad(const char* /*pFilename*/)
     {
-    }
-
-    /**
-     * Override this function if calc layout is not needed
-     */
-    virtual bool mustCalcLayoutOf(const char* /*filename*/)
-    {
-        return true;
-    }
-
-    /**
-     * Override this function if validation is wanted
-     */
-    virtual bool mustValidate(const char* /*filename*/) const
-    {
-        return false;
     }
 
     void dumpLayout(const css::uno::Reference< css::lang::XComponent > & rComponent);
@@ -277,15 +261,12 @@ protected:
 
     void header();
 
-    void reload(const char* pFilter, const char* pName, const char* pPassword = nullptr);
-
-    /// Save the loaded document to a tempfile. Can be used to check the resulting docx/odt directly as a ZIP file.
-    void save(const OUString& aFilterName, const char* pName = nullptr, const char* pPassword = nullptr);
+    void saveAndReload(const OUString& pFilter, const char* pPassword = nullptr);
 
     /// Combines load() and save().
-    void loadAndSave(const char* pName);
+    void loadAndSave(const char* pName, const char* pPassword = nullptr);
 
-    /// Combines load() and reload().
+    /// Combines load() and saveAndReload().
     void loadAndReload(const char* pName);
 
     void finish();
@@ -346,13 +327,7 @@ protected:
     void emulateTyping(SwXTextDocument& rTextDoc, const std::u16string_view& rStr);
 
 private:
-    void loadURL(OUString const& rURL, const char* pName, const char* pPassword);
-
-    void load(const char* pName, const char* pPassword = nullptr)
-    {
-        return loadURL(createFileURL(OUString::createFromAscii(pName)), pName, pPassword);
-
-    }
+    void loadURL(OUString const& rURL, const char* pPassword = nullptr);
 };
 
 /**

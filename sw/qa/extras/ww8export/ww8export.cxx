@@ -67,39 +67,6 @@ class Test : public SwModelTestBase
 {
 public:
     Test() : SwModelTestBase("/sw/qa/extras/ww8export/data/", "MS Word 97") {}
-
-    /**
-     * Validation handling
-     */
-    bool mustValidate(const char* filename) const override
-    {
-        const std::vector<const char*> aDenylist =
-        {
-            // the following doc exports currently don't pass binary validation
-            "tdf56321_flipImage_both.doc",
-            "cjklist30.doc",
-            "cjklist31.doc",
-            "cjklist34.doc",
-            "cjklist35.doc",
-            "fdo77454.doc",
-            "new-page-styles.doc",
-            "tdf36117_verticalAdjustment.doc",
-            "bnc636128.doc",
-            "tdf92281.doc",
-            "fdo59530.doc",
-            "fdo56513.doc",
-            "tscp.doc",
-            "zoom.doc",
-            "comments-nested.doc",
-            "commented-table.doc",
-            "zoomtype.doc",
-            "n325936.doc",
-            "first-header-footer.doc"
-        };
-
-        // Don't bother with non-.doc files; weed out denylisted .doc files
-        return (o3tl::ends_with(filename, ".doc") && std::find(aDenylist.begin(), aDenylist.end(), filename) == aDenylist.end());
-    }
 };
 
 DECLARE_WW8EXPORT_TEST(testN757910, "n757910.doc")
@@ -575,16 +542,21 @@ DECLARE_WW8EXPORT_TEST(testFdo81102, "fdo81102.doc")
 DECLARE_WW8EXPORT_TEST(testBnc787942, "bnc787942.doc")
 {
     // The frame ended up on the second page instead of first.
-
     // this is on page 1 in Word
     parseDump("/root/page[1]/body/txt[4]/anchored");
 
     CPPUNIT_ASSERT_EQUAL(text::WrapTextMode_PARALLEL, getProperty<text::WrapTextMode>(getShape(1), "Surround"));
+    CPPUNIT_ASSERT_EQUAL(text::RelOrientation::PAGE_FRAME, getProperty<sal_Int16>(getShape(1), "HoriOrientRelation"));
 }
 
 DECLARE_WW8EXPORT_TEST(testTdf133504_wrapNotBeside, "tdf133504_wrapNotBeside.doc")
 {
     CPPUNIT_ASSERT_EQUAL(text::WrapTextMode_NONE, getProperty<text::WrapTextMode>(getShape(1), "Surround"));
+}
+
+DECLARE_WW8EXPORT_TEST(testTdf36711_inlineFrames, "tdf36711_inlineFrames.doc")
+{
+    CPPUNIT_ASSERT_EQUAL(text::RelOrientation::FRAME, getProperty<sal_Int16>(getShape(1), "VertOrientRelation"));
 }
 
 DECLARE_WW8EXPORT_TEST(testLayoutHanging, "fdo68967.doc")
@@ -777,7 +749,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf112346)
     };
     createSwDoc("tdf112346.doc");
     verify();
-    reload(mpFilter, "tdf112346.doc");
+    saveAndReload("MS Word 97");
     verify();
 }
 
@@ -1543,7 +1515,7 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf94386)
         SfxRequest aRequest(FN_ENVELOP, SfxCallMode::SYNCHRON, aSet);
         SW_MOD()->ExecOther(aRequest);
     }
-    reload(mpFilter, "tdf94386.odt");
+    saveAndReload("MS Word 97");
 
     // check that the first and next page use different page styles
     uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);

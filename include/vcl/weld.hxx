@@ -748,10 +748,16 @@ public:
         = 0;
     virtual void insert_vector(const std::vector<weld::ComboBoxEntry>& rItems, bool bKeepExisting)
         = 0;
+    void insert(int pos, const weld::ComboBoxEntry& rItem)
+    {
+        insert(pos, rItem.sString, rItem.sId.isEmpty() ? nullptr : &rItem.sId,
+               rItem.sImage.isEmpty() ? nullptr : &rItem.sImage, nullptr);
+    }
     void insert_text(int pos, const OUString& rStr)
     {
         insert(pos, rStr, nullptr, nullptr, nullptr);
     }
+    void append(const weld::ComboBoxEntry& rItem) { insert(-1, rItem); }
     void append_text(const OUString& rStr) { insert(-1, rStr, nullptr, nullptr, nullptr); }
     void append(const OUString& rId, const OUString& rStr)
     {
@@ -1376,6 +1382,8 @@ public:
     using Widget::get_sensitive;
 };
 
+typedef std::tuple<tools::JsonWriter&, const TreeIter&, std::string_view> json_prop_query;
+
 class VCL_DLLPUBLIC IconView : virtual public Widget
 {
     friend class ::LOKTrigger;
@@ -1388,6 +1396,7 @@ protected:
     Link<IconView&, bool> m_aItemActivatedHdl;
     Link<const CommandEvent&, bool> m_aCommandHdl;
     Link<const TreeIter&, OUString> m_aQueryTooltipHdl;
+    Link<const json_prop_query&, bool> m_aGetPropertyTreeElemHdl;
 
     void signal_selection_changed() { m_aSelectionChangeHdl.Call(*this); }
     bool signal_item_activated() { return m_aItemActivatedHdl.Call(*this); }
@@ -1442,6 +1451,12 @@ public:
         m_aQueryTooltipHdl = rLink;
     }
 
+    // 0: json writer, 1: TreeIter, 2: property. returns true if supported
+    virtual void connect_get_property_tree_elem(const Link<const json_prop_query&, bool>& rLink)
+    {
+        m_aGetPropertyTreeElemHdl = rLink;
+    }
+
     virtual OUString get_selected_id() const = 0;
 
     virtual void clear() = 0;
@@ -1461,6 +1476,7 @@ public:
     virtual void set_cursor(const TreeIter& rIter) = 0;
     virtual bool get_iter_first(TreeIter& rIter) const = 0;
     virtual OUString get_id(const TreeIter& rIter) const = 0;
+    virtual OUString get_text(const TreeIter& rIter) const = 0;
     virtual void scroll_to_item(const TreeIter& rIter) = 0;
 
     // call func on each selected element until func returns true or we run out of elements
@@ -1919,10 +1935,7 @@ public:
         if (!bKeepExisting)
             m_xTreeView->clear();
         for (const auto& rItem : rItems)
-        {
-            m_xTreeView->insert(-1, rItem.sString, rItem.sId.isEmpty() ? nullptr : &rItem.sId,
-                                rItem.sImage.isEmpty() ? nullptr : &rItem.sImage, nullptr);
-        }
+            append(rItem);
         m_xTreeView->thaw();
     }
 

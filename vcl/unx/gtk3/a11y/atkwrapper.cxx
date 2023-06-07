@@ -377,6 +377,8 @@ wrapper_get_name( AtkObject *atk_obj )
                 if( atk_obj->name )
                     g_free(atk_obj->name);
                 atk_obj->name = g_strdup(aName.getStr());
+
+                return atk_obj->name;
             }
         }
         catch(const uno::Exception&) {
@@ -404,6 +406,8 @@ wrapper_get_description( AtkObject *atk_obj )
 
             g_free(atk_obj->description);
             atk_obj->description = g_strdup(aDescription.getStr());
+
+            return atk_obj->description;
         }
         catch(const uno::Exception&) {
             g_warning( "Exception in getAccessibleDescription()" );

@@ -93,7 +93,7 @@ MenuBarManager::MenuBarManager(
     , m_bHasMenuBar( bHasMenuBar )
     , m_xContext(rxContext)
     , m_xURLTransformer(_xURLTransformer)
-    , m_sIconTheme( SvtMiscOptions().GetIconTheme() )
+    , m_sIconTheme( SvtMiscOptions::GetIconTheme() )
     , m_aAsyncSettingsTimer( "framework::MenuBarManager::Deactivate m_aAsyncSettingsTimer" )
 {
     m_xPopupMenuControllerFactory = frame::thePopupMenuControllerFactory::get(m_xContext);
@@ -563,7 +563,7 @@ IMPL_LINK( MenuBarManager, Activate, Menu *, pMenu, bool )
     const StyleSettings& rSettings = Application::GetSettings().GetStyleSettings();
     bool bShowMenuImages     = rSettings.GetUseImagesInMenus();
     bool bShowShortcuts      = m_bHasMenuBar || rSettings.GetContextMenuShortcuts();
-    bool bHasDisabledEntries = SvtCommandOptions().HasEntries( SvtCommandOptions::CMDOPTION_DISABLED );
+    bool bHasDisabledEntries = SvtCommandOptions().HasEntriesDisabled();
 
     SolarMutexGuard g;
 
@@ -580,7 +580,7 @@ IMPL_LINK( MenuBarManager, Activate, Menu *, pMenu, bool )
     m_bActive = true;
 
     // Check if some modes have changed so we have to update our menu images
-    OUString sIconTheme = SvtMiscOptions().GetIconTheme();
+    OUString sIconTheme = SvtMiscOptions::GetIconTheme();
 
     if ( m_bRetrieveImages ||
          bShowMenuImages != m_bShowMenuImages ||
@@ -657,7 +657,7 @@ IMPL_LINK( MenuBarManager, Activate, Menu *, pMenu, bool )
 
                 if ( bHasDisabledEntries )
                 {
-                    if ( aCmdOptions.Lookup( SvtCommandOptions::CMDOPTION_DISABLED, aTargetURL.Path ))
+                    if ( aCmdOptions.LookupDisabled( aTargetURL.Path ))
                         pMenu->HideItem( menuItemHandler->nItemId );
                 }
 
@@ -840,7 +840,7 @@ bool MenuBarManager::MustBeHidden( PopupMenu* pPopupMenu, const Reference< XURLT
                 aTargetURL.Complete = pPopupMenu->GetItemCommand( nId );
                 rTransformer->parseStrict( aTargetURL );
 
-                if ( aCmdOptions.Lookup( SvtCommandOptions::CMDOPTION_DISABLED, aTargetURL.Path ))
+                if ( aCmdOptions.LookupDisabled( aTargetURL.Path ))
                     ++nHideCount;
             }
         }
@@ -1241,7 +1241,7 @@ void MenuBarManager::FillMenuWithConfiguration(
                                      AddonsOptions().GetMergeMenuInstructions(),
                                      rModuleIdentifier );
 
-    bool bHasDisabledEntries = SvtCommandOptions().HasEntries( SvtCommandOptions::CMDOPTION_DISABLED );
+    bool bHasDisabledEntries = SvtCommandOptions().HasEntriesDisabled();
     if ( !bHasDisabledEntries )
         return;
 

@@ -94,6 +94,8 @@
 #include <scabstdlg.hxx>
 #include <formula/errorcodes.hxx>
 #include <documentlinkmgr.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#include <sfx2/lokhelper.hxx>
 
 #define SC_IDLE_MIN     150
 #define SC_IDLE_MAX     3000
@@ -151,6 +153,9 @@ ScModule::ScModule( SfxObjectFactory* pFact ) :
     ScGlobal::InitTextHeight( m_pMessagePool.get() );
 
     StartListening( *SfxGetpApp() );       // for SfxHintId::Deinitializing
+
+    // Initialize the color config
+    GetColorConfig();
 }
 
 ScModule::~ScModule()
@@ -200,6 +205,28 @@ void ScModule::ConfigurationChanged( utl::ConfigurationBroadcaster* p, Configura
                     }
                     pObjSh = SfxObjectShell::GetNext( *pObjSh );
                 }
+            }
+        }
+
+        if (comphelper::LibreOfficeKit::isActive() && m_pColorConfig)
+        {
+            SfxViewShell* pSfxViewShell = SfxViewShell::Current();
+            ScTabViewShell* pViewShell = dynamic_cast<ScTabViewShell*>(pSfxViewShell);
+
+            if (pViewShell)
+            {
+                ScViewData& pViewData = pViewShell->GetViewData();
+                ScViewOptions aViewOptions = pViewData.GetOptions();
+                Color aFillColor(m_pColorConfig->GetColorValue(svtools::DOCCOLOR).nColor);
+                aViewOptions.SetDocColor(aFillColor);
+                aViewOptions.SetColorSchemeName(svtools::ColorConfig::GetCurrentSchemeName());
+                pViewData.SetOptions(aViewOptions);
+                ScModelObj* pScModelObj = comphelper::getFromUnoTunnel<ScModelObj>(SfxObjectShell::Current()->GetModel());
+                SfxLokHelper::notifyViewRenderState(SfxViewShell::Current(), pScModelObj);
+                // In Online, the document color is the one used for the background, contrary to
+                // Writer and Draw that use the application background color.
+                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_APPLICATION_BACKGROUND_COLOR,
+                        aFillColor.AsRGBHexString().toUtf8());
             }
         }
 
@@ -418,9 +445,7 @@ void ScModule::Execute( SfxRequest& rReq )
         case SID_PSZ_FUNCTION:
             if (pReqArgs)
             {
-                auto const & p = pReqArgs->Get(SID_PSZ_FUNCTION);
-                assert(dynamic_cast<const SfxUInt32Item*>(&p) && "wrong Parameter");
-                const SfxUInt32Item& rItem = static_cast<const SfxUInt32Item&>(p);
+                const SfxUInt32Item & rItem = pReqArgs->Get(SID_PSZ_FUNCTION);
 
                 ScAppOptions aNewOpts( GetAppOptions() );
                 aNewOpts.SetStatusFunc( rItem.GetValue() );
@@ -903,7 +928,7 @@ SvtUserOptions&  ScModule::GetUserOptions()
 
 LanguageType ScModule::GetOptDigitLanguage()
 {
-    SvtCTLOptions::TextNumerals eNumerals = GetCTLOptions().GetCTLTextNumerals();
+    SvtCTLOptions::TextNumerals eNumerals = SvtCTLOptions::GetCTLTextNumerals();
     return ( eNumerals == SvtCTLOptions::NUMERALS_ARABIC ) ? LANGUAGE_ENGLISH_US :
            ( eNumerals == SvtCTLOptions::NUMERALS_HINDI)   ? LANGUAGE_ARABIC_SAUDI_ARABIA :
                                                              LANGUAGE_SYSTEM;

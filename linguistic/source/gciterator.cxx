@@ -345,16 +345,15 @@ OUString GrammarCheckingIterator::GetOrCreateDocId(
 
 
 void GrammarCheckingIterator::AddEntry(
-    const uno::WeakReference< text::XFlatParagraphIterator >& xFlatParaIterator,
-    const uno::WeakReference< text::XFlatParagraph >& xFlatPara,
+    const uno::Reference< text::XFlatParagraphIterator >& xFlatParaIterator,
+    const uno::Reference< text::XFlatParagraph >& xFlatPara,
     const OUString & rDocId,
     sal_Int32 nStartIndex,
     bool bAutomatic )
 {
     // we may not need/have a xFlatParaIterator (e.g. if checkGrammarAtPos was called)
     // but we always need a xFlatPara...
-    uno::Reference< text::XFlatParagraph > xPara( xFlatPara );
-    if (!xPara.is())
+    if (!xFlatPara.is())
         return;
 
     FPEntry aNewFPEntry;
@@ -478,12 +477,9 @@ void GrammarCheckingIterator::ProcessResult(
     if (bContinueWithNextPara)
     {
         // we need to continue with the next paragraph
-        uno::Reference< text::XFlatParagraph > xFlatParaNext;
         if (rxFlatParagraphIterator.is())
-            xFlatParaNext = rxFlatParagraphIterator->getNextPara();
-        {
-            AddEntry( rxFlatParagraphIterator, xFlatParaNext, rRes.aDocumentIdentifier, 0, bIsAutomaticChecking );
-        }
+            AddEntry(rxFlatParagraphIterator, rxFlatParagraphIterator->getNextPara(),
+                     rRes.aDocumentIdentifier, 0, bIsAutomaticChecking);
     }
 }
 

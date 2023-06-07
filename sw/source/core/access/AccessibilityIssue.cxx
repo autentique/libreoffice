@@ -10,13 +10,17 @@
 
 #include <AccessibilityIssue.hxx>
 #include <AccessibilityCheckStrings.hrc>
+#include <drawdoc.hxx>
 #include <edtwin.hxx>
+#include <IDocumentDrawModelAccess.hxx>
+#include <OnlineAccessibilityCheck.hxx>
 #include <swtypes.hxx>
 #include <wrtsh.hxx>
 #include <docsh.hxx>
 #include <view.hxx>
 #include <comphelper/lok.hxx>
 #include <cui/dlgname.hxx>
+#include <svx/svdpage.hxx>
 
 namespace sw
 {
@@ -38,7 +42,7 @@ void AccessibilityIssue::setObjectID(OUString const& rID) { m_sObjectID = rID; }
 
 bool AccessibilityIssue::canGotoIssue() const
 {
-    if (m_eIssueObject != IssueObject::UNKNOWN)
+    if (m_pDoc && m_eIssueObject != IssueObject::UNKNOWN)
         return true;
     return false;
 }
@@ -55,6 +59,14 @@ void AccessibilityIssue::gotoIssue() const
         {
             SwWrtShell* pWrtShell = m_pDoc->GetDocShell()->GetWrtShell();
             pWrtShell->GotoFly(m_sObjectID, FLYCNTTYPE_ALL, true);
+            if (comphelper::LibreOfficeKit::isActive())
+                pWrtShell->ShowCursor();
+        }
+        break;
+        case IssueObject::SHAPE:
+        {
+            SwWrtShell* pWrtShell = m_pDoc->GetDocShell()->GetWrtShell();
+            pWrtShell->GotoDrawingObject(m_sObjectID);
             if (comphelper::LibreOfficeKit::isActive())
                 pWrtShell->ShowCursor();
         }
@@ -92,7 +104,8 @@ void AccessibilityIssue::gotoIssue() const
 
 bool AccessibilityIssue::canQuickFixIssue() const
 {
-    return m_eIssueObject == IssueObject::GRAPHIC || m_eIssueObject == IssueObject::OLE;
+    return m_eIssueObject == IssueObject::GRAPHIC || m_eIssueObject == IssueObject::OLE
+           || m_eIssueObject == IssueObject::SHAPE;
 }
 
 void AccessibilityIssue::quickFixIssue() const
@@ -116,9 +129,25 @@ void AccessibilityIssue::quickFixIssue() const
             }
         }
         break;
+        case IssueObject::SHAPE:
+        {
+            OUString aDesc = SwResId(STR_ENTER_ALT);
+            SvxNameDialog aNameDialog(m_pParent, "", aDesc);
+            if (aNameDialog.run() == RET_OK)
+            {
+                SwWrtShell* pWrtShell = m_pDoc->GetDocShell()->GetWrtShell();
+                auto pPage = pWrtShell->getIDocumentDrawModelAccess().GetDrawModel()->GetPage(0);
+                SdrObject* pObj = pPage->GetObjByName(m_sObjectID);
+                if (pObj)
+                    pObj->SetTitle(aNameDialog.GetName());
+            }
+        }
+        break;
         default:
             break;
     }
+    if (m_pNode)
+        m_pDoc->getOnlineAccessibilityCheck()->resetAndQueue(m_pNode);
 }
 
 } // end sw namespace

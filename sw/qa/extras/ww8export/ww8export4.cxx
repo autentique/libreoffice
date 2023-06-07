@@ -131,7 +131,7 @@ CPPUNIT_TEST_FIXTURE(Test, testDontBreakWrappedTables)
     }
 
     // When saving to doc:
-    reload(mpFilter, "dont-break-wrapped-tables.doc");
+    saveAndReload("MS Word 97");
 
     // Then make sure the compat flag is serialized:
     SwDoc* pDoc = getSwDoc();
@@ -140,6 +140,11 @@ CPPUNIT_TEST_FIXTURE(Test, testDontBreakWrappedTables)
     // Without the accompanying fix in place, this test would have failed, the compat flag was not
     // set.
     CPPUNIT_ASSERT(bDontBreakWrappedTables);
+}
+
+DECLARE_WW8EXPORT_TEST(testTdf104704_mangledFooter, "tdf104704_mangledFooter.odt")
+{
+    CPPUNIT_ASSERT_EQUAL(2, getPages());
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

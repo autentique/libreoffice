@@ -119,6 +119,7 @@ class NoTextNodeAltTextCheck : public NodeCheck
             pIssue->setDoc(pNoTextNode->GetDoc());
             pIssue->setIssueObject(IssueObject::GRAPHIC);
             pIssue->setObjectID(pNoTextNode->GetFlyFormat()->GetName());
+            pIssue->setNode(pNoTextNode);
         }
     }
 
@@ -1361,7 +1362,11 @@ void AccessibilityCheck::checkObject(SdrObject* pObject)
         {
             OUString sName = pObject->GetName();
             OUString sIssueText = SwResId(STR_NO_ALT).replaceAll("%OBJECT_NAME%", sName);
-            lclAddIssue(m_aIssueCollection, sIssueText, sfx::AccessibilityIssueID::NO_ALT_SHAPE);
+            auto pIssue = lclAddIssue(m_aIssueCollection, sIssueText,
+                                      sfx::AccessibilityIssueID::NO_ALT_SHAPE);
+            pIssue->setIssueObject(IssueObject::SHAPE);
+            pIssue->setObjectID(pObject->GetName());
+            pIssue->setDoc(*m_pDoc);
         }
     }
 }

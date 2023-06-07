@@ -17,17 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifndef INCLUDED_SAX_FASTSAXDLLAPI_H
-#define INCLUDED_SAX_FASTSAXDLLAPI_H
+#pragma once
 
-#include <sal/types.h>
+#include "svgnode.hxx"
+#include "svgstyleattributes.hxx"
+#include <basegfx/matrix/b2dhommatrix.hxx>
 
-#if defined FASTSAX_DLLIMPLEMENTATION
-#define FASTSAX_DLLPUBLIC SAL_DLLPUBLIC_EXPORT
-#else
-#define FASTSAX_DLLPUBLIC SAL_DLLPUBLIC_IMPORT
-#endif
+namespace svgio::svgreader
+{
+class SvgFilterNode final : public SvgNode
+{
+public:
+    SvgFilterNode(SvgDocument& rDocument, SvgNode* pParent);
+    virtual ~SvgFilterNode() override;
 
-#endif
+    void apply(drawinglayer::primitive2d::Primitive2DContainer& rTarget) const;
+};
+
+} // end of namespace svgio::svgreader
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
