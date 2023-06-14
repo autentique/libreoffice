@@ -352,6 +352,48 @@ void DomainMapper::lcl_attribute(Id nName, Value & val)
                 m_pImpl->GetTopContext()->Insert(PROP_CHAR_UNDERLINE_COLOR, uno::Any( nIntValue ) );
             }
             break;
+        case NS_ooxml::LN_CT_Underline_themeColor:
+        case NS_ooxml::LN_CT_Underline_themeTint:
+        case NS_ooxml::LN_CT_Underline_themeShade:
+            if (m_pImpl->GetTopContext())
+            {
+                uno::Reference<util::XComplexColor> xComplexColor;
+                model::ComplexColor aComplexColor;
+
+                PropertyMapPtr pTopContext = m_pImpl->GetTopContext();
+                std::optional<PropertyMap::Property> aValue;
+                if (pTopContext && (aValue = pTopContext->getProperty(PROP_CHAR_UNDERLINE_COMPLEX_COLOR)))
+                {
+                    aValue->second >>= xComplexColor;
+                    if (xComplexColor.is())
+                        aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+                }
+
+                if (nName == NS_ooxml::LN_CT_Underline_themeColor)
+                {
+                    auto eThemeColorType = TDefTableHandler::getThemeColorTypeIndex(nIntValue);
+                    aComplexColor.setSchemeColor(eThemeColorType);
+                }
+                else if (nName == NS_ooxml::LN_CT_Underline_themeTint)
+                {
+                    if (nIntValue > 0)
+                    {
+                        sal_Int16 nTransformedValue = sal_Int16((255.0 - nIntValue) * 10000.0 / 255.0);
+                        aComplexColor.addTransformation({model::TransformationType::Tint, sal_Int16(nTransformedValue)});
+                    }
+                }
+                else if (nName == NS_ooxml::LN_CT_Underline_themeShade)
+                {
+                    if (nIntValue > 0)
+                    {
+                        sal_Int16 nTransformedValue = sal_Int16((255.0 - nIntValue) * 10000.0 / 255.0);
+                        aComplexColor.addTransformation({model::TransformationType::Shade, sal_Int16(nTransformedValue)});
+                    }
+                }
+                xComplexColor = model::color::createXComplexColor(aComplexColor);
+                m_pImpl->GetTopContext()->Insert(PROP_CHAR_UNDERLINE_COMPLEX_COLOR, uno::Any(xComplexColor));
+            }
+            break;
 
         case NS_ooxml::LN_CT_TabStop_val:
             if (sal::static_int_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_TabJc_clear)
@@ -1553,25 +1595,30 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         {
             auto pBorderHandler = std::make_shared<BorderHandler>( true );
             pProperties->resolve(*pBorderHandler);
-            PropertyIds eBorderId = PropertyIds( 0 );
-            PropertyIds eBorderDistId = PropertyIds( 0 );
+            PropertyIds eBorderId = PropertyIds::INVALID;
+            PropertyIds eBorderComplexColorId = PropertyIds::INVALID;
+            PropertyIds eBorderDistId = PropertyIds::INVALID;
             switch( nSprmId )
             {
             case NS_ooxml::LN_CT_PBdr_top:
                 eBorderId = PROP_TOP_BORDER;
+                eBorderComplexColorId = PROP_BORDER_TOP_COMPLEX_COLOR;
                 eBorderDistId = PROP_TOP_BORDER_DISTANCE;
                 break;
             case NS_ooxml::LN_CT_PBdr_left:
                 eBorderId = PROP_LEFT_BORDER;
+                eBorderComplexColorId = PROP_BORDER_LEFT_COMPLEX_COLOR;
                 eBorderDistId = PROP_LEFT_BORDER_DISTANCE;
                 break;
             case NS_ooxml::LN_CT_PBdr_bottom:
-                eBorderId = PROP_BOTTOM_BORDER         ;
+                eBorderId = PROP_BOTTOM_BORDER;
+                eBorderComplexColorId = PROP_BORDER_BOTTOM_COMPLEX_COLOR;
                 eBorderDistId = PROP_BOTTOM_BORDER_DISTANCE;
                 break;
             case NS_ooxml::LN_CT_PBdr_right:
                 eBorderId = PROP_RIGHT_BORDER;
-                eBorderDistId = PROP_RIGHT_BORDER_DISTANCE ;
+                eBorderComplexColorId = PROP_BORDER_RIGHT_COMPLEX_COLOR;
+                eBorderDistId = PROP_RIGHT_BORDER_DISTANCE;
                 break;
             case NS_ooxml::LN_CT_PBdr_between:
                 if (m_pImpl->handlePreviousParagraphBorderInBetween())
@@ -1580,6 +1627,7 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                     // then it is possible to emulate this border as top border
                     // for current paragraph
                     eBorderId = PROP_TOP_BORDER;
+                    eBorderComplexColorId = PROP_BORDER_TOP_COMPLEX_COLOR;
                     eBorderDistId = PROP_TOP_BORDER_DISTANCE;
                 }
                 // Since there are borders in between, each paragraph will have own borders. No more joining
@@ -1587,10 +1635,21 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 break;
             default:;
             }
-            if( eBorderId )
-                rContext->Insert( eBorderId, uno::Any( pBorderHandler->getBorderLine()) );
-            if(eBorderDistId)
-                rContext->Insert(eBorderDistId, uno::Any( pBorderHandler->getLineDistance()));
+
+            if (eBorderId != PropertyIds::INVALID)
+            {
+                rContext->Insert(eBorderId, uno::Any(pBorderHandler->getBorderLine()));
+            }
+            if (eBorderComplexColorId != PropertyIds::INVALID)
+            {
+                auto aComplexColor = pBorderHandler->getComplexColor();
+                auto xComplexColor = model::color::createXComplexColor(aComplexColor);
+                rContext->Insert(eBorderComplexColorId, uno::Any(xComplexColor));
+            }
+            if (eBorderDistId != PropertyIds::INVALID)
+            {
+                rContext->Insert(eBorderDistId, uno::Any(pBorderHandler->getLineDistance()));
+            }
             if ( nSprmId == NS_ooxml::LN_CT_PBdr_right )
             {
                 table::ShadowFormat aFormat;
@@ -2002,6 +2061,13 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
             {
                 // For some undocumented reason, MS Word seems to ignore this in docDefaults
 
+                const StyleSheetEntryPtr pCurrStyle = GetStyleSheetTable()->GetCurrentEntry();
+                if (pCurrStyle && pCurrStyle->m_nStyleTypeCode == STYLE_TYPE_PARA && nIntValue < 0)
+                {
+                    m_pImpl->deferCharacterProperty(nSprmId, uno::Any(nIntValue));
+                    break;
+                }
+
                 // DON'T FIXME: Truly calculating this for Character Styles will be tricky,
                 // because it depends on the final fontsize - regardless of
                 // where it is set. So at the style level,
@@ -2198,6 +2264,13 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 rContext->Insert( PROP_CHAR_LEFT_BORDER_DISTANCE, uno::Any( pBorderHandler->getLineDistance()));
                 rContext->Insert( PROP_CHAR_RIGHT_BORDER_DISTANCE, uno::Any( pBorderHandler->getLineDistance()));
 
+                auto xComplexColor = model::color::createXComplexColor(pBorderHandler->getComplexColor());
+
+                rContext->Insert( PROP_CHAR_BORDER_TOP_COMPLEX_COLOR, uno::Any(xComplexColor));
+                rContext->Insert( PROP_CHAR_BORDER_BOTTOM_COMPLEX_COLOR, uno::Any(xComplexColor));
+                rContext->Insert( PROP_CHAR_BORDER_LEFT_COMPLEX_COLOR, uno::Any(xComplexColor));
+                rContext->Insert( PROP_CHAR_BORDER_RIGHT_COMPLEX_COLOR, uno::Any(xComplexColor));
+
                 table::ShadowFormat aFormat;
                 // Word only allows shadows on visible borders
                 if ( pBorderHandler->getShadow() && pBorderHandler->getBorderLine().LineStyle != table::BorderLineStyle::NONE )
@@ -2225,17 +2298,21 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 auto eType = TDefTableHandler::getThemeColorTypeIndex(pThemeColorHandler->mnIndex);
                 if (eType != model::ThemeColorType::Unknown)
                 {
+
                     model::ComplexColor aComplexColor;
                     aComplexColor.setSchemeColor(eType);
 
+                    auto eUsage = TDefTableHandler::getThemeColorUsage(pThemeColorHandler->mnIndex);
+                    aComplexColor.meThemeColorUsage = eUsage;
+
                     if (pThemeColorHandler->mnTint > 0 )
                     {
-                        sal_Int16 nTint = sal_Int16((256 - pThemeColorHandler->mnTint) * 10000 / 256);
+                        sal_Int16 nTint = sal_Int16((255 - pThemeColorHandler->mnTint) * 10000 / 255);
                         aComplexColor.addTransformation({model::TransformationType::Tint, nTint});
                     }
                     if (pThemeColorHandler->mnShade > 0)
                     {
-                        sal_Int16 nShade = sal_Int16((256 - pThemeColorHandler->mnShade) * 10000 / 256);
+                        sal_Int16 nShade = sal_Int16((255 - pThemeColorHandler->mnShade) * 10000 / 255);
                         aComplexColor.addTransformation({model::TransformationType::Shade, nShade});
                     }
 
@@ -3464,9 +3541,19 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     }
 }
 
-void DomainMapper::processDeferredCharacterProperties( const std::map< sal_Int32, uno::Any >& deferredCharacterProperties )
+void DomainMapper::ProcessDeferredStyleCharacterProperties()
 {
-    assert( m_pImpl->GetTopContextType() == CONTEXT_CHARACTER );
+    assert(m_pImpl->GetTopContextType() == CONTEXT_STYLESHEET);
+    m_pImpl->processDeferredCharacterProperties(false);
+}
+
+void DomainMapper::processDeferredCharacterProperties(
+    const std::map<sal_Int32, uno::Any>& deferredCharacterProperties, bool bCharContext)
+{
+    if (bCharContext)
+    {
+        assert(m_pImpl->GetTopContextType() == CONTEXT_CHARACTER);
+    }
     PropertyMapPtr rContext = m_pImpl->GetTopContext();
     for( const auto& rProp : deferredCharacterProperties )
     {

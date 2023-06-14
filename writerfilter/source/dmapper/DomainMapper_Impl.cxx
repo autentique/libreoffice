@@ -8344,6 +8344,9 @@ void DomainMapper_Impl::StartOrEndBookmark( const OUString& rId )
                 else
                 {
                     xCursor = xText->createTextCursorByRange( aBookmarkIter->second.m_xTextRange );
+                }
+                if (!aBookmarkIter->second.m_bIsStartOfText)
+                {
                     xCursor->goRight( 1, false );
                 }
 
@@ -8485,6 +8488,9 @@ void DomainMapper_Impl::startOrEndPermissionRange(sal_Int32 permissinId)
                 else
                 {
                     xCursor = xText->createTextCursorByRange(aPermIter->second.m_xTextRange);
+                }
+                if (!aPermIter->second.m_bIsStartOfText)
+                {
                     xCursor->goRight(1, false);
                 }
 
@@ -9046,12 +9052,12 @@ void DomainMapper_Impl::deferCharacterProperty(sal_Int32 id, const css::uno::Any
     m_deferredCharacterProperties[ id ] = value;
 }
 
-void DomainMapper_Impl::processDeferredCharacterProperties()
+void DomainMapper_Impl::processDeferredCharacterProperties(bool bCharContext)
 {
     // Actually process in DomainMapper, so that it's the same source file like normal processing.
     if( !m_deferredCharacterProperties.empty())
     {
-        m_rDMapper.processDeferredCharacterProperties( m_deferredCharacterProperties );
+        m_rDMapper.processDeferredCharacterProperties(m_deferredCharacterProperties, bCharContext);
         m_deferredCharacterProperties.clear();
     }
 }

@@ -28,7 +28,7 @@ private:
     std::unique_ptr<weld::Builder> m_xBuilder;
     std::unique_ptr<weld::Container> m_xContainer;
     std::unique_ptr<weld::Label> m_xLabel;
-    std::unique_ptr<weld::Button> m_xGotoButton;
+    std::unique_ptr<weld::LinkButton> m_xGotoButton;
     std::unique_ptr<weld::Button> m_xFixButton;
 
     std::shared_ptr<sfx::AccessibilityIssue> const& m_pAccessibilityIssue;
@@ -39,7 +39,7 @@ public:
 
     weld::Widget* get_widget() const { return m_xContainer.get(); }
 
-    DECL_LINK(GotoButtonClicked, weld::Button&, void);
+    DECL_LINK(GotoButtonClicked, weld::LinkButton&, bool);
     DECL_LINK(FixButtonClicked, weld::Button&, void);
 };
 
@@ -60,8 +60,33 @@ public:
     virtual ~A11yCheckIssuesPanel() override;
 
 private:
-    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aAccessibilityCheckEntries;
-    std::unique_ptr<weld::Box> m_xAccessibilityCheckBox;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aDocumentEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aStylesEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aNoAltEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aTableEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aFormattingEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aHyperlinkEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aFakesEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aNumberingEntries;
+    std::vector<std::unique_ptr<AccessibilityCheckEntry>> m_aOtherEntries;
+    std::unique_ptr<weld::Expander> m_xExpanderDocument;
+    std::unique_ptr<weld::Expander> m_xExpanderStyles;
+    std::unique_ptr<weld::Expander> m_xExpanderNoAlt;
+    std::unique_ptr<weld::Expander> m_xExpanderTable;
+    std::unique_ptr<weld::Expander> m_xExpanderFormatting;
+    std::unique_ptr<weld::Expander> m_xExpanderHyperlink;
+    std::unique_ptr<weld::Expander> m_xExpanderFakes;
+    std::unique_ptr<weld::Expander> m_xExpanderNumbering;
+    std::unique_ptr<weld::Expander> m_xExpanderOther;
+    std::unique_ptr<weld::Box> m_xBoxDocument;
+    std::unique_ptr<weld::Box> m_xBoxStyles;
+    std::unique_ptr<weld::Box> m_xBoxNoAlt;
+    std::unique_ptr<weld::Box> m_xBoxTable;
+    std::unique_ptr<weld::Box> m_xBoxFormatting;
+    std::unique_ptr<weld::Box> m_xBoxHyperlink;
+    std::unique_ptr<weld::Box> m_xBoxFakes;
+    std::unique_ptr<weld::Box> m_xBoxNumbering;
+    std::unique_ptr<weld::Box> m_xBoxOther;
     sfx::AccessibilityIssueCollection m_aIssueCollection;
     std::function<sfx::AccessibilityIssueCollection()> m_getIssueCollection;
     void populateIssues();

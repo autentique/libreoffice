@@ -40,6 +40,7 @@
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
+#include <comphelper/xmlencode.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <o3tl/numeric.hxx>
@@ -58,6 +59,7 @@
 #include <tools/stream.hxx>
 #include <tools/helpers.hxx>
 #include <tools/urlobj.hxx>
+#include <tools/UnitConversion.hxx>
 #include <tools/zcodec.hxx>
 #include <unotools/configmgr.hxx>
 #include <vcl/bitmapex.hxx>
@@ -3901,10 +3903,64 @@ void PDFWriterImpl::emitTextAnnotationLine(OStringBuffer & aLine, PDFNoteEntry c
 {
     appendObjectID(rNote.m_nObject, aLine);
 
-    aLine.append("<</Type /Annot /Subtype /Text ");
+    aLine.append("<</Type /Annot /Subtype ");
+    if (rNote.m_aContents.maPolygons.size() == 1)
+    {
+        auto const& rPolygon = rNote.m_aContents.maPolygons[0];
+        aLine.append(rPolygon.isClosed() ? "/Polygon " : "/Polyline ");
+        aLine.append("/Vertices [");
+        for (sal_uInt32 i = 0; i < rPolygon.count(); ++i)
+        {
+            appendDouble(convertMm100ToPoint(rPolygon.getB2DPoint(i).getX()), aLine, nLog10Divisor);
+            aLine.append(" ");
+            appendDouble(m_aPages[rNote.m_nPage].getHeight()
+                             - convertMm100ToPoint(rPolygon.getB2DPoint(i).getY()),
+                         aLine, nLog10Divisor);
+            aLine.append(" ");
+        }
+        aLine.append("] ");
+        aLine.append("/C [");
+        appendColor(rNote.m_aContents.annotColor, aLine, false);
+        aLine.append("] ");
+        if (rPolygon.isClosed())
+        {
+            aLine.append("/IC [");
+            appendColor(rNote.m_aContents.interiorColor, aLine, false);
+            aLine.append("] ");
+        }
+    }
+    else if (rNote.m_aContents.maPolygons.size() > 1)
+    {
+        aLine.append("/Ink /InkList [");
+        for (auto const& rPolygon : rNote.m_aContents.maPolygons)
+        {
+            aLine.append("[");
+            for (sal_uInt32 i = 0; i < rPolygon.count(); ++i)
+            {
+                appendDouble(convertMm100ToPoint(rPolygon.getB2DPoint(i).getX()), aLine,
+                             nLog10Divisor);
+                aLine.append(" ");
+                appendDouble(m_aPages[rNote.m_nPage].getHeight()
+                                 - convertMm100ToPoint(rPolygon.getB2DPoint(i).getY()),
+                             aLine, nLog10Divisor);
+                aLine.append(" ");
+            }
+            aLine.append("]");
+            aLine.append("/C [");
+            appendColor(rNote.m_aContents.annotColor, aLine, false);
+            aLine.append("] ");
+        }
+        aLine.append("] ");
+    }
+    else if (rNote.m_aContents.isFreeText)
+        aLine.append("/FreeText ");
+    else
+        aLine.append("/Text ");
 
-// i59651: key /F set bits Print to 1 rest to 0. We don't set NoZoom NoRotate to 1, since it's a 'should'
-// see PDF 8.4.2 and ISO 19005-1:2005 6.5.3
+    aLine.append("/BS<</W 0>>");
+
+    // i59651: key /F set bits Print to 1 rest to 0. We don't set NoZoom NoRotate to 1, since it's a 'should'
+    // see PDF 8.4.2 and ISO 19005-1:2005 6.5.3
     if (m_bIsPDF_A1 || m_bIsPDF_A2 || m_bIsPDF_A3)
         aLine.append("/F 4 ");
 
@@ -5830,43 +5886,11 @@ sal_Int32 PDFWriterImpl::emitOutputIntent()
     return nOIObject;
 }
 
-// formats the string for the XML stream
-void escapeStringXML(const OUString& rStr, OUString &rValue)
+static void lcl_assignMeta(std::u16string_view aValue, OString& aMeta)
 {
-    const sal_Unicode* pUni = rStr.getStr();
-    int nLen = rStr.getLength();
-    for( ; nLen; nLen--, pUni++ )
+    if (!aValue.empty())
     {
-        switch( *pUni )
-        {
-        case u'&':
-            rValue += "&amp;";
-        break;
-        case u'<':
-            rValue += "&lt;";
-        break;
-        case u'>':
-            rValue += "&gt;";
-        break;
-        case u'\'':
-            rValue += "&apos;";
-        break;
-        case u'"':
-            rValue += "&quot;";
-        break;
-        default:
-            rValue += OUStringChar( *pUni );
-            break;
-        }
-    }
-}
-
-static void lcl_assignMeta(const OUString& aValue, OString& aMeta)
-{
-    if (!aValue.isEmpty())
-    {
-        OUString aTempString;
-        escapeStringXML(aValue, aTempString);
+        OUString aTempString = comphelper::string::encodeForXml(aValue);
         aMeta = OUStringToOString(aTempString, RTL_TEXTENCODING_UTF8);
     }
 }
@@ -9299,6 +9323,8 @@ void PDFWriterImpl::writeReferenceXObject(const ReferenceXObjectEmit& rEmit)
         aStream.append(" re\n");
         aStream.append("f*\n");
 
+        // Reset non-stroking color in case the XObject uses the default
+        aStream.append("0 0 0 rg\n");
         // No reference XObject, draw the form XObject containing the original
         // page streams.
         aStream.append("/Im");
@@ -10356,6 +10382,7 @@ void PDFWriterImpl::createNote( const tools::Rectangle& rRect, const PDFNote& rN
     rNoteEntry.m_aPopUpAnnotation.m_nParentObject = rNoteEntry.m_nObject;
     rNoteEntry.m_aContents = rNote;
     rNoteEntry.m_aRect = rRect;
+    rNoteEntry.m_nPage = nPageNr;
     // convert to default user space now, since the mapmode may change
     m_aPages[nPageNr].convertRect(rNoteEntry.m_aRect);
 

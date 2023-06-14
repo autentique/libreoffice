@@ -135,6 +135,50 @@ CPPUNIT_TEST_FIXTURE(Test, testSymbol)
     assertXPath(pDocument, "/primitive2D/transform/polypolygoncolor", "color", "#00d000");
 }
 
+CPPUNIT_TEST_FIXTURE(Test, testTdf155819)
+{
+    Primitive2DSequence aSequence = parseSvg(u"/svgio/qa/cppunit/data/tdf155819.svg");
+    CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(aSequence.getLength()));
+
+    drawinglayer::Primitive2dXmlDump dumper;
+    xmlDocUniquePtr pDocument = dumper.dumpAndParse(aSequence);
+
+    CPPUNIT_ASSERT (pDocument);
+
+    assertXPath(pDocument, "/primitive2D/transform/polypolygonstroke/line", 1);
+    assertXPath(pDocument, "/primitive2D/transform/polypolygonstroke/polypolygon", 1);
+    // Without the fix in place, this test would have failed with
+    // - Expected: 4
+    // - Actual  : 0
+    assertXPath(pDocument, "/primitive2D/transform/transform", 4);
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFilterSaturate)
+{
+    Primitive2DSequence aSequence = parseSvg(u"/svgio/qa/cppunit/data/filterSaturate.svg");
+    CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(aSequence.getLength()));
+
+    drawinglayer::Primitive2dXmlDump dumper;
+    xmlDocUniquePtr pDocument = dumper.dumpAndParse(aSequence);
+
+    CPPUNIT_ASSERT (pDocument);
+
+    assertXPath(pDocument, "/primitive2D/transform/modifiedColor", "modifier", "saturate");
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testFilterLuminanceToAlpha)
+{
+    Primitive2DSequence aSequence = parseSvg(u"/svgio/qa/cppunit/data/filterLuminanceToAlpha.svg");
+    CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(aSequence.getLength()));
+
+    drawinglayer::Primitive2dXmlDump dumper;
+    xmlDocUniquePtr pDocument = dumper.dumpAndParse(aSequence);
+
+    CPPUNIT_ASSERT (pDocument);
+
+    assertXPath(pDocument, "/primitive2D/transform/modifiedColor", "modifier", "luminance_to_alpha");
+}
+
 CPPUNIT_TEST_FIXTURE(Test, testFilterFeGaussianBlur)
 {
     Primitive2DSequence aSequenceTdf132246 = parseSvg(u"/svgio/qa/cppunit/data/filterFeGaussianBlur.svg");
@@ -987,6 +1031,24 @@ CPPUNIT_TEST_FIXTURE(Test, testBehaviourWhenWidthAndHeightIsOrIsNotSet)
         CPPUNIT_ASSERT_DOUBLES_EQUAL(11.0, fWidth, 1E-12);
         CPPUNIT_ASSERT_DOUBLES_EQUAL(11.0, fHeight, 1E-12);
     }
+}
+
+CPPUNIT_TEST_FIXTURE(Test, testTdf155733)
+{
+    Primitive2DSequence aSequence = parseSvg(u"/svgio/qa/cppunit/data/tdf155733.svg");
+    CPPUNIT_ASSERT_EQUAL(1, static_cast<int>(aSequence.getLength()));
+
+    drawinglayer::Primitive2dXmlDump dumper;
+    xmlDocUniquePtr pDocument = dumper.dumpAndParse(Primitive2DContainer(aSequence));
+
+    CPPUNIT_ASSERT (pDocument);
+
+    assertXPath(pDocument, "/primitive2D/transform/transform[1]/softedge", "radius", "5");
+
+    // Without the fix in place, the softedge would have been applied to the second element
+    // - Expected: 1
+    // - Actual  : 0
+    assertXPath(pDocument, "/primitive2D/transform/transform[2]/unifiedtransparence", "transparence", "50");
 }
 
 CPPUNIT_TEST_FIXTURE(Test, testTdf97663)

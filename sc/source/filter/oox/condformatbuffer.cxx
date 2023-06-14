@@ -168,6 +168,76 @@ void ColorScaleRule::importCfvo( const AttributeList& rAttribs )
     ++mnCfvo;
 }
 
+// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.indexedcolors?view=openxml-2.8.1
+static ::Color IndexedColors[] = {
+    0x00000000,
+    0x00FFFFFF,
+    0x00FF0000,
+    0x0000FF00,
+    0x000000FF,
+    0x00FFFF00,
+    0x00FF00FF,
+    0x0000FFFF,
+    0x00000000,
+    0x00FFFFFF,
+    0x00FF0000,
+    0x0000FF00,
+    0x000000FF,
+    0x00FFFF00,
+    0x00FF00FF,
+    0x0000FFFF,
+    0x00800000,
+    0x00008000,
+    0x00000080,
+    0x00808000,
+    0x00800080,
+    0x00008080,
+    0x00C0C0C0,
+    0x00808080,
+    0x009999FF,
+    0x00993366,
+    0x00FFFFCC,
+    0x00CCFFFF,
+    0x00660066,
+    0x00FF8080,
+    0x000066CC,
+    0x00CCCCFF,
+    0x00000080,
+    0x00FF00FF,
+    0x00FFFF00,
+    0x0000FFFF,
+    0x00800080,
+    0x00800000,
+    0x00008080,
+    0x000000FF,
+    0x0000CCFF,
+    0x00CCFFFF,
+    0x00CCFFCC,
+    0x00FFFF99,
+    0x0099CCFF,
+    0x00FF99CC,
+    0x00CC99FF,
+    0x00FFCC99,
+    0x003366FF,
+    0x0033CCCC,
+    0x0099CC00,
+    0x00FFCC00,
+    0x00FF9900,
+    0x00FF6600,
+    0x00666699,
+    0x00969696,
+    0x00003366,
+    0x00339966,
+    0x00003300,
+    0x00333300,
+    0x00993300,
+    0x00993366,
+    0x00333399,
+    0x00333333,
+    0x00000000, // System Foreground ?
+    0x00000000, // System Background ?
+};
+
 namespace {
 
 ::Color importOOXColor(const AttributeList& rAttribs, const ThemeBuffer& rThemeBuffer, const GraphicHelper& rGraphicHelper)
@@ -190,6 +260,12 @@ namespace {
             nThemeIndex = 2;
 
         nColor = rThemeBuffer.getColorByIndex( nThemeIndex );
+    }
+    else if (rAttribs.hasAttribute(XML_indexed))
+    {
+        sal_uInt32 nIndexed = rAttribs.getUnsigned(XML_indexed, 0);
+        if (nIndexed < std::size(IndexedColors))
+            nColor = IndexedColors[nIndexed];
     }
 
     ::Color aColor;
@@ -1121,6 +1197,16 @@ public:
 
 }
 
+void CondFormatBuffer::updateImport(const ScDataBarFormatData* pTarget)
+{
+    for ( const auto& rRule : maCfRules )
+    {
+        if ( rRule && rRule->GetDataBarData() == pTarget )
+            rRule->finalizeImport();
+    }
+}
+
+
 void CondFormatBuffer::finalizeImport()
 {
     std::unordered_set<size_t> aDoneExtCFs;
@@ -1148,6 +1234,8 @@ void CondFormatBuffer::finalizeImport()
             for (const auto& rxEntry : rEntries)
             {
                 CondFormatRuleRef xRule = rCondFormat.createRule();
+                if (ScDataBarFormat *pData = dynamic_cast<ScDataBarFormat*>(rxEntry.get()))
+                    updateImport(pData->GetDataBarData());
                 ScFormatEntry* pNewEntry = rxEntry->Clone(pDoc);
                 sal_Int32 nPriority = rPriorities[nEntryIdx];
                 if (nPriority == -1)
@@ -1322,6 +1410,12 @@ void ExtCfDataBarRule::finalizeImport()
             pDataBar->maAxisColor = maModel.mnAxisColor;
             break;
         }
+        case POSITIVEFILLCOLOR:
+        {
+            ScDataBarFormatData* pDataBar = mpTarget;
+            pDataBar->maPositiveColor = maModel.mnPositiveColor;
+            break;
+        }
         case NEGATIVEFILLCOLOR:
         {
             ScDataBarFormatData* pDataBar = mpTarget;
@@ -1352,6 +1446,19 @@ void ExtCfDataBarRule::finalizeImport()
                 pEntry->SetType(COLORSCALE_PERCENT);
             else if (maModel.maColorScaleType == "formula")
                 pEntry->SetType(COLORSCALE_FORMULA);
+            else if (maModel.maColorScaleType == "num")
+                pEntry->SetType(COLORSCALE_VALUE);
+
+            if (!maModel.msScaleTypeValue.isEmpty())
+            {
+                sal_Int32 nSize = 0;
+                rtl_math_ConversionStatus eStatus = rtl_math_ConversionStatus_Ok;
+                double fValue = rtl::math::stringToDouble(maModel.msScaleTypeValue, '.', '\0', &eStatus, &nSize);
+                if (eStatus == rtl_math_ConversionStatus_Ok && nSize == maModel.msScaleTypeValue.getLength())
+                {
+                    pEntry->SetValue(fValue);
+                }
+            }
             break;
         }
         case UNKNOWN: // nothing to do
@@ -1365,6 +1472,15 @@ void ExtCfDataBarRule::importDataBar( const AttributeList& rAttribs )
     mnRuleType = DATABAR;
     maModel.mbGradient = rAttribs.getBool( XML_gradient, true );
     maModel.maAxisPosition = rAttribs.getString( XML_axisPosition, "automatic" );
+}
+
+void ExtCfDataBarRule::importPositiveFillColor( const AttributeList& rAttribs )
+{
+    mnRuleType = POSITIVEFILLCOLOR;
+    ThemeBuffer& rThemeBuffer = getTheme();
+    GraphicHelper& rGraphicHelper = getBaseFilter().getGraphicHelper();
+    ::Color aColor = importOOXColor(rAttribs, rThemeBuffer, rGraphicHelper);
+    maModel.mnPositiveColor = aColor;
 }
 
 void ExtCfDataBarRule::importNegativeFillColor( const AttributeList& rAttribs )

@@ -46,6 +46,18 @@ CPPUNIT_TEST_FIXTURE(SwCoreThemeTest, testThemeColorInHeading)
     CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aComplexColor.getSchemeType());
 }
 
+CPPUNIT_TEST_FIXTURE(SwCoreThemeTest, testThemeColorInHeadingODT)
+{
+    createSwDoc("ThemeColorInHeading.fodt");
+    SwDoc* pDoc = getSwDoc();
+    CPPUNIT_ASSERT(pDoc);
+
+    auto xComplexColor
+        = getProperty<uno::Reference<util::XComplexColor>>(getParagraph(1), "CharComplexColor");
+    auto aComplexColor = model::color::getFromXComplexColor(xComplexColor);
+    CPPUNIT_ASSERT_EQUAL(model::ThemeColorType::Accent1, aComplexColor.getSchemeType());
+}
+
 void checkFillStyles(std::vector<model::FillStyle> const& rStyleList)
 {
     CPPUNIT_ASSERT_EQUAL(size_t(3), rStyleList.size());
@@ -418,12 +430,12 @@ CPPUNIT_TEST_FIXTURE(SwCoreThemeTest, testThemeChanging)
     // Change theme colors
     {
         auto const& rColorSets = svx::ColorSets::get();
-        model::ColorSet const& rNewColorSet = rColorSets.getColorSet(0);
+        auto pNewColorSet = std::make_shared<model::ColorSet>(rColorSets.getColorSet(0));
         // check that the theme colors are as expected
-        CPPUNIT_ASSERT_EQUAL(OUString(u"LibreOffice"), rNewColorSet.getName());
+        CPPUNIT_ASSERT_EQUAL(OUString(u"LibreOffice"), pNewColorSet->getName());
 
         sw::ThemeColorChanger aChanger(pDoc->GetDocShell());
-        aChanger.apply(rNewColorSet);
+        aChanger.apply(pNewColorSet);
     }
 
     // Check new theme colors

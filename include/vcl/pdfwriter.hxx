@@ -66,6 +66,10 @@ struct PDFNote
     OUString          Title;          // optional title for the popup containing the note
     OUString          Contents;       // contents of the note
     css::util::DateTime maModificationDate;
+    bool isFreeText = false;
+    std::vector<basegfx::B2DPolygon> maPolygons;
+    Color annotColor;
+    Color interiorColor;
 };
 
 class VCL_DLLPUBLIC PDFOutputStream
@@ -1231,8 +1235,6 @@ The following structure describes the permissions used in PDF security
     /// Get current date/time in PDF D:YYYYMMDDHHMMSS form.
     static OString GetDateTime();
 };
-
-VCL_DLLPUBLIC void escapeStringXML( const OUString& rStr, OUString &rValue);
 
 }
 

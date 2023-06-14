@@ -237,10 +237,12 @@ struct ExCfRuleModel
     ExCfRuleModel() : mnAxisColor( ColorTransparency, UNSIGNED_RGB_TRANSPARENT ), mnNegativeColor( ColorTransparency, UNSIGNED_RGB_TRANSPARENT ), mbGradient( false ), mbIsLower( true ) {}
     // AxisColor
     ::Color mnAxisColor;
+    ::Color mnPositiveColor;
     // NegativeFillColor
     ::Color mnNegativeColor;
     OUString maAxisPosition; // DataBar
     OUString maColorScaleType; // Cfvo
+    OUString msScaleTypeValue; // Cfvo
     bool mbGradient; // DataBar
     bool mbIsLower; // Cfvo
 };
@@ -250,6 +252,7 @@ class ExtCfDataBarRule : public WorksheetHelper
     enum RuleType
     {
         DATABAR,
+        POSITIVEFILLCOLOR,
         NEGATIVEFILLCOLOR,
         AXISCOLOR,
         CFVO,
@@ -263,10 +266,12 @@ public:
     ExtCfDataBarRule(ScDataBarFormatData* pTarget, const WorksheetHelper& rParent);
     void finalizeImport();
     void importDataBar(  const AttributeList& rAttribs );
+    void importPositiveFillColor(  const AttributeList& rAttribs );
     void importNegativeFillColor(  const AttributeList& rAttribs );
     void importAxisColor(  const AttributeList& rAttribs );
     void importCfvo(  const AttributeList& rAttribs );
     ExCfRuleModel& getModel() { return maModel; }
+    const ScDataBarFormatData* GetDataBarData() { return mpTarget; }
 };
 
 class ExtCfCondFormat
@@ -307,6 +312,7 @@ public:
     void                finalizeImport();
 private:
     CondFormatRef       createCondFormat();
+    void                updateImport(const ScDataBarFormatData* pTarget);
 
 private:
     typedef RefVector< CondFormat > CondFormatVec;

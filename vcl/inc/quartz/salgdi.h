@@ -133,6 +133,10 @@ private:
 
 namespace sal::aqua
 {
+#ifdef MACOSX
+NSRect getTotalScreenBounds();
+void resetTotalScreenBounds();
+#endif
 float getWindowScaling();
 void resetWindowScaling();
 }

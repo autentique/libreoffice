@@ -44,28 +44,30 @@ static std::ostream& operator<<(std::ostream& rStream, const std::vector<sal_Int
 
 class VclComplexTextTest : public test::BootstrapFixture
 {
+    OUString maDataUrl = u"/vcl/qa/cppunit/data/";
+
 public:
-    VclComplexTextTest() : BootstrapFixture(true, false) {}
+    OUString getFullUrl(std::u16string_view sFileName)
+    {
+        return m_directories.getURLFromSrc(maDataUrl) + sFileName;
+    }
 
-    /// Play with font measuring etc.
-    void testArabic();
-    void testTdf95650(); // Windows-only issue
-    void testCaching();
-    void testCachingSubstring();
-    void testCaret();
-    void testGdefCaret();
+    bool addFont(OutputDevice* pOutDev, std::u16string_view sFileName,
+                 std::u16string_view sFamilyName)
+    {
+        OutputDevice::ImplClearAllFontData(true);
+        bool bAdded = pOutDev->AddTempDevFont(getFullUrl(sFileName), OUString(sFamilyName));
+        OutputDevice::ImplRefreshAllFontData(true);
+        return bAdded;
+    }
 
-    CPPUNIT_TEST_SUITE(VclComplexTextTest);
-    CPPUNIT_TEST(testArabic);
-    CPPUNIT_TEST(testTdf95650);
-    CPPUNIT_TEST(testCaching);
-    CPPUNIT_TEST(testCachingSubstring);
-    CPPUNIT_TEST(testCaret);
-    CPPUNIT_TEST(testGdefCaret);
-    CPPUNIT_TEST_SUITE_END();
+    VclComplexTextTest()
+        : BootstrapFixture(true, false)
+    {
+    }
 };
 
-void VclComplexTextTest::testArabic()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testArabic)
 {
 #if HAVE_MORE_FONTS
     OUString aOneTwoThree(u"واحِدْ إثٍنين ثلاثةٌ");
@@ -114,7 +116,7 @@ void VclComplexTextTest::testArabic()
 #endif
 }
 
-void VclComplexTextTest::testTdf95650()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testTdf95650)
 {
     static constexpr OUStringLiteral aTxt =
         u"\u0131\u0302\u0504\u4E44\u3031\u3030\u3531\u2D30"
@@ -178,7 +180,7 @@ static void testCachedGlyphs( const OUString& aText, const OUString& aFontName )
 
 // Check that caching using SalLayoutGlyphs gives same results as without caching.
 // This should preferably use fonts that come with LO.
-void VclComplexTextTest::testCaching()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testCaching)
 {
     // Just something basic, no font fallback.
     testCachedGlyphs( "test", "Dejavu Sans" );
@@ -222,7 +224,7 @@ static void testCachedGlyphsSubstring( const OUString& aText, const OUString& aF
 // Check that SalLayoutGlyphsCache works properly when it builds a subset
 // of glyphs using SalLayoutGlyphsImpl::cloneCharRange().
 // This should preferably use fonts that come with LO.
-void VclComplexTextTest::testCachingSubstring()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testCachingSubstring)
 {
     // Just something basic.
     testCachedGlyphsSubstring( "test", "Dejavu Sans", false );
@@ -235,7 +237,7 @@ void VclComplexTextTest::testCachingSubstring()
     testCachedGlyphsSubstring( text, "Dejavu Sans", false );
 }
 
-void VclComplexTextTest::testCaret()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testCaret)
 {
 #if HAVE_MORE_FONTS
     // Test caret placement in fonts *without* ligature carets in GDEF table.
@@ -304,7 +306,7 @@ void VclComplexTextTest::testCaret()
 #endif
 }
 
-void VclComplexTextTest::testGdefCaret()
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testGdefCaret)
 {
 #if HAVE_MORE_FONTS
     // Test caret placement in fonts *with* ligature carets in GDEF table.
@@ -379,6 +381,102 @@ void VclComplexTextTest::testGdefCaret()
 #endif
 }
 
-CPPUNIT_TEST_SUITE_REGISTRATION(VclComplexTextTest);
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testTdf152048)
+{
+#if HAVE_MORE_FONTS
+    OUString aText(u"می‌شود");
+
+    vcl::Font aFont(u"Noto Naskh Arabic", u"Regular", Size(0, 72));
+
+    ScopedVclPtrInstance<VirtualDevice> pOutDev;
+    pOutDev->SetFont(aFont);
+
+    // get an compare the default text array
+    std::vector<sal_Int32> aRefCharWidths{ 33, 82, 82, 129, 163, 193 };
+    tools::Long nRefTextWidth(193);
+
+    KernArray aCharWidths;
+    tools::Long nTextWidth = pOutDev->GetTextArray(aText, &aCharWidths);
+
+    CPPUNIT_ASSERT_EQUAL(aRefCharWidths, aCharWidths.get_subunit_array());
+    CPPUNIT_ASSERT_EQUAL(nRefTextWidth, nTextWidth);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(nTextWidth), aCharWidths.back());
+
+    // Simulate Kashida insertion using Kashida array and extending text array
+    // to have room for Kashida.
+    std::vector<sal_Bool> aKashidaArray{ false, false, false, true, false, false };
+    auto nKashida = 200;
+
+    aCharWidths.set(3, aCharWidths[3] + nKashida);
+    aCharWidths.set(4, aCharWidths[4] + nKashida);
+    aCharWidths.set(5, aCharWidths[5] + nKashida);
+    auto pLayout = pOutDev->ImplLayout(aText, 0, -1, Point(0, 0), 0, aCharWidths, aKashidaArray);
+
+    // Without the fix this fails with:
+    // - Expected: 393
+    // - Actual  : 511
+    CPPUNIT_ASSERT_EQUAL(DeviceCoordinate(nRefTextWidth + nKashida), pLayout->GetTextWidth());
+#endif
+}
+
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testTdf152048_2)
+{
+#if HAVE_MORE_FONTS
+    vcl::Font aFont(u"Noto Naskh Arabic", u"Regular", Size(0, 72));
+
+    ScopedVclPtrInstance<VirtualDevice> pOutDev;
+    pOutDev->SetFont(aFont);
+
+    // get an compare the default text array
+    KernArray aCharWidths;
+    auto nTextWidth = pOutDev->GetTextArray(u"ع a ع", &aCharWidths);
+
+    // Text width should always be equal to the width of the last glyph in the
+    // kern array.
+    // Without the fix this fails with:
+    // - Expected: 158
+    // - Actual  : 118
+    CPPUNIT_ASSERT_EQUAL(aCharWidths.back(), sal_Int32(nTextWidth));
+#endif
+}
+
+CPPUNIT_TEST_FIXTURE(VclComplexTextTest, testTdf153440)
+{
+#if HAVE_MORE_FONTS
+    vcl::Font aFont(u"Noto Naskh Arabic", u"Regular", Size(0, 72));
+
+    ScopedVclPtrInstance<VirtualDevice> pOutDev;
+    pOutDev->SetFont(aFont);
+
+#if !defined _WIN32 // TODO: Fails on jenkins but passes locally
+    // Add an emoji font so that we are sure a font will be found for the
+    // emoji. The font is subset and supports only 🌿.
+    bool bAdded = addFont(pOutDev, u"tdf153440.ttf", u"Noto Emoji");
+    CPPUNIT_ASSERT_EQUAL(true, bAdded);
+#endif
+
+    for (auto& aString : { u"ع 🌿 ع", u"a 🌿 a" })
+    {
+        OUString aText(aString);
+        bool bRTL = aText.startsWith(u"ع");
+
+        auto pLayout = pOutDev->ImplLayout(aText, 0, -1, Point(0, 0), 0, {}, {});
+
+        int nStart = 0;
+        DevicePoint aPos;
+        const GlyphItem* pGlyphItem;
+        while (pLayout->GetNextGlyph(&pGlyphItem, aPos, nStart))
+        {
+            // Assert glyph ID is not 0, if it is 0 then font fallback didn’t
+            // happen.
+            CPPUNIT_ASSERT(pGlyphItem->glyphId());
+
+            // Assert that we are indeed doing RTL layout for RTL text since
+            // the bug does not happen for LTR text.
+            CPPUNIT_ASSERT_EQUAL(bRTL, pGlyphItem->IsRTLGlyph());
+        }
+    }
+#endif
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

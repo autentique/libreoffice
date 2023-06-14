@@ -1077,9 +1077,9 @@ void ScGridWindow::LaunchAutoFilterMenu(SCCOL nCol, SCROW nRow)
     mpAutoFilterPopup->addMenuItem(
         ScResId(STR_MENU_SORT_DESC),
         new AutoFilterAction(this, AutoFilterMode::SortDescending));
-    mpAutoFilterPopup->addSeparator();
     if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_SORT_COLOR), true, true))
         pSubMenu->setPopupStartAction(new AutoFilterColorPopupStartAction(this, pSubMenu, false));
+    mpAutoFilterPopup->addSeparator();
     if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_FILTER_COLOR), true, true))
         pSubMenu->setPopupStartAction(new AutoFilterColorPopupStartAction(this, pSubMenu, true));
     if (ScListSubMenuControl* pSubMenu = mpAutoFilterPopup->addSubMenuItem(ScResId(SCSTR_FILTER_CONDITION), true, false))
@@ -6637,7 +6637,7 @@ void ScGridWindow::UpdateAutoFillOverlay()
     tools::Long nSizeYPix;
     mrViewData.GetMergeSizePixel( nX, nY, nSizeXPix, nSizeYPix );
 
-    if (bLayoutRTL)
+    if (bLayoutRTL && !comphelper::LibreOfficeKit::isActive())
         aFillPos.AdjustX( -(nSizeXPix - 2 + (aFillHandleSize.Width() / 2)) );
     else
         aFillPos.AdjustX(nSizeXPix - (aFillHandleSize.Width() / 2) );

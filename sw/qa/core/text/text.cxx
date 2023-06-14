@@ -42,6 +42,7 @@
 #include <ndtxt.hxx>
 #include <txatbase.hxx>
 #include <textcontentcontrol.hxx>
+#include <pagefrm.hxx>
 
 /// Covers sw/source/core/text/ fixes.
 class SwCoreTextTest : public SwModelTestBase
@@ -1279,6 +1280,95 @@ CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf41652NBSPWidth)
     // Assert justified NBSP is wider for the enabled file
     CPPUNIT_ASSERT_GREATER(nSectionAfterNBSPX_optionDisabled_justified,
                            nSectionAfterNBSPX_optionEnabled_justified);
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testFloattableOverlap)
+{
+    // Given a document with 2 floating tables, not overlapping in Word's "Word 2010" compat mode,
+    // because the first empty paragraph is below the first floating table:
+    createSwDoc("floattable-overlap.docx");
+
+    // When laying out that document:
+    calcLayout();
+
+    // Then make sure they don't overlap in Writer, either:
+    SwDoc* pDoc = getSwDoc();
+    SwRootFrame* pLayout = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
+    auto pPage1 = dynamic_cast<SwPageFrame*>(pLayout->Lower());
+    CPPUNIT_ASSERT(pPage1);
+    CPPUNIT_ASSERT(pPage1->GetSortedObjs());
+    const SwSortedObjs& rPage1Objs = *pPage1->GetSortedObjs();
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), rPage1Objs.size());
+    SwAnchoredObject* pPage1Obj1 = rPage1Objs[0];
+    const SwRect& rRect1 = pPage1Obj1->GetObjRectWithSpaces();
+    SwAnchoredObject* pPage1Obj2 = rPage1Objs[1];
+    const SwRect& rRect2 = pPage1Obj2->GetObjRectWithSpaces();
+    // Without the accompanying fix in place, this test would have failed, the empty paragraph,
+    // which is after the floating table in the document model went above the floating table in the
+    // layout, which resulted in an overlap.
+    CPPUNIT_ASSERT(!rRect1.Overlaps(rRect2));
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf89288)
+{
+    // Given a document with 2 paragraphs of mixed Complex and Western text,
+    // and 2 other paragrpahs of mixed Western and Asian text:
+    createSwDoc("tdf89288.fodt");
+
+    // When laying out that document:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // Then make sure there is no kern portions between the Western and Complex
+    // portions:
+    assertXPath(pXmlDoc, "//body/txt[1]/SwParaPortion/SwLineLayout/SwLinePortion", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[1]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Text']", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[1]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Kern']", 0);
+
+    assertXPath(pXmlDoc, "//body/txt[2]/SwParaPortion/SwLineLayout/SwLinePortion", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[2]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Text']", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[2]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Kern']", 0);
+
+    // But also make sure there is a kern portion between each Western and Asian
+    // portion:
+    assertXPath(pXmlDoc, "//body/txt[3]/SwParaPortion/SwLineLayout/SwLinePortion", 5);
+    assertXPath(pXmlDoc,
+                "//body/txt[3]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Text']", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[3]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Kern']", 2);
+    assertXPath(pXmlDoc, "//body/txt[3]/SwParaPortion/SwLineLayout/SwLinePortion[2]", "type",
+                "PortionType::Kern");
+    assertXPath(pXmlDoc, "//body/txt[3]/SwParaPortion/SwLineLayout/SwLinePortion[4]", "type",
+                "PortionType::Kern");
+
+    assertXPath(pXmlDoc, "//body/txt[4]/SwParaPortion/SwLineLayout/SwLinePortion", 5);
+    assertXPath(pXmlDoc,
+                "//body/txt[4]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Text']", 3);
+    assertXPath(pXmlDoc,
+                "//body/txt[4]/SwParaPortion/SwLineLayout/child::*[@type='PortionType::Kern']", 2);
+    assertXPath(pXmlDoc, "//body/txt[4]/SwParaPortion/SwLineLayout/SwLinePortion[2]", "type",
+                "PortionType::Kern");
+    assertXPath(pXmlDoc, "//body/txt[4]/SwParaPortion/SwLineLayout/SwLinePortion[4]", "type",
+                "PortionType::Kern");
+}
+
+CPPUNIT_TEST_FIXTURE(SwCoreTextTest, testTdf139863)
+{
+    // Given a document with 2 paragraphs of mixed Complex scripts:
+    createSwDoc("tdf139863.fodt");
+
+    // When laying out that document:
+    xmlDocUniquePtr pXmlDoc = parseLayoutDump();
+
+    // Then make sure the text is not split into multiple portions.
+    // Without the fix we don’t even reach here, as the old code resulted in a
+    // lone surrogate which can’t be converted to UTF-8 for the layout dump and
+    // we get an assert in OString::toUtf8().
+    assertXPath(pXmlDoc, "//body/txt[1]/SwParaPortion/SwLineLayout/child::*", 1);
+    assertXPath(pXmlDoc, "//body/txt[2]/SwParaPortion/SwLineLayout/child::*", 1);
 }
 
 CPPUNIT_PLUGIN_IMPLEMENT();

@@ -37,23 +37,35 @@ public:
     OFileWriter(const char *pcFile, const char *locale );
     ~OFileWriter();
     void  writeStringCharacters(std::u16string_view str) const;
+    void  writeOUStringLiteralCharacters(std::u16string_view str) const;
     void  writeAsciiString(const char *str)const ;
     void  writeInt(sal_Int16 nb) const;
+    void  writeHexInt(sal_Int16 nb) const;
+    void  writeOUStringRefFunction(const char *func, std::u16string_view useLocale) const;
+    void  writeOUStringRefFunction(const char *func, std::u16string_view useLocale, const char *to) const;
     void  writeFunction(const char *func, const char *count, const char *array) const;
+    void  writeOUStringFunction(const char *func, const char *count, const char *array) const;
     void  writeRefFunction(const char *func, std::u16string_view useLocale) const;
     void  writeFunction(const char *func, const char *count, const char *array, const char *from, const char *to) const;
+    void  writeOUStringFunction(const char *func, const char *count, const char *array, const char *from, const char *to) const;
     void  writeRefFunction(const char *func, std::u16string_view useLocale, const char *to) const;
     void  writeFunction2(const char *func, const char *style, const char* attr, const char *array) const;
     void  writeRefFunction2(const char *func, std::u16string_view useLocale) const;
     void  writeFunction3(const char *func, const char *style, const char* levels, const char* attr, const char *array) const;
     void  writeRefFunction3(const char *func, std::u16string_view useLocale) const;
     void  writeIntParameter(const char* pAsciiStr, const sal_Int16 count, sal_Int16 val) const;
+    void  writeOUStringLiteralIntParameter(const char* pAsciiStr, const sal_Int16 count, sal_Int16 val) const;
     bool  writeDefaultParameter(const char* pAsciiStr, std::u16string_view str, sal_Int16 count) const;
+    bool  writeOUStringLiteralDefaultParameter(const char* pAsciiStr, std::u16string_view str, sal_Int16 count) const;
     void  writeParameter(const char* pAsciiStr, std::u16string_view aChars) const;
+    void  writeOUStringLiteralParameter(const char* pAsciiStr, std::u16string_view aChars) const;
     void  writeParameter(const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count) const;
+    void  writeOUStringLiteralParameter(const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count) const;
     void  writeParameter(const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count0, sal_Int16 count1) const;
+    void  writeOUStringLiteralParameter(const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count0, sal_Int16 count1) const;
     void  writeParameter(const char* pTagStr, const char* pAsciiStr, std::u16string_view aChars, const sal_Int16 count) const;
     void  writeParameter(const char* pTagStr, const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count0, sal_Int16 count1) const;
+    void  writeOUStringLiteralParameter(const char* pTagStr, const char* pAsciiStr, std::u16string_view aChars, sal_Int16 count0, sal_Int16 count1) const;
     void  closeOutput() const;
     /// Return the locale string, something like en_US or de_DE
     const char * getLocale() const { return theLocale.c_str(); }
@@ -104,7 +116,9 @@ public:
     // nMaxLen <  0 : any length
     // nMaxLen >= 0 : warning if more than nMaxLen characters
     OUString writeParameterCheckLen( const OFileWriter &of, const char* pParameterName, const LocaleNode* pNode, sal_Int32 nMinLen, sal_Int32 nMaxLen ) const;
+    OUString writeOUStringLiteralParameterCheckLen( const OFileWriter &of, const char* pParameterName, const LocaleNode* pNode, sal_Int32 nMinLen, sal_Int32 nMaxLen ) const;
     OUString writeParameterCheckLen( const OFileWriter &of, const char* pNodeName, const char* pParameterName, sal_Int32 nMinLen, sal_Int32 nMaxLen ) const;
+    OUString writeOUStringLiteralParameterCheckLen( const OFileWriter &of, const char* pNodeName, const char* pParameterName, sal_Int32 nMinLen, sal_Int32 nMaxLen ) const;
     // ++nError with output to stderr
     void incError( const char* pStr ) const;
     // ++nError with output to stderr

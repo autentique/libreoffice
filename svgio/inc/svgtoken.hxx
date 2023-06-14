@@ -81,6 +81,7 @@ namespace svgio::svgreader
             ClipPathNode,
             ClipPathProperty,
             FeGaussianBlur,
+            FeColorMatrix,
             Filter,
             Mask,
             ClipPathUnits,
@@ -121,6 +122,7 @@ namespace svgio::svgreader
             XMaxYMax,
             Meet,
             Slice,
+            Values,
 
             // structural elements
             Defs,

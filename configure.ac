@@ -9,7 +9,7 @@ dnl in order to create a configure script.
 # several non-alphanumeric characters, those are split off and used only for the
 # ABOUTBOXPRODUCTVERSIONSUFFIX in openoffice.lst. Why that is necessary, no idea.
 
-AC_INIT([LibreOffice],[7.7.0.0.alpha0+],[],[],[http://documentfoundation.org/])
+AC_INIT([LibreOffice],[24.2.0.0.alpha0+],[],[],[http://documentfoundation.org/])
 
 dnl libnumbertext needs autoconf 2.68, but that can pick up autoconf268 just fine if it is installed
 dnl whereas aclocal (as run by autogen.sh) insists on using autoconf and fails hard
@@ -2852,14 +2852,13 @@ AC_MSG_CHECKING([whether build target is Release Build])
 if test "$enable_release_build" = "" -o "$enable_release_build" = "no"; then
     AC_MSG_RESULT([no])
     ENABLE_RELEASE_BUILD=
-    GET_TASK_ALLOW_ENTITLEMENT='
-        <!-- We want to be able to debug a hardened process when not building for release -->
-        <key>com.apple.security.get-task-allow</key>
-        <true/>'
+    dnl Pu the value on one line as make (at least on macOS) seems to ignore
+    dnl the newlines and then complains about spaces.
+    GET_TASK_ALLOW_ENTITLEMENT='<!-- We want to be able to debug a hardened process when not building for release --><key>com.apple.security.get-task-allow</key><true/>'
 else
     AC_MSG_RESULT([yes])
     ENABLE_RELEASE_BUILD=TRUE
-    GET_TASK_ALLOW_ENTITLEMENT=''
+    GET_TASK_ALLOW_ENTITLEMENT=
 fi
 AC_SUBST(ENABLE_RELEASE_BUILD)
 AC_SUBST(GET_TASK_ALLOW_ENTITLEMENT)
@@ -13650,6 +13649,9 @@ dnl ===================================================================
 dnl Test for the presence of Ant and that it works
 dnl ===================================================================
 
+# java takes the encoding from LC_ALL, and since autoconf forces it to C it
+# breaks filename decoding, so for the ant section, set it to LANG
+LC_ALL=$LANG
 if test "$ENABLE_JAVA" != "" -a "$NEED_ANT" = "TRUE" -a "$cross_compiling" != "yes"; then
     ANT_HOME=; export ANT_HOME
     WITH_ANT_HOME=; export WITH_ANT_HOME
@@ -13868,7 +13870,8 @@ if test "$ENABLE_JAVA" != "" -a "$with_junit" != "no" -a "$cross_compiling" != "
 fi
 AC_SUBST(OOO_JUNIT_JAR)
 AC_SUBST(HAMCREST_JAR)
-
+# set back LC_ALL to C after the java related tests...
+LC_ALL=C
 
 AC_SUBST(SCPDEFS)
 

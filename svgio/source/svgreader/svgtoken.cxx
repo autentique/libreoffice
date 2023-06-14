@@ -73,6 +73,7 @@ namespace svgio::svgreader
         const char aSVGStrClipPathNode[] = "clipPath";
         const char aSVGStrClipPathProperty[] = "clip-path";
         const char aSVGStrFeGaussianBlur[] = "feGaussianBlur";
+        const char aSVGStrFeColorMatrix[] = "feColorMatrix";
         const char aSVGStrFilter[] = "filter";
         const char aSVGStrMask[] = "mask";
         const char aSVGStrClipPathUnits[] = "clipPathUnits";
@@ -112,6 +113,7 @@ namespace svgio::svgreader
         const char aSVGStrXMaxYMax[] = "xMaxYMax";
         const char aSVGStrMeet[] = "meet";
         const char aSVGStrSlice[] = "slice";
+        const char aSVGStrValues[] = "values";
 
         const char aSVGStrDefs[] = "defs";
         const char aSVGStrG[] = "g";
@@ -224,6 +226,7 @@ namespace svgio::svgreader
                 { aSVGStrClipPathNode, SVGToken::ClipPathNode },
                 { aSVGStrClipPathProperty, SVGToken::ClipPathProperty },
                 { aSVGStrFeGaussianBlur, SVGToken::FeGaussianBlur },
+                { aSVGStrFeColorMatrix, SVGToken::FeColorMatrix },
                 { aSVGStrFilter, SVGToken::Filter },
                 { aSVGStrMask, SVGToken::Mask },
                 { aSVGStrClipPathUnits, SVGToken::ClipPathUnits },
@@ -263,6 +266,7 @@ namespace svgio::svgreader
                 { aSVGStrXMaxYMax, SVGToken::XMaxYMax },
                 { aSVGStrMeet, SVGToken::Meet },
                 { aSVGStrSlice, SVGToken::Slice },
+                { aSVGStrValues, SVGToken::Values },
 
                 { aSVGStrDefs, SVGToken::Defs },
                 { aSVGStrG, SVGToken::G },

@@ -114,12 +114,17 @@ class NoTextNodeAltTextCheck : public NodeCheck
         }
         else if (pNoTextNode->IsGrfNode())
         {
-            auto pIssue = lclAddIssue(m_rIssueCollection, sIssueText,
-                                      sfx::AccessibilityIssueID::NO_ALT_GRAPHIC);
-            pIssue->setDoc(pNoTextNode->GetDoc());
-            pIssue->setIssueObject(IssueObject::GRAPHIC);
-            pIssue->setObjectID(pNoTextNode->GetFlyFormat()->GetName());
-            pIssue->setNode(pNoTextNode);
+            const SwFrameFormat* pFrameFormat = pNoTextNode->GetFlyFormat();
+            const SfxBoolItem* pIsDecorItem = pFrameFormat->GetItemIfSet(RES_DECORATIVE);
+            if (!(pIsDecorItem && pIsDecorItem->GetValue()))
+            {
+                auto pIssue = lclAddIssue(m_rIssueCollection, sIssueText,
+                                          sfx::AccessibilityIssueID::NO_ALT_GRAPHIC);
+                pIssue->setDoc(pNoTextNode->GetDoc());
+                pIssue->setIssueObject(IssueObject::GRAPHIC);
+                pIssue->setObjectID(pNoTextNode->GetFlyFormat()->GetName());
+                pIssue->setNode(pNoTextNode);
+            }
         }
     }
 
@@ -1354,8 +1359,12 @@ void AccessibilityCheck::checkObject(SdrObject* pObject)
         && FindFrameFormat(pObject)->GetAnchor().GetAnchorId() != RndStdIds::FLY_AS_CHAR)
         lclAddIssue(m_aIssueCollection, SwResId(STR_FLOATING_TEXT));
 
-    if (pObject->GetObjIdentifier() == SdrObjKind::CustomShape
-        || pObject->GetObjIdentifier() == SdrObjKind::Text)
+    const SdrObjKind nObjId = pObject->GetObjIdentifier();
+    const SdrInventor nInv = pObject->GetObjInventor();
+
+    if (nObjId == SdrObjKind::CustomShape || nObjId == SdrObjKind::Text
+        || nObjId == SdrObjKind::Media || nObjId == SdrObjKind::Group
+        || nInv == SdrInventor::FmForm)
     {
         OUString sAlternative = pObject->GetTitle();
         if (sAlternative.isEmpty())
@@ -1364,7 +1373,12 @@ void AccessibilityCheck::checkObject(SdrObject* pObject)
             OUString sIssueText = SwResId(STR_NO_ALT).replaceAll("%OBJECT_NAME%", sName);
             auto pIssue = lclAddIssue(m_aIssueCollection, sIssueText,
                                       sfx::AccessibilityIssueID::NO_ALT_SHAPE);
-            pIssue->setIssueObject(IssueObject::SHAPE);
+            // Set FORM Issue for Form objects because of the design mode
+            if (nInv == SdrInventor::FmForm)
+                pIssue->setIssueObject(IssueObject::FORM);
+            else
+                pIssue->setIssueObject(IssueObject::SHAPE);
+
             pIssue->setObjectID(pObject->GetName());
             pIssue->setDoc(*m_pDoc);
         }

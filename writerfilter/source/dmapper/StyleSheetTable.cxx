@@ -808,6 +808,7 @@ void StyleSheetTable::lcl_entry(writerfilter::Reference<Properties>::Pointer_t r
     m_pImpl->m_pCurrentEntry = pNewEntry;
     m_pImpl->m_rDMapper.PushStyleSheetProperties( m_pImpl->m_pCurrentEntry->m_pProperties.get() );
     ref->resolve(*this);
+    m_pImpl->m_rDMapper.ProcessDeferredStyleCharacterProperties();
     //append it to the table
     m_pImpl->m_rDMapper.PopStyleSheetProperties();
     if( !m_pImpl->m_rDMapper.IsOOXMLImport() || !m_pImpl->m_pCurrentEntry->m_sStyleName.isEmpty())
@@ -969,12 +970,27 @@ void StyleSheetTable::ReApplyInheritedOutlineLevelFromChapterNumbering()
             if (pEntry->m_nStyleTypeCode != STYLE_TYPE_PARA || pEntry->m_sBaseStyleIdentifier.isEmpty())
                 continue;
 
-            sal_Int16 nOutlineLevel = pEntry->m_pProperties->GetOutlineLevel();
-            if (nOutlineLevel != -1)
-                continue;
-
             StyleSheetEntryPtr pParent = FindStyleSheetByISTD(pEntry->m_sBaseStyleIdentifier);
             if (!pParent || !pParent->m_bAssignedAsChapterNumbering)
+                continue;
+
+            uno::Reference< style::XStyle > xStyle;
+            xParaStyles->getByName(pEntry->m_sConvertedStyleName) >>= xStyle;
+            if (!xStyle.is())
+                continue;
+
+            uno::Reference<beans::XPropertySet> xPropertySet(xStyle, uno::UNO_QUERY_THROW);
+            const sal_Int16 nListId = pEntry->m_pProperties->props().GetListId();
+            const OUString& sParentNumberingStyleName
+                = m_pImpl->m_rDMapper.GetListStyleName(pParent->m_pProperties->props().GetListId());
+            if (nListId == -1 && !sParentNumberingStyleName.isEmpty())
+            {
+                xPropertySet->setPropertyValue(getPropertyName(PROP_NUMBERING_STYLE_NAME),
+                                               uno::Any(sParentNumberingStyleName));
+            }
+
+            sal_Int16 nOutlineLevel = pEntry->m_pProperties->GetOutlineLevel();
+            if (nOutlineLevel != -1)
                 continue;
 
             nOutlineLevel = pParent->m_pProperties->GetOutlineLevel();
@@ -983,12 +999,6 @@ void StyleSheetTable::ReApplyInheritedOutlineLevelFromChapterNumbering()
             // convert MS level to LO equivalent outline level
             ++nOutlineLevel;
 
-            uno::Reference< style::XStyle > xStyle;
-            xParaStyles->getByName(pEntry->m_sConvertedStyleName) >>= xStyle;
-            if ( !xStyle.is() )
-                break;
-
-            uno::Reference<beans::XPropertySet> xPropertySet( xStyle, uno::UNO_QUERY_THROW );
             xPropertySet->setPropertyValue(getPropertyName(PROP_OUTLINE_LEVEL), uno::Any(nOutlineLevel));
         }
     }

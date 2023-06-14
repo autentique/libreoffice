@@ -137,14 +137,6 @@ void SwLayoutWriter2::CheckRedlineCharAttributesHidden()
                 "portion", "foobaz");
 }
 
-CPPUNIT_TEST_FIXTURE(SwLayoutWriter2, testTdf100680_as_char_wrap)
-{
-    createSwDoc("tdf100680.docx");
-    auto pDump = parseLayoutDump();
-    assertXPath(pDump, "/root/page/header/txt/SwParaPortion/SwLineLayout[3]");
-    // If the third line missing that assert will fire, as was before the fix.
-}
-
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter2, testTdf148897)
 {
     createSwDoc("tdf148897.odt");
@@ -979,6 +971,24 @@ CPPUNIT_TEST_FIXTURE(SwLayoutWriter2, testChangedTableRows)
     assertXPath(pXmlDoc, "/metafile/push/push/push/push/push/fillcolor[@color='#e1f2fa']", 1);
     // This was 3 (color of the cells of the last column, 2 of them disabled by change tracking )
     assertXPath(pXmlDoc, "/metafile/push/push/push/push/push/fillcolor[@color='#3faf46']", 1);
+}
+
+CPPUNIT_TEST_FIXTURE(SwLayoutWriter2, testTdf155187_TableInTextChange)
+{
+    createSwDoc("table_in_text_change.fodt");
+    SwDoc* pDoc = getSwDoc();
+    SwDocShell* pShell = pDoc->GetDocShell();
+
+    // Dump the rendering of the first page as an XML file.
+    std::shared_ptr<GDIMetaFile> xMetaFile = pShell->GetPreviewMetaFile();
+    MetafileXmlDump dumper;
+    xmlDocUniquePtr pXmlDoc = dumpAndParse(dumper, *xMetaFile);
+    CPPUNIT_ASSERT(pXmlDoc);
+
+    // This was 0 (other color, not COL_AUTHOR_TABLE_DEL, color of the tracked row deletion)
+    assertXPath(pXmlDoc, "/metafile/push/push/push/push/push/fillcolor[@color='#fce6f4']", 2);
+    // This was 0 (other color, not COL_AUTHOR_TABLE_INS, color of the tracked row insertion)
+    assertXPath(pXmlDoc, "/metafile/push/push/push/push/push/fillcolor[@color='#e1f2fa']", 2);
 }
 
 CPPUNIT_TEST_FIXTURE(SwLayoutWriter2, testTdf145225_RedlineMovingWithBadInsertion)
