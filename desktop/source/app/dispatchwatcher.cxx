@@ -335,6 +335,128 @@ DispatchWatcher::~DispatchWatcher()
 }
 
 
+bool DispatchWatcher::exportPDF (std::optional<OUString> cwdUrl, OUString eArgs) {
+    sal_Int32 eOutputIndex = eArgs.indexOf(':');
+    OUString eInput = eArgs.copy(0, eOutputIndex);
+    OUString eOutput = eArgs.copy(eOutputIndex + 1);
+
+    Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );
+
+    std::vector<PropertyValue> aArgs;
+    OUString aTarget = "_blank";
+    aArgs.emplace_back("ReadOnly", 0, Any(true), PropertyState_DIRECT_VALUE);
+    aArgs.emplace_back("OpenNewView", 0, Any(true), PropertyState_DIRECT_VALUE);
+    aArgs.emplace_back("Hidden", 0, Any(true), PropertyState_DIRECT_VALUE);
+    aArgs.emplace_back("Silent", 0, Any(true), PropertyState_DIRECT_VALUE);
+
+    OUString aName( GetURL_Impl( eInput, cwdUrl ) );
+
+    INetURLObject aObj( aName );
+    Reference < XPrintable > xDoc;
+
+    try {
+        xDoc.set(comphelper::SynchronousDispatch::dispatch(
+            xDesktop, aName, aTarget, comphelper::containerToSequence(aArgs)), UNO_QUERY);
+    } catch (const css::lang::IllegalArgumentException&) {
+        TOOLS_WARN_EXCEPTION(
+            "desktop.app",
+            "Dispatchwatcher IllegalArgumentException while calling loadComponentFromURL");
+    } catch (const css::io::IOException&) {
+        TOOLS_WARN_EXCEPTION(
+            "desktop.app",
+            "Dispatchwatcher IOException while calling loadComponentFromURL");
+    }
+
+    if ( xDoc.is() ) {
+        Reference< XStorable > xStorable( xDoc, UNO_QUERY );
+        if ( xStorable.is() ) {
+            OUString aFilter;
+            OUString eExt = "pdf";
+
+            FileBase::getFileURLFromSystemPath( eOutput, eOutput );
+            INetURLObject aOutFilename(eOutput);
+            OUString aOutFile = aOutFilename.GetMainURL(INetURLObject::DecodeMechanism::NONE);
+
+            // guess filter
+            OUString aDocService;
+            Reference< XModel > xModel( xDoc, UNO_QUERY );
+            if ( xModel.is() ) {
+                utl::MediaDescriptor aMediaDesc( xModel->getArgs() );
+                aDocService = aMediaDesc.getUnpackedValueOrDefault(utl::MediaDescriptor::PROP_DOCUMENTSERVICE, OUString() );
+            }
+            aFilter = impl_GuessFilter( aOutFile, aDocService );
+
+            if (aFilter.isEmpty()) {
+                std::cerr << "Error: no export filter" << std::endl;
+            } else {
+                Sequence<PropertyValue> conversionProperties( 4 );
+                auto pconversionProperties = conversionProperties.getArray();
+                pconversionProperties[0].Name = "ConversionRequestOrigin";
+                pconversionProperties[0].Value <<= OUString("CommandLine");
+                pconversionProperties[1].Name = "Overwrite";
+                pconversionProperties[1].Value <<= true;
+
+                pconversionProperties[2].Name = "FilterName";
+                pconversionProperties[2].Value <<= aFilter;
+
+                Sequence<PropertyValue> filterOptions( 1 );
+                auto pfilterOptions = filterOptions.getArray();
+
+                pfilterOptions[0].Name = "ExportFormFields";
+                pfilterOptions[0].Value <<= false;
+
+                pconversionProperties[3].Name = "FilterData";
+                pconversionProperties[3].Value <<= filterOptions;
+
+
+                OUString aTempName;
+                FileBase::getSystemPathFromFileURL(aName, aTempName);
+                OString aSource8 = OUStringToOString(aTempName, osl_getThreadTextEncoding());
+                FileBase::getSystemPathFromFileURL(aOutFile, aTempName);
+                OString aTargetURL8 = OUStringToOString(aTempName, osl_getThreadTextEncoding());
+
+                OUString name=getName(xDoc);
+                std::cout << "convert " << aSource8;
+                if (!name.isEmpty())
+                    std::cout << " as a " << name <<" document";
+                std::cout << " -> " << aTargetURL8;
+                std::cout << " using filter : " << OUStringToOString(aFilter, osl_getThreadTextEncoding()) << std::endl;
+                if (FStatHelper::IsDocument(aOutFile))
+                    std::cout << "Overwriting: " << OUStringToOString(aTempName, osl_getThreadTextEncoding()) << std::endl ;
+
+                try
+                {
+                    xStorable->storeToURL(aOutFile, conversionProperties);
+                }
+                catch (const Exception& rException)
+                {
+                    std::cerr << "Error: Please verify input parameters...";
+                    if (!rException.Message.isEmpty())
+                        std::cerr << " (" << rException.Message << ")";
+                    std::cerr << std::endl;
+                }
+            }
+        }
+    } else {
+        std::cerr << "Error: source file could not be loaded" << std::endl;
+    }
+
+    // remove the document
+    try {
+        Reference < XCloseable > xClose( xDoc, UNO_QUERY );
+        if ( xClose.is() )
+            xClose->close( true );
+        else {
+            Reference < XComponent > xComp( xDoc, UNO_QUERY );
+            if ( xComp.is() )
+                xComp->dispose();
+        }
+    } catch (const css::util::CloseVetoException&) {}
+
+    xDesktop->terminate();
+    return true;
+}
+
 bool DispatchWatcher::executeDispatchRequests( const std::vector<DispatchRequest>& aDispatchRequestsList, bool bNoTerminate )
 {
     Reference< XDesktop2 > xDesktop = css::frame::Desktop::create( ::comphelper::getProcessComponentContext() );

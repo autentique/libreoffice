@@ -57,6 +57,9 @@ class CommandLineArgs
         const std::optional< OUString >& getCwdUrl() const { return m_cwdUrl; }
 
         // Access to bool parameters
+        bool                    IsPDFExport() const;
+        OUString                GetPDFExportArgs() const;
+
         bool                IsMinimized() const { return m_minimized;}
         bool                IsInvisible() const
         {
@@ -179,6 +182,7 @@ class CommandLineArgs
         std::vector< OUString > m_infilter;
         OUString m_language;
         OUString m_pidfile;
+        OUString m_pdfexportargs;
 };
 
 }

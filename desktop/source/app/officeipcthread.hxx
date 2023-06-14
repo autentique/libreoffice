@@ -120,6 +120,7 @@ class RequestHandler: public salhelper::SimpleReferenceObject
     static void                 RequestsCompleted();
     static bool                 ExecuteCmdLineRequests(
         ProcessDocumentsRequest&, bool noTerminate);
+    static bool                 exportPDF(std::optional<OUString> cwdUrl, OUString eArgs);
 
     // return sal_False if second office
     static Status               Enable(bool ipc);

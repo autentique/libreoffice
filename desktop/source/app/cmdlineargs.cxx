@@ -101,7 +101,8 @@ private:
 
 enum class CommandLineEvent {
     Open, Print, View, Start, PrintTo,
-    ForceOpen, ForceNew, Conversion, BatchPrint
+    ForceOpen, ForceNew, Conversion, BatchPrint,
+    ExportPDF
 };
 
 // Office URI Schemes: see https://msdn.microsoft.com/en-us/library/dn906146
@@ -305,6 +306,16 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
             if ( oArg == "minimized" )
             {
                 m_minimized = true;
+            }
+            else if ( oArg == "export-pdf" )
+            {
+                eCurrentEvent = CommandLineEvent::ExportPDF;
+                if (supplier.next(&aArg)) {
+                    m_pdfexportargs = aArg;
+                    setHeadless();
+                }
+                else if (m_unknown.isEmpty())
+                    m_unknown = "--export-pdf must be followed by input_file_path:output_file_path";
             }
             else if ( oArg == "invisible" )
             {
@@ -676,6 +687,8 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
                 case CommandLineEvent::BatchPrint:
                     m_conversionlist.push_back(aArg);
                     break;
+                case CommandLineEvent::ExportPDF:
+                    break;
                 }
             }
 
@@ -781,6 +794,12 @@ OUString CommandLineArgs::GetConversionOut() const
     return translateExternalUris(m_conversionout);
 }
 
+bool CommandLineArgs::IsPDFExport () const {
+    return !m_pdfexportargs.isEmpty();
+}
+OUString CommandLineArgs::GetPDFExportArgs () const {
+    return m_pdfexportargs;
+}
 } // namespace desktop
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1295,6 +1295,17 @@ struct ConditionSetGuard
 
 }
 
+bool RequestHandler::exportPDF (std::optional<OUString> cwdUrl, OUString eArgs) {
+    if ( pGlobal.is() ) {
+        if ( !pGlobal->mpDispatchWatcher.is() ) {
+            pGlobal->mpDispatchWatcher = new DispatchWatcher;
+        }
+
+        rtl::Reference<DispatchWatcher> dispatchWatcher(pGlobal->mpDispatchWatcher);
+        return dispatchWatcher->exportPDF(cwdUrl, eArgs);
+    }
+}
+
 bool RequestHandler::ExecuteCmdLineRequests(
     ProcessDocumentsRequest& aRequest, bool noTerminate)
 {

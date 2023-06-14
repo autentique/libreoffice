@@ -76,6 +76,9 @@ class DispatchWatcher : public ::cppu::WeakImplHelper< css::frame::XDispatchResu
         // execute new dispatch request
         bool executeDispatchRequests( const std::vector<DispatchRequest>& aDispatches, bool bNoTerminate );
 
+        // export PDF
+        bool exportPDF(std::optional<OUString> cwdUrl, OUString eArgs);
+
     private:
 
         std::atomic<int> m_nRequestCount;

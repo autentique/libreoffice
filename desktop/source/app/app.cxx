@@ -1917,6 +1917,28 @@ void Desktop::OpenClients()
 {
 
     const CommandLineArgs& rArgs = GetCommandLineArgs();
+    if (rArgs.IsPDFExport()) {
+
+        // disable autorecovery
+        try {
+            Reference< XDispatch > xRecovery = css::frame::theAutoRecovery::get( ::comphelper::getProcessComponentContext() );
+            Reference< css::util::XURLTransformer > xParser = css::util::URLTransformer::create( ::comphelper::getProcessComponentContext() );
+
+            css::util::URL aCmd;
+            aCmd.Complete = "vnd.sun.star.autorecovery:/disableRecovery";
+            xParser->parseStrict(aCmd);
+
+            xRecovery->dispatch(aCmd, css::uno::Sequence< css::beans::PropertyValue >());
+        } catch(const css::uno::Exception&) {
+            TOOLS_WARN_EXCEPTION( "desktop.app", "Could not disable AutoRecovery.");
+        }
+
+        CrashReporter::addKeyValue("Language", Application::GetSettings().GetLanguageTag().getBcp47(), CrashReporter::Create);
+
+        if (RequestHandler::exportPDF(rArgs.getCwdUrl(), rArgs.GetPDFExportArgs())) {
+            return;
+        }
+    }
 
     if (!rArgs.IsQuickstart())
     {
